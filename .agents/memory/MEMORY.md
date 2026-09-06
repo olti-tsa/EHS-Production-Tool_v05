@@ -1,7 +1,7 @@
 - [LED PDF vs tab parity](led-pdf-vs-tab-parity.md) — PDF must use computeScreenMetrics(…, beamCatalog)/m.weightKg for weight; power split (raw nameplate vs estimateScreenPower) is intentional.
 - [LED finishing row](led-finishing-row.md) — bottom row uses a different real (smaller) panel; finishing panel width MUST match main panel; the key→panel resolver is the single guard.
 - [Profile photo ownership and route gates](profile-photo-security.md) — bind private uploads to their issuer; scope role middleware to URL namespaces so shared portal routes remain reachable.
-- [Calendar interval semantics](calendar-interval-semantics.md) — use half-open local-day intervals; bulk replacement preserves outside fragments, while non-overlapping daily blocks remain distinct.
+- [Calendar interval semantics](calendar-interval-semantics.md) — map half-open instants to local days; bulk replacement preserves outside fragments and distinct non-overlapping daily blocks.
 - [Feedback panel rendering](feedback-panel-rendering.md) — feedback must be a direct fixed in-layout panel; do not reintroduce Radix Dialog or portal rendering.
 - [Disabled controls can re-blur](disabled-control-blur.md) — disabling a focused autosave field may trigger another blur; guard synchronously before awaiting the first save.
 - [Project collaboration roles](project-collaboration-roles.md) — employees default to editor and may archive; hard deletion is admin-only, governance owner-only, freelancers assignment-scoped.
@@ -20,3 +20,4 @@
 - [Ephemeral team broadcasts](ephemeral-team-broadcasts.md) — use Postgres NOTIFY plus authenticated SSE across autoscale; bound listener and slow-client resources.
 - [Multi-role crew bookings](multi-role-crew-bookings.md) — crewId is the immutable role-slot identity; one account may hold independent assignments and gigs under one brief.
 - [Per-window crew acceptance](per-window-crew-acceptance.md) — responses are authoritative per date/phase/window; derive booking dates/status from them while preserving map-less legacy decisions.
+- [Drizzle correlated SQL](drizzle-correlated-sql.md) — qualify outer columns inside raw correlated subqueries; unqualified interpolation can silently become an inner self-comparison.

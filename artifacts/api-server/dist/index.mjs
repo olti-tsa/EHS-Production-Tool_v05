@@ -4759,7 +4759,7 @@ var require_dbcs_data = __commonJS({
   "../../node_modules/.pnpm/iconv-lite@0.7.2/node_modules/iconv-lite/encodings/dbcs-data.js"(exports, module) {
     "use strict";
     module.exports = {
-      // == Japanese/ShiftJIS ====================================================
+      // -- Japanese/ShiftJIS ----------------------------------------------------
       // All japanese encodings are based on JIS X set of standards:
       // JIS X 0201 - Single-byte encoding of ASCII + ¥ + Kana chars at 0xA1-0xDF.
       // JIS X 0208 - Main set of 6879 characters, placed in 94x94 plane, to be encoded by 2 bytes.
@@ -4817,7 +4817,7 @@ var require_dbcs_data = __commonJS({
       // TODO: KDDI extension to Shift_JIS
       // TODO: IBM CCSID 942 = CP932, but F0-F9 custom chars and other char changes.
       // TODO: IBM CCSID 943 = Shift_JIS = CP932 with original Shift_JIS lower 128 chars.
-      // == Chinese/GBK ==========================================================
+      // -- Chinese/GBK ----------------------------------------------------------
       // http://en.wikipedia.org/wiki/GBK
       // We mostly implement W3C recommendation: https://www.w3.org/TR/encoding/#gbk-encoder
       // Oldest GB2312 (1981, ~7600 chars) is a subset of CP936
@@ -4863,7 +4863,7 @@ var require_dbcs_data = __commonJS({
         encodeAdd: { "\u20AC": 41699 }
       },
       chinese: "gb18030",
-      // == Korean ===============================================================
+      // -- Korean ---------------------------------------------------------------
       // EUC-KR, KS_C_5601 and KS X 1001 are exactly the same.
       windows949: "cp949",
       ms949: "cp949",
@@ -4882,7 +4882,7 @@ var require_dbcs_data = __commonJS({
       ksc56011987: "cp949",
       ksc56011989: "cp949",
       ksc5601: "cp949",
-      // == Big5/Taiwan/Hong Kong ================================================
+      // -- Big5/Taiwan/Hong Kong ------------------------------------------------
       // There are lots of tables for Big5 and cp950. Please see the following links for history:
       // http://moztw.org/docs/big5/  http://www.haible.de/bruno/charsets/conversion-tables/Big5.html
       // Variations, in roughly number of defined chars:
@@ -77774,11 +77774,12 @@ router6.get("/portal/freelancers", requireEmployee, async (req, res) => {
       );
     }
     const where = conditions.length > 0 ? and(...conditions) : void 0;
+    const directoryUserId = sql.raw(`"freelancer_profiles"."user_id"`);
     const statusExpr = startDate ? sql`
           CASE
             WHEN EXISTS (
               SELECT 1 FROM gigs g
-               WHERE g.freelancer_user_id = ${freelancerProfilesTable.userId}
+               WHERE g.freelancer_user_id = ${directoryUserId}
                  AND g.status IN ('confirmed','done','invoiced','paid')
                  AND g.start_date IS NOT NULL
                  AND g.start_date <= ${endDate}::date
@@ -77788,7 +77789,7 @@ router6.get("/portal/freelancers", requireEmployee, async (req, res) => {
               SELECT 1
                 FROM brief_assignments ba
                 JOIN project_briefs b ON ba.brief_id = b.id
-               WHERE ba.freelancer_user_id = ${freelancerProfilesTable.userId}
+               WHERE ba.freelancer_user_id = ${directoryUserId}
                  AND ba.decision = 'pending'
                  AND b.owner_user_id = ${callerUserId}
                  AND b.start_date IS NOT NULL
@@ -77816,19 +77817,19 @@ router6.get("/portal/freelancers", requireEmployee, async (req, res) => {
       // Privacy-safe booking signal for producers. Notes and external
       // calendar metadata never leave the calendar tables.
       availabilityStatus: startDate ? sql`CASE
-              WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id = ${freelancerProfilesTable.userId} AND cg.status IN ('confirmed','done','invoiced','paid') AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date) >= ${startDate}::date) THEN 'unavailable'
-              WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${freelancerProfilesTable.userId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from}) THEN 'unavailable'
-              WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${freelancerProfilesTable.userId} AND ch.expires_at > now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from}) THEN 'tentative'
-              WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${freelancerProfilesTable.userId} AND ca.status='unavailable' AND ca.starts_at < ${requestedBounds.to} AND ca.ends_at > ${requestedBounds.from}) THEN 'unavailable'
-              WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${freelancerProfilesTable.userId} AND ca.status='tentative' AND ca.starts_at < ${requestedBounds.to} AND ca.ends_at > ${requestedBounds.from}) THEN 'tentative'
-              WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${freelancerProfilesTable.userId} AND ca.status='available' AND ca.starts_at <= ${requestedBounds.from} AND ca.ends_at >= ${requestedBounds.to}) THEN 'full'
-              WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${freelancerProfilesTable.userId} AND ca.status='available' AND ca.starts_at < ${requestedBounds.to} AND ca.ends_at > ${requestedBounds.from}) THEN 'partial'
+              WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id = ${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date) >= ${startDate}::date) THEN 'unavailable'
+              WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from}) THEN 'unavailable'
+              WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.expires_at > now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from}) THEN 'tentative'
+              WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${directoryUserId} AND ca.status='unavailable' AND ca.starts_at < ${requestedBounds.to} AND ca.ends_at > ${requestedBounds.from}) THEN 'unavailable'
+              WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${directoryUserId} AND ca.status='tentative' AND ca.starts_at < ${requestedBounds.to} AND ca.ends_at > ${requestedBounds.from}) THEN 'tentative'
+              WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${directoryUserId} AND ca.status='available' AND ca.starts_at <= ${requestedBounds.from} AND ca.ends_at >= ${requestedBounds.to}) THEN 'full'
+              WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${directoryUserId} AND ca.status='available' AND ca.starts_at < ${requestedBounds.to} AND ca.ends_at > ${requestedBounds.from}) THEN 'partial'
               ELSE 'unknown' END`.as("availability_status") : sql`'unknown'`.as("availability_status"),
-      availabilityReason: startDate ? sql`CASE WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id=${freelancerProfilesTable.userId} AND cg.status IN ('confirmed','done','invoiced','paid') AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date)>=${startDate}::date) THEN 'gig' WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${freelancerProfilesTable.userId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from}) THEN 'external_busy' WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${freelancerProfilesTable.userId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from}) THEN 'hold' ELSE NULL END`.as("availability_reason") : sql`NULL`.as("availability_reason"),
-      availabilityUpdatedAt: sql`(SELECT max(x.updated_at) FROM calendar_availability x WHERE x.user_id=${freelancerProfilesTable.userId})`.as("availability_updated_at"),
-      conflicts: startDate ? sql`(SELECT count(*)::int FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${freelancerProfilesTable.userId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from})`.as("conflicts") : sql`0`.as("conflicts"),
-      holdId: startDate && briefId ? sql`(SELECT ch.id FROM calendar_holds ch WHERE ch.freelancer_user_id=${freelancerProfilesTable.userId} AND ch.owner_user_id=${callerUserId} AND ch.brief_id=${briefId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from} ORDER BY ch.expires_at LIMIT 1)`.as("hold_id") : sql`NULL`.as("hold_id"),
-      holdExpiresAt: startDate && briefId ? sql`(SELECT ch.expires_at FROM calendar_holds ch WHERE ch.freelancer_user_id=${freelancerProfilesTable.userId} AND ch.owner_user_id=${callerUserId} AND ch.brief_id=${briefId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from} ORDER BY ch.expires_at LIMIT 1)`.as("hold_expires_at") : sql`NULL`.as("hold_expires_at")
+      availabilityReason: startDate ? sql`CASE WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id=${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date)>=${startDate}::date) THEN 'gig' WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from}) THEN 'external_busy' WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from}) THEN 'hold' ELSE NULL END`.as("availability_reason") : sql`NULL`.as("availability_reason"),
+      availabilityUpdatedAt: sql`(SELECT max(x.updated_at) FROM calendar_availability x WHERE x.user_id=${directoryUserId})`.as("availability_updated_at"),
+      conflicts: startDate ? sql`(SELECT count(*)::int FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from})`.as("conflicts") : sql`0`.as("conflicts"),
+      holdId: startDate && briefId ? sql`(SELECT ch.id FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.owner_user_id=${callerUserId} AND ch.brief_id=${briefId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from} ORDER BY ch.expires_at LIMIT 1)`.as("hold_id") : sql`NULL`.as("hold_id"),
+      holdExpiresAt: startDate && briefId ? sql`(SELECT ch.expires_at FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.owner_user_id=${callerUserId} AND ch.brief_id=${briefId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from} ORDER BY ch.expires_at LIMIT 1)`.as("hold_expires_at") : sql`NULL`.as("hold_expires_at")
     }).from(freelancerProfilesTable).where(where).orderBy(freelancerProfilesTable.fullName);
     const recurringRules = startDate ? await db.select({
       userId: calendarAvailabilityRulesTable.userId,
