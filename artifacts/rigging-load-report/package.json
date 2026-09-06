@@ -8,10 +8,14 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/lib/briefDeliveryToast.test.ts src/lib/i18n/translations/parity.test.ts src/portal/screens/availability/utils.test.ts src/components/global/MasterCalendarPage.test.ts"
+    "test": "tsx --test src/lib/briefDeliveryToast.test.ts src/lib/i18n/translations/parity.test.ts src/portal/screens/availability/utils.test.ts src/components/global/MasterCalendarPage.test.ts",
+    "test:auth-e2e": "playwright install chromium && playwright test --config playwright.config.ts"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@clerk/backend": "^2.33.6",
+    "@clerk/testing": "^1.12.14",
+    "@playwright/test": "^1.55.0",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",
     "@radix-ui/react-aspect-ratio": "^1.1.3",

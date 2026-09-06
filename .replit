@@ -57,7 +57,7 @@ externalPort = 3002
 VITE_CLERK_PUBLISHABLE_KEY = "pk_test_c3dlZXQtZ3J1Yi0yNS5jbGVyay5hY2NvdW50cy5kZXYk"
 
 [nix]
-packages = ["zip"]
+packages = ["zip", "glib", "nss", "nspr", "atk", "at-spi2-atk", "cups", "dbus", "expat", "libdrm", "mesa", "xorg.libX11", "xorg.libxcb", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "pango", "cairo", "alsa-lib", "libgbm", "libxkbcommon"]
 channel = "stable-25_05"
 
 [objectStorage]

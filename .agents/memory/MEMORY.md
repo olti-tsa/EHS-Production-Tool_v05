@@ -21,3 +21,4 @@
 - [Multi-role crew bookings](multi-role-crew-bookings.md) — crewId is the immutable role-slot identity; one account may hold independent assignments and gigs under one brief.
 - [Per-window crew acceptance](per-window-crew-acceptance.md) — responses are authoritative per date/phase/window; derive booking dates/status from them while preserving map-less legacy decisions.
 - [Drizzle correlated SQL](drizzle-correlated-sql.md) — qualify outer columns inside raw correlated subqueries; unqualified interpolation can silently become an inner self-comparison.
+- [Clerk browser regression harness](clerk-browser-regression-harness.md) — disable dev auto-login before navigation and clean shared Clerk fixtures once globally, not once per worker.
