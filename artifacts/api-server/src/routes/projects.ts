@@ -188,6 +188,8 @@ router.get("/projects", requireSignedIn, async (req, res) => {
         cloned_from_project_id: projectsTable.clonedFromProjectId,
         reportDate: sql<unknown>`${projectsTable.data}->>'reportDate'`,
         reportEndDate: sql<unknown>`${projectsTable.data}->>'reportEndDate'`,
+         category: sql<string | null>`nullif(${projectsTable.data}->>'eventCategory', '')`,
+         type: sql<string | null>`coalesce(nullif(${projectsTable.data}->>'projectType', ''), nullif(${projectsTable.data}->>'type', ''))`,
         crewCount: sql<number>`case when jsonb_typeof(${projectsTable.data}->'crew') = 'array' then jsonb_array_length(${projectsTable.data}->'crew') else 0 end`,
         status: sql<string>`coalesce(${projectsTable.status}, case when nullif(${projectsTable.data}->>'activeBriefId', '') is not null then 'active' when nullif(${projectsTable.venue}, '') is not null or nullif(${projectsTable.client}, '') is not null then 'planning' else 'draft' end)`,
         archivedAt: projectsTable.archivedAt,
