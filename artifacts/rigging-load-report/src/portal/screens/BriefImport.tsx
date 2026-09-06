@@ -5,7 +5,8 @@ import {
   upsertBrief,
   type PortalData,
 } from "../lib/portalStorage";
-import { decodeBrief } from "../../lib/briefShare";
+import { BriefShareError, decodeBrief } from "../../lib/briefShare";
+import { useT } from "../../lib/i18n/I18nContext";
 
 /** Handles `/portal/brief/import?b=<encoded>` — decodes the payload,
  *  upserts it into the freelancer's portal data, then redirects to the
@@ -22,6 +23,7 @@ export function BriefImport({
   setData: React.Dispatch<React.SetStateAction<PortalData>>;
 }) {
   const c = PALETTE[theme];
+  const t = useT();
   const [, setLocation] = useLocation();
   const [status, setStatus] = useState<Status>("loading");
   const [errMsg, setErrMsg] = useState<string>("");
@@ -45,7 +47,11 @@ export function BriefImport({
       } catch (e) {
         if (!cancelled) {
           setStatus("error");
-          setErrMsg(e instanceof Error ? e.message : "Could not read the brief.");
+          const message =
+            e instanceof BriefShareError
+              ? t(`portal.import.error.${e.code}`)
+              : t("portal.import.readError");
+          setErrMsg(message);
         }
       }
     })();
@@ -71,20 +77,19 @@ export function BriefImport({
       {status === "loading" ? (
         <>
           <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
-            Loading project briefing…
+            {t("portal.import.loadingTitle")}
           </div>
           <div style={{ fontSize: 13, color: c.muted }}>
-            Decoding the link from your producer.
+            {t("portal.import.loadingBody")}
           </div>
         </>
       ) : status === "missing" ? (
         <>
           <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
-            No briefing in this link
+            {t("portal.import.missingTitle")}
           </div>
           <div style={{ fontSize: 13, color: c.muted, marginBottom: 16 }}>
-            The share link you followed didn't include a project payload.
-            Ask your producer to re-send the brief.
+            {t("portal.import.missingBody")}
           </div>
           <Link
             href="/portal/briefs"
@@ -99,7 +104,7 @@ export function BriefImport({
               textDecoration: "none",
             }}
           >
-            View my briefs
+            {t("portal.import.viewBriefs")}
           </Link>
         </>
       ) : (
@@ -112,7 +117,7 @@ export function BriefImport({
               color: c.danger,
             }}
           >
-            Couldn't open this briefing
+            {t("portal.import.errorTitle")}
           </div>
           <div
             style={{
@@ -122,8 +127,7 @@ export function BriefImport({
               lineHeight: 1.5,
             }}
           >
-            {errMsg ||
-              "The link looks malformed. It may have been truncated by the chat app you received it in. Ask your producer to send the link again."}
+            {errMsg || t("portal.import.errorBody")}
           </div>
           <Link
             href="/portal/briefs"
@@ -138,7 +142,7 @@ export function BriefImport({
               textDecoration: "none",
             }}
           >
-            View my briefs
+            {t("portal.import.viewBriefs")}
           </Link>
         </>
       )}

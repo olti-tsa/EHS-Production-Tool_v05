@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ehsLogo from "../assets/ehs-logo.png";
+import { useT } from "../lib/i18n/I18nContext";
+import type { TranslationKey } from "../lib/i18n/types";
 import { NumberField } from "./NumberField";
 import { LedSystemDesigner } from "./LedSystemDesigner";
 import type { LedSystem } from "../lib/ledSystem";
@@ -167,6 +169,7 @@ export type PlaceMode = {
 } | null;
 
 export function LedScreenReportView(props: Props) {
+  const t = useT();
   const {
     screens,
     panels,
@@ -682,32 +685,36 @@ export function LedScreenReportView(props: Props) {
       if (total === 0) return;
       if (
         !window.confirm(
-          `Remove all power & signal markers from "${screen.name || "(unnamed)"}"?`,
+          t("led.report.confirm.clearMarkers", {
+            name: screen.name || t("led.report.unnamed"),
+          }),
         )
       ) {
         return;
       }
       onUpdateScreen(screenId, { markers: [], panelMarkers: [] });
     },
-    [screens, onUpdateScreen],
+    [screens, onUpdateScreen, t],
   );
 
   return (
     <div className="led-report">
       <header className="led-report-header">
         <div>
-          <h2>LED Screen Report</h2>
+          <h2>{t("led.report.title")}</h2>
           <p className="led-report-sub">
-            Pixel map generator for LED video systems. Define your screens,
-            assign processor outputs, and review the visual layout.
+            {t("led.report.subtitle")}
           </p>
         </div>
         <div className="led-report-meta">
           <span className="badge">
-            {linkedCount} linked · {standaloneCount} manual
+            {t("led.report.linkSummary", {
+              linked: linkedCount,
+              manual: standaloneCount,
+            })}
           </span>
           <button className="btn btn-soft" onClick={onJumpToRigging}>
-            ↗ Rigging Report
+            ↗ {t("led.report.riggingReport")}
           </button>
         </div>
       </header>
@@ -719,7 +726,7 @@ export function LedScreenReportView(props: Props) {
           across every screen + the System Designer. */}
       <div className="led-touring-strip">
         <div className="led-touring-strip-left">
-          <span className="led-touring-strip-label">Mode</span>
+          <span className="led-touring-strip-label">{t("led.report.mode")}</span>
           <LedModeToggle
             mode={settings.uiMode}
             onChange={(next) => {
@@ -748,9 +755,9 @@ export function LedScreenReportView(props: Props) {
                   : "btn-soft"
             }`}
             onClick={() => setValidationOpen((v) => !v)}
-            title="Open validation drawer"
+            title={t("led.report.validation.open")}
           >
-            ⚠ Validation
+            ⚠ {t("led.report.validation.label")}
             {validation.errors > 0 && (
               <span className="led-touring-pill led-touring-pill-error">
                 {validation.errors}
@@ -762,7 +769,9 @@ export function LedScreenReportView(props: Props) {
               </span>
             )}
             {validation.errors === 0 && validation.warnings === 0 && (
-              <span className="led-touring-pill led-touring-pill-ok">OK</span>
+              <span className="led-touring-pill led-touring-pill-ok">
+                {t("led.report.status.ok")}
+              </span>
             )}
           </button>
           {advancedMode && (
@@ -772,18 +781,18 @@ export function LedScreenReportView(props: Props) {
                 className="btn btn-soft btn-sm"
                 onClick={exportPatchSheet}
                 disabled={screens.length === 0}
-                title="Download per-port patch sheet (CSV)"
+                title={t("led.report.export.patchSheetTitle")}
               >
-                ↓ Patch sheet
+                ↓ {t("led.report.export.patchSheet")}
               </button>
               <button
                 type="button"
                 className="btn btn-soft btn-sm"
                 onClick={exportCabinetIds}
                 disabled={screens.length === 0}
-                title="Download per-cabinet ID report (CSV)"
+                title={t("led.report.export.cabinetIdsTitle")}
               >
-                ↓ Cabinet IDs
+                ↓ {t("led.report.export.cabinetIds")}
               </button>
             </>
           )}
@@ -804,35 +813,34 @@ export function LedScreenReportView(props: Props) {
 
       <section className="led-card">
         <div className="led-card-head">
-          <h3>Screens</h3>
+          <h3>{t("led.report.screens")}</h3>
           <div className="led-controls">
             <button className="btn btn-primary" onClick={onAddScreen}>
-              + Add Screen
+              + {t("led.report.addScreen")}
             </button>
           </div>
         </div>
 
         {screens.length === 0 ? (
           <div className="led-empty">
-            No screens yet. Add one with the button above, or add an LED row
-            on the Rigging Report and it will appear here automatically.
+            {t("led.report.emptyScreens")}
           </div>
         ) : (
           <div className="led-table-wrap">
             <table className="led-table">
               <thead>
                 <tr>
-                  <th>Source</th>
-                  <th>Name</th>
-                  <th>Panel</th>
-                  <th>Wide</th>
-                  <th>Tall</th>
-                  <th>Shape</th>
-                  <th>Resolution</th>
-                  <th>Size (m)</th>
-                  <th>Output</th>
-                  <th>Color</th>
-                  <th>Notes</th>
+                  <th>{t("led.report.table.source")}</th>
+                  <th>{t("led.report.table.name")}</th>
+                  <th>{t("led.report.table.panel")}</th>
+                  <th>{t("led.report.table.wide")}</th>
+                  <th>{t("led.report.table.tall")}</th>
+                  <th>{t("led.report.table.shape")}</th>
+                  <th>{t("led.report.table.resolution")}</th>
+                  <th>{t("led.report.table.size")}</th>
+                  <th>{t("led.report.table.output")}</th>
+                  <th>{t("led.report.table.color")}</th>
+                  <th>{t("led.report.table.notes")}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -874,11 +882,9 @@ export function LedScreenReportView(props: Props) {
       {screens.length > 0 && (
         <section className="led-card">
           <div className="led-card-head">
-            <h3>Pixel Map</h3>
+            <h3>{t("led.report.pixelMap")}</h3>
             <span className="led-hint">
-              Each cell is one panel. Columns are letters (A, B, C…), rows are
-              numbers (1, 2, 3…). Click a screen to select it, drag the ⠿
-              handle to reposition.
+              {t("led.report.pixelMapHint")}
             </span>
             <div className="led-controls">
               {/* "Reset positions" returns the canvas to the default
@@ -891,11 +897,11 @@ export function LedScreenReportView(props: Props) {
                 disabled={!anyPositioned}
                 title={
                   anyPositioned
-                    ? "Clear every dragged position and return to auto-flow"
-                    : "Nothing to reset — no screens have been dragged"
+                    ? t("led.report.resetPositionsTitle")
+                    : t("led.report.resetPositionsDisabled")
                 }
               >
-                Reset positions
+                {t("led.report.resetPositions")}
               </button>
             </div>
           </div>
@@ -951,13 +957,9 @@ export function LedScreenReportView(props: Props) {
       {advancedMode && (
         <section className="led-card">
           <div className="led-card-head">
-            <h3>System</h3>
+            <h3>{t("led.report.system")}</h3>
             <span className="led-hint">
-              Drag screens, processors, CVT10 Pro-S fiber boxes and power
-              supplies onto the canvas, then connect them with cables.
-              Switch the cable type with the toolbar buttons before
-              drawing a connection. Distances drive the over-limit
-              warnings (CAT-6 90 m, fiber 300 m).
+              {t("led.report.systemHint")}
             </span>
           </div>
           <LedSystemDesigner
@@ -1003,6 +1005,11 @@ function ProcessorBanner({
   screens: LedScreen[];
   panels: LedPanel[];
 }) {
+  const t = useT();
+  const processorBlurbKeys: Record<string, TranslationKey> = {
+    "novastar-mx30": "led.report.processor.blurb.mx30",
+    "novastar-mx40": "led.report.processor.blurb.mx40",
+  };
   const proc = findProcessor(settings.processorId);
   if (!proc) return null;
   if (totals.screens === 0) return null;
@@ -1026,6 +1033,54 @@ function ProcessorBanner({
 
   const utilizationPct = Math.min(999, Math.round(result.utilization * 100));
   const outputsPct = Math.min(999, Math.round(result.outputsUtilization * 100));
+  const localizedIssues: string[] = [];
+  if (totals.pixels > proc.totalPixels) {
+    localizedIssues.push(t("led.report.processor.issue.totalPixels", {
+      used: PIXEL_FMT.format(totals.pixels),
+      name: proc.name,
+      capacity: PIXEL_FMT.format(proc.totalPixels),
+    }));
+  } else if (result.utilization > 0.9) {
+    localizedIssues.push(t("led.report.processor.issue.pixelHeadroom", {
+      percent: Math.round(result.utilization * 100),
+      name: proc.name,
+    }));
+  }
+  if (outputsAtProcLimit > proc.outputs) {
+    localizedIssues.push(t("led.report.processor.issue.outputs", {
+      needed: outputsAtProcLimit,
+      name: proc.name,
+      available: proc.outputs,
+    }));
+  } else if (result.outputsUtilization > 0.9) {
+    localizedIssues.push(t("led.report.processor.issue.outputHeadroom", {
+      used: outputsAtProcLimit,
+      available: proc.outputs,
+      name: proc.name,
+      percent: Math.round(result.outputsUtilization * 100),
+    }));
+  }
+  if (totals.largestScreenPixels > proc.maxPixelsPerOutput) {
+    localizedIssues.push(t("led.report.processor.issue.perOutput", {
+      pixels: PIXEL_FMT.format(totals.largestScreenPixels),
+      name: proc.name,
+      limit: PIXEL_FMT.format(proc.maxPixelsPerOutput),
+    }));
+  }
+  if (totals.largestWidthPx > proc.maxWidthPx) {
+    localizedIssues.push(t("led.report.processor.issue.width", {
+      pixels: PIXEL_FMT.format(totals.largestWidthPx),
+      name: proc.name,
+      limit: PIXEL_FMT.format(proc.maxWidthPx),
+    }));
+  }
+  if (totals.largestHeightPx > proc.maxHeightPx) {
+    localizedIssues.push(t("led.report.processor.issue.height", {
+      pixels: PIXEL_FMT.format(totals.largestHeightPx),
+      name: proc.name,
+      limit: PIXEL_FMT.format(proc.maxHeightPx),
+    }));
+  }
 
   return (
     <section
@@ -1037,47 +1092,49 @@ function ProcessorBanner({
           <span className="led-proc-dot" aria-hidden />
           <span>
             <strong>{proc.name}</strong>
-            <span className="led-proc-blurb"> — {proc.blurb}</span>
+            <span className="led-proc-blurb">
+              {" "}— {processorBlurbKeys[proc.id] ? t(processorBlurbKeys[proc.id]) : proc.blurb}
+            </span>
           </span>
         </div>
         <div className="led-proc-status">
-          {result.level === "ok" && "Fits comfortably"}
-          {result.level === "warn" && "Fits — near limits"}
-          {result.level === "fail" && "Does NOT fit"}
+          {t(`led.report.processor.status.${result.level}` as TranslationKey)}
         </div>
       </div>
       <div className="led-proc-meters">
         <Meter
-          label="Pixels"
+          label={t("led.report.processor.pixels")}
           used={result.totalPixels}
           cap={proc.totalPixels}
           pct={utilizationPct}
           fmt={(n) => PIXEL_FMT.format(n)}
         />
         <Meter
-          label="Outputs"
+          label={t("led.report.processor.outputs")}
           used={result.outputsNeeded}
           cap={proc.outputs}
           pct={outputsPct}
           fmt={(n) => `${n}`}
         />
         <div className="led-proc-bound">
-          <div className="led-proc-bound-label">Largest screen</div>
+          <div className="led-proc-bound-label">
+            {t("led.report.processor.largestScreen")}
+          </div>
           <div className="led-proc-bound-value">
             {totals.largestWidthPx.toLocaleString()} ×{" "}
             {totals.largestHeightPx.toLocaleString()} px
           </div>
           <div className="led-proc-bound-sub">
-            Max canvas: {proc.maxWidthPx.toLocaleString()} ×{" "}
+            {t("led.report.processor.maxCanvas")}: {proc.maxWidthPx.toLocaleString()} ×{" "}
             {proc.maxHeightPx.toLocaleString()} px
           </div>
         </div>
       </div>
-      {result.issues.length > 0 && (
+      {localizedIssues.length > 0 && (
         <ul className="led-proc-issues">
-          {result.issues.map((iss, i) => (
-            <li key={i} className={`led-proc-issue is-${iss.level}`}>
-              {iss.message}
+          {localizedIssues.map((message, i) => (
+            <li key={i} className={`led-proc-issue is-${result.issues[i]?.level ?? "warn"}`}>
+              {message}
             </li>
           ))}
         </ul>
@@ -1125,22 +1182,25 @@ function LedDashboard({
   totals: LedTotals;
   settings: LedSettings;
 }) {
+  const t = useT();
   return (
     <div className="led-dashboard">
-      <Stat label="Screens" value={fmt(totals.screens, 0)} />
-      <Stat label="Panels" value={fmt(totals.panels, 0)} />
-      <Stat label="Total pixels" value={PIXEL_FMT.format(totals.pixels)} />
-      <Stat label="Area" value={`${fmt(totals.areaM2, 1)} m²`} />
-      <Stat label="Weight" value={`${fmt(totals.weightKg, 1)} kg`} />
-      <Stat label="Max output" value={`${fmt(totals.powerW / 1000, 2)} kW`} />
+      <Stat label={t("led.report.screens")} value={fmt(totals.screens, 0)} />
+      <Stat label={t("led.report.panels")} value={fmt(totals.panels, 0)} />
+      <Stat label={t("led.report.totalPixels")} value={PIXEL_FMT.format(totals.pixels)} />
+      <Stat label={t("led.report.area")} value={`${fmt(totals.areaM2, 1)} m²`} />
+      <Stat label={t("led.report.weight")} value={`${fmt(totals.weightKg, 1)} kg`} />
+      <Stat label={t("led.report.maxOutput")} value={`${fmt(totals.powerW / 1000, 2)} kW`} />
       <Stat
-        label="Avg output"
+        label={t("led.report.avgOutput")}
         value={`${fmt((totals.powerW * AVERAGE_POWER_FRACTION) / 1000, 2)} kW`}
       />
       <Stat
-        label="Outputs needed"
+        label={t("led.report.outputsNeeded")}
         value={fmt(totals.portsNeeded, 0)}
-        sub={`@ ${PIXEL_FMT.format(settings.portLimit)} px/output`}
+        sub={t("led.report.pixelsPerOutputSummary", {
+          pixels: PIXEL_FMT.format(settings.portLimit),
+        })}
       />
     </div>
   );
@@ -1209,6 +1269,17 @@ function ScreenRow({
   beamsCatalog: LedRigAccessoryCatalogItem[];
   power: PowerEstimate | undefined;
 }) {
+  const t = useT();
+  const panelPresetLabelKeys: Record<string, TranslationKey> = {
+    Blue: "led.report.color.blue",
+    Red: "led.report.color.red",
+    "Red + Blue": "led.report.color.redBlue",
+    Green: "led.report.color.green",
+    Purple: "led.report.color.purple",
+    Orange: "led.report.color.orange",
+    Teal: "led.report.color.teal",
+    Mono: "led.report.color.mono",
+  };
   const panel = resolveScreenPanel(screen, panels);
   // Pass the beam catalog so the weight readout in the screen card
   // reflects auto-fitted + manual rig accessories — matching the
@@ -1270,7 +1341,9 @@ function ScreenRow({
       ) ?? null
     );
   }, [screen.panelColorDark, screen.panelColorLight]);
-  const triggerLabel = activePreset ? activePreset.label : "Auto";
+  const triggerLabel = activePreset
+    ? t(panelPresetLabelKeys[activePreset.label])
+    : t("led.report.auto");
   // Build-by-size form state. Pre-fill with the screen's current
   // physical width/height so the producer can tweak rather than
   // re-type from scratch on every open.
@@ -1325,17 +1398,17 @@ function ScreenRow({
         onClick={onSelect}
         title={
           isSelected
-            ? "Selected — also highlighted on the pixel-map canvas below"
-            : "Click to select on the pixel-map canvas"
+            ? t("led.report.row.selected")
+            : t("led.report.row.select")
         }
       >
         <td>
           {screen.linked ? (
-            <span className="badge badge-linked" title="From rigging report">
-              Linked
+            <span className="badge badge-linked" title={t("led.report.row.fromRigging")}>
+              {t("led.report.linked")}
             </span>
           ) : (
-            <span className="badge badge-manual">Manual</span>
+            <span className="badge badge-manual">{t("led.report.manual")}</span>
           )}
         </td>
         <td>
@@ -1344,14 +1417,14 @@ function ScreenRow({
             type="text"
             value={screen.name}
             onChange={(e) => onUpdate({ name: e.target.value })}
-            placeholder="e.g. Main, IMAG, Side L…"
-            title="This name appears as the centered pill on the pixel map and on the exported PNG."
+            placeholder={t("led.report.row.namePlaceholder")}
+            title={t("led.report.row.nameTitle")}
           />
           {/* Pill-size slider — sits directly under the name input so the
               relationship is obvious. The number on the right doubles as
               a "reset to 1×" button when the user wants the default. */}
-          <div className="led-pill-scale" title="Resize the name pill on the visual / PNG export">
-            <span className="led-pill-scale-label">Pill size</span>
+          <div className="led-pill-scale" title={t("led.report.row.pillSizeTitle")}>
+            <span className="led-pill-scale-label">{t("led.report.row.pillSize")}</span>
             <input
               className="led-pill-scale-range"
               type="range"
@@ -1362,13 +1435,15 @@ function ScreenRow({
               onChange={(e) =>
                 onUpdate({ nameScale: Number(e.target.value) })
               }
-              aria-label={`Name pill size for ${screen.name || "screen"}`}
+              aria-label={t("led.report.row.pillSizeAria", {
+                name: screen.name || t("led.report.screen"),
+              })}
             />
             <button
               type="button"
               className="led-pill-scale-value"
               onClick={() => onUpdate({ nameScale: NAME_SCALE_DEFAULT })}
-              title="Reset to 1×"
+              title={t("led.report.row.resetScale")}
             >
               {nameScale.toFixed(1)}×
             </button>
@@ -1387,7 +1462,7 @@ function ScreenRow({
                 so the user can see it before re-picking. */}
             {!panels.some((p) => p.key === screen.panelKey) && (
               <option value={screen.panelKey}>
-                {screen.panelKey} (missing)
+                {screen.panelKey} {t("led.report.missing")}
               </option>
             )}
             {panels.map((p) => (
@@ -1405,7 +1480,7 @@ function ScreenRow({
               className="led-input"
               style={{ marginTop: 4 }}
               value={resolveFinishingPanel(screen, panels)?.key ?? ""}
-              title="Finishing (bottom) row panel — the smaller panel that completes a non-whole-multiple height"
+              title={t("led.report.row.finishingPanelTitle")}
               onChange={(e) =>
                 onUpdate({
                   finishingPanelKey: e.target.value
@@ -1415,7 +1490,7 @@ function ScreenRow({
                 })
               }
             >
-              <option value="">↳ finishing row: none</option>
+              <option value="">↳ {t("led.report.row.noFinishingRow")}</option>
               {panels
                 .filter(
                   (p) =>
@@ -1468,9 +1543,9 @@ function ScreenRow({
                 e.stopPropagation();
                 setShapeOpen((v) => !v);
               }}
-              title="Open shape templates and build-by-size controls"
+              title={t("led.report.shape.openTitle")}
             >
-              Shape…
+              {t("led.report.table.shape")}…
             </button>
             <button
               type="button"
@@ -1481,16 +1556,18 @@ function ScreenRow({
               }}
               title={
                 armed === "shape"
-                  ? "Cancel — click here to stop toggling cells"
-                  : "Click cells on the visual below to toggle them ON/OFF"
+                  ? t("led.report.shape.cancelEdit")
+                  : t("led.report.shape.editTitle")
               }
             >
-              {armed === "shape" ? "Click cells…" : "Edit"}
+              {armed === "shape"
+                ? t("led.report.shape.clickCells")
+                : t("common.edit")}
             </button>
           </div>
           {disabledCount > 0 && (
-            <div className="led-sub" title="Cabinets currently OFF">
-              −{disabledCount} off
+            <div className="led-sub" title={t("led.report.shape.offTitle")}>
+              {t("led.report.shape.offCount", { count: disabledCount })}
             </div>
           )}
           {shapeOpen && (
@@ -1518,15 +1595,20 @@ function ScreenRow({
         <td className="led-num">
           {PIXEL_FMT.format(m.pixelsX)} × {PIXEL_FMT.format(m.pixelsY)}
           <div className="led-sub">
-            {PIXEL_FMT.format(m.pixels)} px · {m.panels} panels
+            {t("led.report.row.pixelPanelSummary", {
+              pixels: PIXEL_FMT.format(m.pixels),
+              panels: m.panels,
+            })}
           </div>
           {resolveFinishingPanel(screen, panels) && (
             <div
               className="led-sub"
-              title="Bottom finishing row built from a smaller inventory panel"
+              title={t("led.report.row.finishingRowTitle")}
             >
-              incl. {enabledLastRowCount(screen)}×{" "}
-              {resolveFinishingPanel(screen, panels)!.name} finishing row
+              {t("led.report.row.finishingRow", {
+                count: enabledLastRowCount(screen),
+                name: resolveFinishingPanel(screen, panels)!.name,
+              })}
             </div>
           )}
         </td>
@@ -1571,8 +1653,10 @@ function ScreenRow({
               aria-expanded={colorMenuOpen}
               title={
                 activePreset
-                  ? `Panel preset: ${activePreset.label}`
-                  : "Using global panel colours — click to change"
+                  ? t("led.report.color.presetTitle", {
+                      name: t(panelPresetLabelKeys[activePreset.label]),
+                    })
+                  : t("led.report.color.globalTitle")
               }
             >
               <span
@@ -1595,13 +1679,13 @@ function ScreenRow({
               <div
                 className="led-color-menu-popover"
                 role="dialog"
-                aria-label="Screen colour"
+                aria-label={t("led.report.color.screenAria")}
               >
                 <div className="led-color-menu-section">
-                  <div className="led-color-menu-heading">Panel preset</div>
+                  <div className="led-color-menu-heading">{t("led.report.color.panelPreset")}</div>
                   <div
                     className="led-preset-picker"
-                    aria-label="Panel grid preset"
+                    aria-label={t("led.report.color.panelGridAria")}
                   >
                     <button
                       type="button"
@@ -1618,9 +1702,9 @@ function ScreenRow({
                           panelColorLight: undefined,
                         });
                       }}
-                      title="Use the global panel colours from Export options"
+                      title={t("led.report.color.useGlobal")}
                     >
-                      Auto
+                      {t("led.report.auto")}
                     </button>
                     {LED_PANEL_COLOR_PRESETS.map((p) => {
                       const active =
@@ -1644,18 +1728,22 @@ function ScreenRow({
                               color: p.light,
                             });
                           }}
-                          title={`${p.label} preset`}
+                          title={t("led.report.color.presetTitle", {
+                            name: t(panelPresetLabelKeys[p.label]),
+                          })}
                           style={{
                             background: `linear-gradient(135deg, ${p.dark} 0%, ${p.dark} 50%, ${p.light} 50%, ${p.light} 100%)`,
                           }}
-                          aria-label={`${p.label} preset`}
+                          aria-label={t("led.report.color.presetTitle", {
+                            name: t(panelPresetLabelKeys[p.label]),
+                          })}
                         />
                       );
                     })}
                   </div>
                 </div>
                 <div className="led-color-menu-section">
-                  <div className="led-color-menu-heading">Badge colour</div>
+                  <div className="led-color-menu-heading">{t("led.report.color.badge")}</div>
                   <div className="led-color-picker">
                     {LED_SCREEN_COLORS.map((c) => (
                       <button
@@ -1667,13 +1755,13 @@ function ScreenRow({
                           e.stopPropagation();
                           onUpdate({ color: c });
                         }}
-                        aria-label={`Color ${c}`}
+                        aria-label={t("led.report.color.colorAria", { color: c })}
                       />
                     ))}
                   </div>
                 </div>
                 <div className="led-color-menu-section">
-                  <div className="led-color-menu-heading">Label colour</div>
+                  <div className="led-color-menu-heading">{t("led.report.color.label")}</div>
                   <div
                     className="led-color-picker"
                     style={{ alignItems: "center", gap: 8 }}
@@ -1687,9 +1775,9 @@ function ScreenRow({
                         e.stopPropagation();
                         onUpdate({ labelColor: undefined });
                       }}
-                      title="Use the default label colour"
+                      title={t("led.report.color.useDefaultLabel")}
                     >
-                      Auto
+                      {t("led.report.auto")}
                     </button>
                     {[...LED_SCREEN_COLORS, "#ffffff"].map((c) => (
                       <button
@@ -1709,7 +1797,7 @@ function ScreenRow({
                           e.stopPropagation();
                           onUpdate({ labelColor: c });
                         }}
-                        aria-label={`Label colour ${c}`}
+                        aria-label={t("led.report.color.labelAria", { color: c })}
                       />
                     ))}
                     <input
@@ -1717,7 +1805,7 @@ function ScreenRow({
                       value={screen.labelColor ?? "#0f172a"}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => onUpdate({ labelColor: e.target.value })}
-                      title="Custom label colour"
+                      title={t("led.report.color.customLabel")}
                       style={{
                         width: 28,
                         height: 24,
@@ -1740,14 +1828,14 @@ function ScreenRow({
             type="text"
             value={screen.notes}
             onChange={(e) => onUpdate({ notes: e.target.value })}
-            placeholder="Position, notes…"
+            placeholder={t("led.report.row.notesPlaceholder")}
           />
           {/* Rotation input — degrees clockwise. Empty / 0 = no
               rotation (legacy default). Compact so it fits the row
               without pushing the notes column. */}
           <div className="led-rotation-row" style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}>
             <label className="led-sub" style={{ whiteSpace: "nowrap" }}>
-              Rotate
+              {t("led.report.row.rotate")}
             </label>
             <input
               className="led-input led-input-num"
@@ -1770,7 +1858,7 @@ function ScreenRow({
                   onUpdate({ rotationDeg: Math.max(-180, Math.min(180, n)) });
                 }
               }}
-              title="Rotate this screen on the pixel-map canvas (degrees clockwise). Display only — does not affect pixel/cabinet counts."
+              title={t("led.report.row.rotateTitle")}
             />
             <span className="led-sub">°</span>
           </div>
@@ -1779,16 +1867,16 @@ function ScreenRow({
           <button
             className="btn btn-primary btn-sm"
             onClick={() => onExport()}
-            title="Export PNG pixel map"
+            title={t("led.report.row.exportTitle")}
           >
             PNG
           </button>
           <button
             className="btn btn-soft btn-sm"
             onClick={onDuplicate}
-            title="Duplicate this screen"
+            title={t("led.report.row.duplicateTitle")}
           >
-            Copy
+              {t("led.report.row.copy")}
           </button>
           {!screen.linked && (
             <button
@@ -1796,15 +1884,17 @@ function ScreenRow({
               onClick={() => {
                 if (
                   window.confirm(
-                    `Delete screen "${screen.name || "(unnamed)"}"? This can't be undone.`,
+                    t("led.report.confirm.deleteScreen", {
+                      name: screen.name || t("led.report.unnamed"),
+                    }),
                   )
                 ) {
                   onRemove();
                 }
               }}
-              title="Delete this screen"
+              title={t("led.report.row.deleteTitle")}
             >
-              Delete
+              {t("common.delete")}
             </button>
           )}
         </td>
@@ -1854,9 +1944,9 @@ function ScreenRow({
         <tr className="led-row-custom">
           <td colSpan={12}>
             <div className="led-custom-panel">
-              <strong>Custom panel:</strong>
+              <strong>{t("led.report.customPanel")}:</strong>
               <label>
-                Pixels W
+                {t("led.report.custom.pixelsW")}
                 <NumberField
                   min={1}
                   value={panel.pixelWidth}
@@ -1868,7 +1958,7 @@ function ScreenRow({
                 />
               </label>
               <label>
-                Pixels H
+                {t("led.report.custom.pixelsH")}
                 <NumberField
                   min={1}
                   value={panel.pixelHeight}
@@ -1880,7 +1970,7 @@ function ScreenRow({
                 />
               </label>
               <label>
-                Width (m)
+                {t("led.report.custom.width")}
                 <NumberField
                   min={0.01}
                   step={0.01}
@@ -1893,7 +1983,7 @@ function ScreenRow({
                 />
               </label>
               <label>
-                Height (m)
+                {t("led.report.custom.height")}
                 <NumberField
                   min={0.01}
                   step={0.01}
@@ -1906,7 +1996,7 @@ function ScreenRow({
                 />
               </label>
               <label>
-                Weight (kg)
+                {t("led.report.custom.weight")}
                 <NumberField
                   min={0}
                   step={0.1}
@@ -1919,7 +2009,7 @@ function ScreenRow({
                 />
               </label>
               <label>
-                Power (W)
+                {t("led.report.custom.power")}
                 <NumberField
                   min={0}
                   step={1}
@@ -1998,6 +2088,7 @@ function PixelMapCanvas({
     phase: "start" | "move" | "end",
   ) => void;
 }) {
+  const t = useT();
   /** Outer SVG ref — used by the drag handler to translate client-pixel
    *  pointer movement into the SVG's user-space units (which is what
    *  `posX`/`posY` are stored in). */
@@ -2206,7 +2297,7 @@ function PixelMapCanvas({
         viewBox={`${layout.minX} ${layout.minY} ${layout.totalWidth} ${layout.totalHeight}`}
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-label="Pixel map of LED screens"
+        aria-label={t("led.report.canvasAria")}
         onClick={(e) => {
           // Click on empty canvas = clear selection. Children stop
           // propagation when the user clicks a screen, so this only
@@ -2332,6 +2423,7 @@ function ScreenSvg({
    *  to persist `logoX/Y` after the user repositions it. */
   onUpdateSettings: (patch: Partial<LedSettings>) => void;
 }) {
+  const t = useT();
   const { screen, x, y, width, height, cellW, cellH } = item;
   /** Per-screen panel colours override the global ledSettings ones when
    *  present (set via the per-row preset picker, the PDF importer, or
@@ -3078,7 +3170,7 @@ function ScreenSvg({
             >
               ⠿
             </text>
-            <title>Drag to reposition this screen on the canvas</title>
+            <title>{t("led.report.canvas.dragScreen")}</title>
           </g>
         );
       })()}
@@ -3488,7 +3580,15 @@ function ScreenSvg({
         const gcd = (a: number, b: number): number =>
           b === 0 ? a : gcd(b, a % b);
         const g = gcd(m.pixelsX, m.pixelsY) || 1;
-        const text = `${screen.panelsWide} × ${screen.panelsTall}  •  ${m.panels} panels  •  ${m.pixelsX} × ${m.pixelsY} px  •  ${m.pixelsX / g}:${m.pixelsY / g}`;
+        const text = t("led.report.canvas.infoBar", {
+          wide: screen.panelsWide,
+          tall: screen.panelsTall,
+          panels: m.panels,
+          pixelsX: m.pixelsX,
+          pixelsY: m.pixelsY,
+          aspectX: m.pixelsX / g,
+          aspectY: m.pixelsY / g,
+        });
         const minDim = Math.min(width, height);
         const infoFont = Math.max(8, Math.min(20, minDim * 0.028));
         const padX = infoFont * 1.2;
@@ -3640,8 +3740,12 @@ function ScreenSvg({
                   how to remove it without cluttering the always-on
                   visual. */}
               <title>
-                {mk.kind === "power" ? "Power" : "Signal"} drop {mk.index} —
-                drag to move, alt-click or right-click to delete
+                {t("led.report.canvas.markerTitle", {
+                  kind: t(mk.kind === "power"
+                    ? "led.report.power"
+                    : "led.report.signal"),
+                  index: mk.index,
+                })}
               </title>
             </g>
           );
@@ -3719,8 +3823,13 @@ function ScreenSvg({
                 {label}
               </text>
               <title>
-                {mk.kind === "power" ? "Power" : "Signal"} feed at panel
-                {" "}r{mk.row + 1}c{mk.col + 1} — click to remove
+                {t("led.report.canvas.feedTitle", {
+                  kind: t(mk.kind === "power"
+                    ? "led.report.power"
+                    : "led.report.signal"),
+                  row: mk.row + 1,
+                  col: mk.col + 1,
+                })}
               </title>
             </g>
           );
@@ -3759,9 +3868,11 @@ function ScreenSvg({
             key: "power",
             icon: "⚡",
             color: "#f59e0b",
-            title: `Power map: ${powerPorts.length} port${
-              powerPorts.length === 1 ? "" : "s"
-            }, ${cables} cable${cables === 1 ? "" : "s"}`,
+            title: t("led.report.canvas.mapSummary", {
+              kind: t("led.report.power"),
+              ports: powerPorts.length,
+              cables,
+            }),
           });
         }
         if (hasSignal) {
@@ -3770,9 +3881,11 @@ function ScreenSvg({
             key: "signal",
             icon: "⇄",
             color: "#2563eb",
-            title: `Signal map: ${signalPorts.length} port${
-              signalPorts.length === 1 ? "" : "s"
-            }, ${cables} cable${cables === 1 ? "" : "s"}`,
+            title: t("led.report.canvas.mapSummary", {
+              kind: t("led.report.signal"),
+              ports: signalPorts.length,
+              cables,
+            }),
           });
         }
         const count = items.length;
@@ -3850,31 +3963,72 @@ function ShapePopover({
   onApplyTemplate: (template: LedShapeTemplate) => void;
   onClose: () => void;
 }) {
+  const t = useT();
+  const shapeKeys: Record<LedShapeTemplate, {
+    label: TranslationKey;
+    description: TranslationKey;
+  }> = {
+    rectangle: {
+      label: "led.report.shape.rectangle",
+      description: "led.report.shape.rectangleDescription",
+    },
+    "l-shape": {
+      label: "led.report.shape.lShape",
+      description: "led.report.shape.lShapeDescription",
+    },
+    "u-shape": {
+      label: "led.report.shape.uShape",
+      description: "led.report.shape.uShapeDescription",
+    },
+    "t-shape": {
+      label: "led.report.shape.tShape",
+      description: "led.report.shape.tShapeDescription",
+    },
+    plus: {
+      label: "led.report.shape.plus",
+      description: "led.report.shape.plusDescription",
+    },
+    stairs: {
+      label: "led.report.shape.stairs",
+      description: "led.report.shape.stairsDescription",
+    },
+    ribbon: {
+      label: "led.report.shape.ribbon",
+      description: "led.report.shape.ribbonDescription",
+    },
+    columns: {
+      label: "led.report.shape.columns",
+      description: "led.report.shape.columnsDescription",
+    },
+  };
   return (
     <div
       className="led-shape-popover"
       role="dialog"
-      aria-label="Build by size & shape templates"
+      aria-label={t("led.report.shape.dialogAria")}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="led-shape-popover-head">
-        <strong>Build by size</strong>
+        <strong>{t("led.report.shape.buildBySize")}</strong>
         <button
           type="button"
           className="btn btn-ghost btn-xs"
           onClick={onClose}
-          title="Close"
+          title={t("common.close")}
         >
           ×
         </button>
       </div>
       <div className="led-shape-popover-body">
         <div className="led-shape-current">
-          Current: {currentWidthM.toFixed(2)} × {currentHeightM.toFixed(2)} m
+          {t("led.report.shape.current", {
+            width: currentWidthM.toFixed(2),
+            height: currentHeightM.toFixed(2),
+          })}
         </div>
         <div className="led-shape-build-grid">
           <label>
-            Target W (m)
+            {t("led.report.shape.targetWidth")}
             <input
               className="led-input led-input-num"
               type="number"
@@ -3885,7 +4039,7 @@ function ShapePopover({
             />
           </label>
           <label>
-            Target H (m)
+            {t("led.report.shape.targetHeight")}
             <input
               className="led-input led-input-num"
               type="number"
@@ -3902,7 +4056,7 @@ function ShapePopover({
             checked={clearShapeOnApply}
             onChange={(e) => setClearShapeOnApply(e.target.checked)}
           />
-          Reset panel ON/OFF on apply
+          {t("led.report.shape.resetOnApply")}
         </label>
         <div className="led-shape-actions">
           <button
@@ -3913,31 +4067,31 @@ function ShapePopover({
               onClose();
             }}
           >
-            Apply size
+            {t("led.report.shape.applySize")}
           </button>
         </div>
       </div>
       <div className="led-shape-popover-divider" />
       <div className="led-shape-popover-body">
-        <strong>Shape templates</strong>
+        <strong>{t("led.report.shape.templates")}</strong>
         <div className="led-shape-chips">
           {LED_SHAPE_TEMPLATE_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
               className="btn btn-ghost btn-xs led-shape-chip"
-              title={opt.description}
+              title={t(shapeKeys[opt.value].description)}
               onClick={() => {
                 onApplyTemplate(opt.value);
               }}
             >
-              {opt.label}
+              {t(shapeKeys[opt.value].label)}
             </button>
           ))}
         </div>
         <div className="led-shape-hint">
-          Click a chip to fill the cabinet ON/OFF pattern. Use{" "}
-          <em>Edit</em> on the row to toggle individual cabinets.
+          {t("led.report.shape.hintBefore")}{" "}
+          <em>{t("common.edit")}</em> {t("led.report.shape.hintAfter")}
         </div>
       </div>
     </div>
@@ -3964,11 +4118,12 @@ function ProcessorsStrip({
   onAdd: (model: NovastarProcessorModel) => void;
   onRemove: (processorId: string) => void;
 }) {
+  const t = useT();
   const [pickerOpen, setPickerOpen] = useState(false);
   const hasAny = processors.length > 0;
   return (
     <div className="led-procs-strip">
-      <div className="led-procs-strip-label">Processors:</div>
+      <div className="led-procs-strip-label">{t("led.report.processors")}:</div>
       <div className="led-procs-strip-chips">
         {processors.map((p) => {
           const spec = NOVASTAR_PROCESSOR_CATALOG[p.model];
@@ -3982,8 +4137,10 @@ function ProcessorsStrip({
                   e.stopPropagation();
                   onRemove(p.id);
                 }}
-                aria-label={`Remove ${spec?.name ?? p.model}`}
-                title="Remove"
+                aria-label={t("led.report.processor.removeNamed", {
+                  name: spec?.name ?? p.model,
+                })}
+                title={t("common.remove")}
               >
                 ×
               </button>
@@ -3998,9 +4155,9 @@ function ProcessorsStrip({
               e.stopPropagation();
               setPickerOpen((v) => !v);
             }}
-            title="Attach a Novastar processor to this screen"
+            title={t("led.report.processor.attachTitle")}
           >
-            + Add
+            + {t("common.add")}
           </button>
           {pickerOpen && (
             <div
@@ -4028,13 +4185,17 @@ function ProcessorsStrip({
       {hasAny && (
         <div
           className={`led-procs-cap ${isUnder ? "is-under" : ""}`}
-          title="Combined Ethernet outputs and pixel cap across attached processors vs this screen's pixel count"
+          title={t("led.report.processor.capacityTitle")}
         >
-          {cap.outputs} outputs · {PIXEL_FMT.format(cap.maxPixels)} px cap
-          {" vs "}
-          {PIXEL_FMT.format(requiredPixels)} px needed
+          {t("led.report.processor.capacity", {
+            outputs: cap.outputs,
+            capacity: PIXEL_FMT.format(cap.maxPixels),
+            needed: PIXEL_FMT.format(requiredPixels),
+          })}
           {isUnder && (
-            <span className="led-procs-under-pill">Under capacity</span>
+            <span className="led-procs-under-pill">
+              {t("led.report.processor.underCapacity")}
+            </span>
           )}
         </div>
       )}
@@ -4055,6 +4216,7 @@ function CableBracketBomCard({
   panels: LedPanel[];
   beamCatalog: LedRigAccessoryCatalogItem[];
 }) {
+  const t = useT();
   const rows = screens.map((s) => {
     const bom = computeScreenCableBOM(s, panels, beamCatalog);
     return { screen: s, bom };
@@ -4089,26 +4251,28 @@ function CableBracketBomCard({
   return (
     <section className="led-bom-card">
       <header className="led-bom-head">
-        <h3>Cable &amp; bracket BOM</h3>
+        <h3>{t("led.report.bom.title")}</h3>
         <span className="led-bom-sub">
-          Cabinet-to-cabinet jumpers only — signal {SIGNAL_CABLE_LENGTH_M.toFixed(2)} m,
-          TrueOne power {POWER_TRUE1_CABLE_LENGTH_M.toFixed(2)} m
+          {t("led.report.bom.subtitle", {
+            signalLength: SIGNAL_CABLE_LENGTH_M.toFixed(2),
+            powerLength: POWER_TRUE1_CABLE_LENGTH_M.toFixed(2),
+          })}
         </span>
       </header>
       <div className="led-bom-table-wrap">
         <table className="led-table led-bom-table">
           <thead>
             <tr>
-              <th>Screen</th>
-              <th className="led-num">Signal</th>
-              <th className="led-num">Power (TrueOne)</th>
-              <th>Brackets</th>
+              <th>{t("led.report.screen")}</th>
+              <th className="led-num">{t("led.report.signal")}</th>
+              <th className="led-num">{t("led.report.bom.powerTrueOne")}</th>
+              <th>{t("led.report.bom.brackets")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map(({ screen, bom }) => (
               <tr key={screen.id}>
-                <td>{screen.name || "(unnamed)"}</td>
+                <td>{screen.name || t("led.report.unnamed")}</td>
                 <td className="led-num">
                   {bom.signalCables} ×{" "}
                   <span className="led-sub">
@@ -4143,7 +4307,7 @@ function CableBracketBomCard({
           <tfoot>
             <tr>
               <td>
-                <strong>Totals</strong>
+                <strong>{t("led.report.totals")}</strong>
               </td>
               <td className="led-num">
                 <strong>{totalSignalCables}</strong>{" "}
@@ -4202,6 +4366,7 @@ function PowerBalancerCard({
   mainsVoltage: number;
   onMainsVoltageChange: (v: number) => void;
 }) {
+  const t = useT();
   // Defensive — settings can be momentarily 0 if a user is mid-edit.
   // Falling back to 230 keeps the table sane until they finish typing.
   const voltage = mainsVoltage > 0 ? mainsVoltage : 230;
@@ -4223,10 +4388,9 @@ function PowerBalancerCard({
   return (
     <section className="led-card">
       <div className="led-card-head">
-        <h3>3-phase power balancer</h3>
+        <h3>{t("led.report.powerBalancer.title")}</h3>
         <span className="led-hint">
-          Splits each screen's wattage evenly across L1 / L2 / L3 at the
-          configured mains voltage. Use to size the feed (16 A, 32 A, 63 A…).
+          {t("led.report.powerBalancer.subtitle")}
         </span>
       </div>
       <div className="led-card-body">
@@ -4235,7 +4399,7 @@ function PowerBalancerCard({
           style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}
         >
           <label className="led-sub" style={{ whiteSpace: "nowrap" }}>
-            Mains voltage (L–N)
+            {t("led.report.powerBalancer.mainsVoltage")}
           </label>
           <input
             className="led-input led-input-num"
@@ -4251,26 +4415,26 @@ function PowerBalancerCard({
                 onMainsVoltageChange(n);
               }
             }}
-            title="Line-to-neutral voltage (V). Typical: 230 EU, 120 US, 100 JP."
+            title={t("led.report.powerBalancer.voltageTitle")}
           />
           <span className="led-sub">V</span>
         </div>
         <table className="led-table led-table-compact">
           <thead>
             <tr>
-              <th>Screen</th>
-              <th className="led-num">Total power</th>
+              <th>{t("led.report.screen")}</th>
+              <th className="led-num">{t("led.report.powerBalancer.totalPower")}</th>
               <th className="led-num">L1</th>
               <th className="led-num">L2</th>
               <th className="led-num">L3</th>
-              <th className="led-num">A / phase</th>
+              <th className="led-num">{t("led.report.powerBalancer.ampsPerPhase")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="led-sub">
-                  No screens yet — add one to see the per-phase split.
+                  {t("led.report.powerBalancer.empty")}
                 </td>
               </tr>
             ) : (
@@ -4291,7 +4455,7 @@ function PowerBalancerCard({
           <tfoot>
             <tr>
               <td>
-                <strong>Totals</strong>
+                <strong>{t("led.report.totals")}</strong>
               </td>
               <td className="led-num">
                 <strong>{fmt(totalW, 0)} W</strong>
@@ -4399,6 +4563,35 @@ function ExportOptions({
   settings: LedSettings;
   onUpdateSettings: (patch: Partial<LedSettings>) => void;
 }) {
+  const t = useT();
+  const overlayLabelKeys: Record<
+    | "showLabels"
+    | "showArrows"
+    | "showCabinetIds"
+    | "showDataFlowPath"
+    | "showTestPattern"
+    | "showScreenName"
+    | "showInfoBar",
+    TranslationKey
+  > = {
+    showLabels: "led.report.export.panelLabels",
+    showArrows: "led.report.export.dataFlowArrows",
+    showCabinetIds: "led.report.export.cabinetBadges",
+    showDataFlowPath: "led.report.export.dataFlowPath",
+    showTestPattern: "led.report.export.testPattern",
+    showScreenName: "led.report.export.screenNamePill",
+    showInfoBar: "led.report.export.infoBar",
+  };
+  const panelPresetLabelKeys: Record<string, TranslationKey> = {
+    Blue: "led.report.color.blue",
+    Red: "led.report.color.red",
+    "Red + Blue": "led.report.color.redBlue",
+    Green: "led.report.color.green",
+    Purple: "led.report.color.purple",
+    Orange: "led.report.color.orange",
+    Teal: "led.report.color.teal",
+    Mono: "led.report.color.mono",
+  };
   const [open, setOpen] = useState(false);
   return (
     <section className={`led-card led-export-card ${open ? "is-open" : ""}`}>
@@ -4414,11 +4607,10 @@ function ExportOptions({
           </span>
           <span className="led-export-header-text">
             <span className="led-export-header-title">
-              Export options (PNG)
+              {t("led.report.export.title")}
             </span>
             <span className="led-export-header-sub">
-              Controls what the per-screen <strong>PNG</strong> button renders.
-              The on-screen pixel map uses these too where applicable.
+              {t("led.report.export.subtitle")}
             </span>
           </span>
         </span>
@@ -4432,14 +4624,14 @@ function ExportOptions({
           {/* ── Group 1: Output & wiring ───────────────────────────── */}
           <div className="led-export-group">
             <div className="led-export-group-head">
-              <span className="led-export-group-title">Output &amp; wiring</span>
+              <span className="led-export-group-title">{t("led.report.export.outputWiring")}</span>
               <span className="led-export-group-hint">
-                How the wall is sliced across processor outputs.
+                {t("led.report.export.outputWiringHint")}
               </span>
             </div>
             <div className="led-export-fields">
               <label className="led-field">
-                <span className="led-field-label">Output mode</span>
+                <span className="led-field-label">{t("led.report.export.outputMode")}</span>
                 <select
                   className="led-input"
                   value={settings.outputMode}
@@ -4449,13 +4641,13 @@ function ExportOptions({
                     })
                   }
                 >
-                  <option value="per-screen">One per screen</option>
-                  <option value="per-row">One per panel row</option>
+                  <option value="per-screen">{t("led.report.export.onePerScreen")}</option>
+                  <option value="per-row">{t("led.report.export.onePerRow")}</option>
                 </select>
               </label>
 
               <label className="led-field">
-                <span className="led-field-label">Pixels per output</span>
+                <span className="led-field-label">{t("led.report.export.pixelsPerOutput")}</span>
                 <NumberField
                   className="led-input"
                   min={1000}
@@ -4471,7 +4663,7 @@ function ExportOptions({
               </label>
 
               <label className="led-field">
-                <span className="led-field-label">Wire path</span>
+                <span className="led-field-label">{t("led.report.export.wirePath")}</span>
                 <select
                   className="led-input"
                   value={settings.wirePath}
@@ -4481,18 +4673,18 @@ function ExportOptions({
                     })
                   }
                 >
-                  <option value="linear">Linear (rows L→R)</option>
+                  <option value="linear">{t("led.report.export.linear")}</option>
                   <option value="serpentine">
-                    Serpentine (alternates rows)
+                    {t("led.report.export.serpentine")}
                   </option>
                   <option value="column-serpentine">
-                    Snake by column (down/up)
+                    {t("led.report.export.columnSnake")}
                   </option>
                 </select>
               </label>
 
               <label className="led-field">
-                <span className="led-field-label">Processor</span>
+                <span className="led-field-label">{t("led.report.processor.label")}</span>
                 <select
                   className="led-input"
                   value={settings.processorId ?? ""}
@@ -4503,7 +4695,7 @@ function ExportOptions({
                     })
                   }
                 >
-                  <option value="">— None / generic —</option>
+                  <option value="">— {t("led.report.export.noProcessor")} —</option>
                   {LED_PROCESSORS.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -4517,22 +4709,24 @@ function ExportOptions({
           {/* ── Group 2: Visual overlays ───────────────────────────── */}
           <div className="led-export-group">
             <div className="led-export-group-head">
-              <span className="led-export-group-title">Visual overlays</span>
+              <span className="led-export-group-title">{t("led.report.export.visualOverlays")}</span>
               <span className="led-export-group-hint">
-                Toggle the helper graphics drawn on top of every cabinet.
+                {t("led.report.export.visualOverlaysHint")}
               </span>
             </div>
             <div className="led-export-toggles">
               {(
                 [
-                  ["showLabels", "Panel labels (A1, B1…)"],
-                  ["showArrows", "Data-flow arrows"],
-                  ["showCabinetIds", "Cabinet ID badges (1, 2, 3…)"],
-                  ["showDataFlowPath", "Data-flow path overlay"],
-                  ["showTestPattern", "Alignment circle + corner X"],
-                  ["showScreenName", "Screen name pill"],
-                  ["showInfoBar", "Bottom info bar"],
-                  ["showLogo", settings.customLogoUrl ? "Custom logo" : "EHS logo"],
+                  ["showLabels", t(overlayLabelKeys.showLabels)],
+                  ["showArrows", t(overlayLabelKeys.showArrows)],
+                  ["showCabinetIds", t(overlayLabelKeys.showCabinetIds)],
+                  ["showDataFlowPath", t(overlayLabelKeys.showDataFlowPath)],
+                  ["showTestPattern", t(overlayLabelKeys.showTestPattern)],
+                  ["showScreenName", t(overlayLabelKeys.showScreenName)],
+                  ["showInfoBar", t(overlayLabelKeys.showInfoBar)],
+                  ["showLogo", settings.customLogoUrl
+                    ? t("led.report.export.customLogo")
+                    : t("led.report.export.ehsLogo")],
                 ] as const
               ).map(([key, label]) => {
                 const checked = Boolean(settings[key]);
@@ -4555,7 +4749,7 @@ function ExportOptions({
                       className="led-toggle-card-pill"
                       aria-hidden="true"
                     >
-                      {checked ? "On" : "Off"}
+                      {t(checked ? "led.report.on" : "led.report.off")}
                     </span>
                   </label>
                 );
@@ -4566,11 +4760,9 @@ function ExportOptions({
           {/* ── Group 2.5: Custom logo ───────────────────────────── */}
           <div className="led-export-group">
             <div className="led-export-group-head">
-              <span className="led-export-group-title">Logo</span>
+              <span className="led-export-group-title">{t("led.report.export.logo")}</span>
               <span className="led-export-group-hint">
-                Upload your own logo to replace the EHS mark. Drag the
-                logo on the canvas to reposition it, and use the slider
-                to resize.
+                {t("led.report.export.logoHint")}
               </span>
             </div>
             <div
@@ -4583,7 +4775,9 @@ function ExportOptions({
               }}
             >
               <label className="led-btn led-btn-secondary" style={{ cursor: "pointer" }}>
-                {settings.customLogoUrl ? "Replace logo" : "Upload logo"}
+                {t(settings.customLogoUrl
+                  ? "led.report.export.replaceLogo"
+                  : "led.report.export.uploadLogo")}
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/svg+xml,image/webp"
@@ -4596,7 +4790,7 @@ function ExportOptions({
                     if (!file) return;
                     if (file.size > 4 * 1024 * 1024) {
                       window.alert(
-                        "Logo file is too large (max 4 MB). Please use a smaller image.",
+                        t("led.report.export.logoTooLarge"),
                       );
                       return;
                     }
@@ -4641,9 +4835,9 @@ function ExportOptions({
                       customLogoAspect: undefined,
                     })
                   }
-                  title="Revert to the built-in EHS logo"
+                  title={t("led.report.export.useEhsTitle")}
                 >
-                  Use EHS logo
+                  {t("led.report.export.useEhs")}
                 </button>
               )}
               <button
@@ -4656,21 +4850,23 @@ function ExportOptions({
                     logoScale: undefined,
                   })
                 }
-                title="Move the logo back to the top-right corner at its default size"
+                title={t("led.report.export.resetLogoTitle")}
                 disabled={
                   settings.logoX === undefined &&
                   settings.logoY === undefined &&
                   settings.logoScale === undefined
                 }
               >
-                Reset position &amp; size
+                {t("led.report.export.resetLogo")}
               </button>
               <label
                 className="led-field"
                 style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 220 }}
               >
                 <span className="led-field-label" style={{ whiteSpace: "nowrap" }}>
-                  Size {Math.round((settings.logoScale ?? 1) * 100)}%
+                  {t("led.report.export.logoSize", {
+                    percent: Math.round((settings.logoScale ?? 1) * 100),
+                  })}
                 </span>
                 <input
                   type="range"
@@ -4687,7 +4883,7 @@ function ExportOptions({
               {settings.customLogoUrl && (
                 <img
                   src={settings.customLogoUrl}
-                  alt="Custom logo preview"
+                  alt={t("led.report.export.logoPreview")}
                   style={{
                     height: 36,
                     maxWidth: 120,
@@ -4705,15 +4901,15 @@ function ExportOptions({
           {/* ── Group 3: Look &amp; feel ───────────────────────────── */}
           <div className="led-export-group">
             <div className="led-export-group-head">
-              <span className="led-export-group-title">Look &amp; feel</span>
+              <span className="led-export-group-title">{t("led.report.export.lookFeel")}</span>
               <span className="led-export-group-hint">
-                Cabinet pattern and the alternating tint used on the map.
+                {t("led.report.export.lookFeelHint")}
               </span>
             </div>
 
             <div className="led-export-look">
               <label className="led-field">
-                <span className="led-field-label">Panel pattern</span>
+                <span className="led-field-label">{t("led.report.export.panelPattern")}</span>
                 <select
                   className="led-input"
                   value={settings.panelPattern}
@@ -4724,14 +4920,14 @@ function ExportOptions({
                   }
                 >
                   <option value="checker">
-                    Checkerboard (every panel visible)
+                    {t("led.report.export.checkerboard")}
                   </option>
-                  <option value="columns">Vertical stripes (columns)</option>
+                  <option value="columns">{t("led.report.export.verticalStripes")}</option>
                 </select>
               </label>
 
               <div className="led-field">
-                <span className="led-field-label">Panel colors</span>
+                <span className="led-field-label">{t("led.report.export.panelColors")}</span>
                 <div className="led-color-pair-row">
                   <label className="led-color-input">
                     <input
@@ -4740,9 +4936,9 @@ function ExportOptions({
                       onChange={(e) =>
                         onUpdateSettings({ panelColorDark: e.target.value })
                       }
-                      aria-label="Dark panel color"
+                      aria-label={t("led.report.export.darkColorAria")}
                     />
-                    <span>Dark</span>
+                    <span>{t("led.report.export.dark")}</span>
                   </label>
                   <label className="led-color-input">
                     <input
@@ -4751,16 +4947,16 @@ function ExportOptions({
                       onChange={(e) =>
                         onUpdateSettings({ panelColorLight: e.target.value })
                       }
-                      aria-label="Light panel color"
+                      aria-label={t("led.report.export.lightColorAria")}
                     />
-                    <span>Light</span>
+                    <span>{t("led.report.export.light")}</span>
                   </label>
                 </div>
               </div>
             </div>
 
             <div className="led-export-presets">
-              <span className="led-export-presets-label">Presets</span>
+              <span className="led-export-presets-label">{t("led.report.export.presets")}</span>
               <div className="led-color-presets">
                 {LED_PANEL_COLOR_PRESETS.map((p) => {
                   const isActive =
@@ -4773,7 +4969,9 @@ function ExportOptions({
                       key={p.label}
                       type="button"
                       className={`led-color-preset ${isActive ? "is-active" : ""}`}
-                      title={`Use ${p.label} preset`}
+                      title={t("led.report.export.usePreset", {
+                        name: t(panelPresetLabelKeys[p.label]),
+                      })}
                       onClick={() =>
                         onUpdateSettings({
                           panelColorDark: p.dark,
@@ -4789,7 +4987,9 @@ function ExportOptions({
                         className="led-color-preset-half"
                         style={{ background: p.light }}
                       />
-                      <span className="led-color-preset-label">{p.label}</span>
+                      <span className="led-color-preset-label">
+                        {t(panelPresetLabelKeys[p.label])}
+                      </span>
                     </button>
                   );
                 })}

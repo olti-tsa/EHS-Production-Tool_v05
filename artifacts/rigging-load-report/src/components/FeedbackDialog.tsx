@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useSubmitFeedback } from "../hooks/use-feedback";
 import { toast } from "sonner";
 import { Bug, Lightbulb } from "lucide-react";
+import { useT } from "../lib/i18n/I18nContext";
 
 export function FeedbackDialog({
   isOpen,
@@ -11,6 +12,7 @@ export function FeedbackDialog({
   onClose: () => void;
 }) {
   const submitFeedback = useSubmitFeedback();
+  const t = useT();
 
   const [type, setType] = useState<"bug" | "feature_request">("bug");
   const [title, setTitle] = useState("");
@@ -28,7 +30,7 @@ export function FeedbackDialog({
         pageUrl: window.location.href,
       });
       
-      toast.success("Feedback submitted. Thank you!");
+      toast.success(t("feedback.success"));
 
       onClose();
 
@@ -40,7 +42,7 @@ export function FeedbackDialog({
       }, 300);
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "An unknown error occurred",
+        err instanceof Error ? err.message : t("feedback.unknownError"),
       );
     }
   };
@@ -84,20 +86,20 @@ export function FeedbackDialog({
             id="feedback-panel-title"
             style={{ margin: 0, fontSize: 18, fontWeight: 600 }}
           >
-            Report a Bug / Feedback
+            {t("feedback.title")}
           </h3>
           <p
             id="feedback-panel-description"
             style={{ margin: "6px 0 0", color: "var(--text-muted, #9999A6)", fontSize: 14 }}
           >
-            Report an issue or request a new feature.
+            {t("feedback.description")}
           </p>
         </div>
         <button
           type="button"
           onClick={onClose}
           disabled={submitFeedback.isPending}
-          aria-label="Close feedback panel"
+          aria-label={t("feedback.closeAria")}
           style={{
             flexShrink: 0,
             border: 0,
@@ -109,14 +111,14 @@ export function FeedbackDialog({
             fontSize: 13,
           }}
         >
-          ✕ Close
+          ✕ {t("common.close")}
         </button>
       </div>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div
             role="group"
-            aria-label="Feedback type"
+            aria-label={t("feedback.type")}
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
@@ -147,7 +149,7 @@ export function FeedbackDialog({
               }}
             >
               <Bug size={16} aria-hidden />
-              Bug Report
+              {t("feedback.bugReport")}
             </button>
             <button
               type="button"
@@ -180,18 +182,18 @@ export function FeedbackDialog({
               }}
             >
               <Lightbulb size={16} aria-hidden />
-              Feature Request
+              {t("feedback.featureRequest")}
             </button>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-main, #E5E5EC)" }}>Title</label>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-main, #E5E5EC)" }}>{t("feedback.form.title")}</label>
             <input
               required
               maxLength={255}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Brief summary of the issue"
+              placeholder={t("feedback.form.titlePlaceholder")}
               style={{
                 width: "100%",
                 padding: "10px",
@@ -206,14 +208,14 @@ export function FeedbackDialog({
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-main, #E5E5EC)" }}>Details</label>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-main, #E5E5EC)" }}>{t("feedback.form.details")}</label>
             <textarea
               required
               rows={5}
               maxLength={10000}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What happened? What did you expect to happen?"
+              placeholder={t("feedback.form.detailsPlaceholder")}
               style={{
                 width: "100%",
                 padding: "10px",
@@ -242,7 +244,7 @@ export function FeedbackDialog({
                 cursor: submitFeedback.isPending ? "not-allowed" : "pointer",
               }}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
@@ -259,7 +261,7 @@ export function FeedbackDialog({
                 opacity: submitFeedback.isPending || !title.trim() || !description.trim() ? 0.7 : 1,
               }}
             >
-              {submitFeedback.isPending ? "Submitting..." : "Submit"}
+              {submitFeedback.isPending ? t("feedback.submitting") : t("feedback.submit")}
             </button>
           </div>
         </form>

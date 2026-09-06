@@ -5,6 +5,7 @@ import {
   formatPhaseTime,
   hotelLineForDay,
 } from "../lib/itineraryFormat";
+import { useT } from "../../lib/i18n/I18nContext";
 
 /** Per-day itinerary card shape — mirrors the server's response.
  *  Defined locally (not imported from the server lib) because the
@@ -219,6 +220,7 @@ function ItineraryDayCard({
   theme: ThemeMode;
 }) {
   const c = PALETTE[theme];
+  const t = useT();
   // formatHumanDate now embeds the weekday via Intl, so we don't render
   // `day.dayOfWeek` separately — that field is server-emitted English
   // and would visually clash with a localised date for non-English
@@ -244,12 +246,12 @@ function ItineraryDayCard({
         }}
       >
         <strong style={{ fontSize: 14, color: c.text }}>{formatted}</strong>
-        {day.working ? <Chip theme={theme} kind="working" label="Working" /> : null}
+        {day.working ? <Chip theme={theme} kind="working" label={t("portal.itinerary.working")} /> : null}
         {day.hotel?.isCheckIn ? (
-          <Chip theme={theme} kind="hotel" label="Hotel check-in" />
+          <Chip theme={theme} kind="hotel" label={t("portal.itinerary.hotelCheckIn")} />
         ) : null}
         {day.hotel?.isCheckOut ? (
-          <Chip theme={theme} kind="hotel" label="Hotel check-out" />
+          <Chip theme={theme} kind="hotel" label={t("portal.itinerary.hotelCheckOut")} />
         ) : null}
       </div>
 
@@ -257,7 +259,7 @@ function ItineraryDayCard({
         <div style={{ fontSize: 13, color: c.text }}>
           {day.callTime ? (
             <>
-              <strong style={{ color: c.muted, fontWeight: 600 }}>Call:</strong>{" "}
+              <strong style={{ color: c.muted, fontWeight: 600 }}>{t("portal.itinerary.call")}:</strong>{" "}
               {day.callTime}
             </>
           ) : null}
@@ -266,7 +268,7 @@ function ItineraryDayCard({
           ) : null}
           {day.offTime ? (
             <>
-              <strong style={{ color: c.muted, fontWeight: 600 }}>Off:</strong>{" "}
+              <strong style={{ color: c.muted, fontWeight: 600 }}>{t("portal.itinerary.off")}:</strong>{" "}
               {day.offTime}
             </>
           ) : null}
@@ -276,7 +278,7 @@ function ItineraryDayCard({
       {day.phases.length > 0 ? (
         <div style={{ fontSize: 13, color: c.text }}>
           <strong style={{ color: c.muted, fontWeight: 600 }}>
-            Production:
+            {t("portal.itinerary.production")}:
           </strong>{" "}
           {day.phases.map((p, i) => {
             const time = p.timeTbd
@@ -297,7 +299,7 @@ function ItineraryDayCard({
 
       {day.hotel ? (
         <div style={{ fontSize: 13, color: c.text }}>
-          <strong style={{ color: c.muted, fontWeight: 600 }}>Hotel:</strong>{" "}
+          <strong style={{ color: c.muted, fontWeight: 600 }}>{t("portal.itinerary.hotel")}:</strong>{" "}
           {hotelLineForDay(day.hotel)}
         </div>
       ) : null}

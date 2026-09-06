@@ -23,6 +23,25 @@
  */
 
 import type { RosterRow } from "./crewRoster";
+import type { Locale } from "./i18n/types";
+
+export type MasterSheetExportCopy = {
+  title: string;
+  documentTitle: string;
+  untitledBrief: string;
+  generated: string;
+  rosterCount: (count: number) => string;
+  hotelSummary: (rooms: number, nights: number) => string;
+  empty: string;
+  table: { name: string; role: string; status: string; days: string; hotel: string; food: string; phone: string; notes: string; call: string; off: string; dayRate: string };
+  footer: string;
+  print: string;
+  dayKey: string;
+  numberedByDate: string;
+  status: Record<RosterRow["status"], string>;
+  food: { profileMissing: string; none: string; vegetarian: string; vegan: string; halal: string; glutenFree: string; lactoseFree: string; allergens: (count: number) => string };
+  hotel: { nights: (count: number) => string; required: string; notRequired: string };
+};
 
 /** Row payload for the print export. We deliberately re-type instead
  *  of reusing RosterRow directly because call/off times don't live on
@@ -48,6 +67,8 @@ export type MasterSheetInput = {
    *  columns are added. We always print Notes — it's a fundamental
    *  call-sheet column, just hidden on small screens. */
   showProductionDetails: boolean;
+  locale: Locale;
+  copy: MasterSheetExportCopy;
 };
 
 function escHtml(s: string): string {
@@ -59,62 +80,29 @@ function escHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function fmtDateShort(iso: string | null): string {
+function localeId(locale: Locale): string {
+  return locale === "no" ? "nb-NO" : "en-US";
+}
+
+function fmtDateShort(iso: string | null, locale: Locale): string {
   if (!iso) return "—";
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", {
+  return d.toLocaleDateString(localeId(locale), {
     day: "2-digit",
     month: "short",
     timeZone: "UTC",
   });
 }
 
-function fmtGeneratedNow(): string {
-  return new Date().toLocaleString("en-GB", {
+function fmtGeneratedNow(locale: Locale): string {
+  return new Date().toLocaleString(localeId(locale), {
     day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-const DIETARY_LABELS: Record<string, string> = {
-  vegetarian: "veg",
-  vegan: "vegan",
-  halal: "halal",
-  "gluten-free": "GF",
-  "lactose-free": "LF",
-};
-
-function statusLabel(s: RosterRow["status"]): string {
-  switch (s) {
-    case "invited":
-      return "Invited";
-    case "confirmed":
-      return "Confirmed";
-    case "done":
-      return "Done";
-    case "invoiced":
-      return "Invoiced";
-    case "paid":
-      return "Paid";
-    case "requested":
-      return "Requested";
-    case "accepted":
-      return "Accepted";
-    case "declined":
-      return "Declined";
-    case "no-reply":
-      return "No reply";
-    case "too_late":
-      return "Too late";
-    case "manual":
-      return "In-house";
-    default:
-      return s;
-  }
 }
 
 /** Compact "1 2 3 / 4" chip strip — same idea as the on-screen
@@ -125,10 +113,11 @@ function statusLabel(s: RosterRow["status"]): string {
 function dayChipsHtml(
   assigned: ReadonlyArray<string>,
   projectDays: ReadonlyArray<string>,
+  locale: Locale,
 ): string {
   if (projectDays.length === 0) {
     if (assigned.length === 0) return '<span class="ms-empty">—</span>';
-    return assigned.map((d) => `<span class="ms-chip ms-chip-on">${escHtml(fmtDateShort(d))}</span>`).join(" ");
+    return assigned.map((d) => `<span class="ms-chip ms-chip-on">${escHtml(fmtDateShort(d, locale))}</span>`).join(" ");
   }
   const set = new Set(assigned);
   return projectDays
@@ -140,21 +129,25 @@ function dayChipsHtml(
     .join(" ");
 }
 
-function foodHtml(row: RosterRow): string {
+function foodHtml(row: RosterRow, copy: MasterSheetExportCopy): string {
   if (row.source !== "gig") return '<span class="ms-empty">—</span>';
-  if (row.profileless) return '<span class="ms-empty" title="Freelancer profile not filled in">?</span>';
+  if (row.profileless) return `<span class="ms-empty" title="${escHtml(copy.food.profileMissing)}">?</span>`;
   if (row.dietaryTags.length === 0 && row.allergens.length === 0) {
-    return '<span class="ms-muted">none</span>';
+    return `<span class="ms-muted">${escHtml(copy.food.none)}</span>`;
   }
+  const dietaryLabels: Record<string, string> = {
+    vegetarian: copy.food.vegetarian, vegan: copy.food.vegan, halal: copy.food.halal,
+    "gluten-free": copy.food.glutenFree, "lactose-free": copy.food.lactoseFree,
+  };
   const tagHtml = row.dietaryTags
     .map(
       (t) =>
-        `<span class="ms-pill ms-pill-warn">${escHtml(DIETARY_LABELS[t] ?? t)}</span>`,
+        `<span class="ms-pill ms-pill-warn">${escHtml(dietaryLabels[t] ?? t)}</span>`,
     )
     .join(" ");
   const allergenHtml =
     row.allergens.length > 0
-      ? `<span class="ms-pill ms-pill-bad" title="${escHtml(row.allergens.join(", "))}">⚠ ${row.allergens.length}</span>`
+      ? `<span class="ms-pill ms-pill-bad" title="${escHtml(row.allergens.join(", "))}">⚠ ${escHtml(copy.food.allergens(row.allergens.length))}</span>`
       : "";
   return `${tagHtml}${tagHtml && allergenHtml ? " " : ""}${allergenHtml}`;
 }
@@ -162,14 +155,14 @@ function foodHtml(row: RosterRow): string {
 function rowsHtml(input: MasterSheetInput): string {
   return input.rows
     .map((row) => {
-      const status = statusLabel(row.status);
+      const status = input.copy.status[row.status];
       const nights = row.hotelDates?.length ?? 0;
       const hotel =
         nights > 0
-          ? `<span class="ms-pill ms-pill-ok" title="${escHtml(row.hotelDates.join(", "))}">🏨 ${nights}n</span>`
+          ? `<span class="ms-pill ms-pill-ok" title="${escHtml(row.hotelDates.join(", "))}">🏨 ${escHtml(input.copy.hotel.nights(nights))}</span>`
           : row.hotelRequired
-            ? '<span class="ms-pill ms-pill-ok">hotel</span>'
-            : '<span class="ms-muted">no</span>';
+            ? `<span class="ms-pill ms-pill-ok">${escHtml(input.copy.hotel.required)}</span>`
+            : `<span class="ms-muted">${escHtml(input.copy.hotel.notRequired)}</span>`;
       const phone = row.phone
         ? `<span class="ms-phone">${escHtml(row.phone)}</span>`
         : '<span class="ms-empty">—</span>';
@@ -182,16 +175,16 @@ function rowsHtml(input: MasterSheetInput): string {
         ? `
         <td class="ms-cell-num">${callTime ? escHtml(callTime) : '<span class="ms-empty">—</span>'}</td>
         <td class="ms-cell-num">${offTime ? escHtml(offTime) : '<span class="ms-empty">—</span>'}</td>
-        <td class="ms-cell-num">${row.dayRate ? escHtml(row.dayRate.toLocaleString("en-US")) : '<span class="ms-empty">—</span>'}</td>`
+        <td class="ms-cell-num">${row.dayRate ? escHtml(row.dayRate.toLocaleString(localeId(input.locale))) : '<span class="ms-empty">—</span>'}</td>`
         : "";
       return `
       <tr>
         <td class="ms-cell-name"><strong>${escHtml(row.name || "—")}</strong></td>
         <td>${escHtml(row.role || "—")}</td>
         <td>${escHtml(status)}</td>
-        <td class="ms-cell-days">${dayChipsHtml(row.assignedDates, input.projectDays)}</td>
+        <td class="ms-cell-days">${dayChipsHtml(row.assignedDates, input.projectDays, input.locale)}</td>
         <td>${hotel}</td>
-        <td>${foodHtml(row)}</td>
+        <td>${foodHtml(row, input.copy)}</td>
         <td>${phone}</td>
         <td class="ms-cell-notes">${notes}</td>${productionCells}
       </tr>`;
@@ -199,7 +192,7 @@ function rowsHtml(input: MasterSheetInput): string {
     .join("");
 }
 
-function legendHtml(projectDays: ReadonlyArray<string>): string {
+function legendHtml(projectDays: ReadonlyArray<string>, locale: Locale, copy: MasterSheetExportCopy): string {
   if (projectDays.length === 0) return "";
   // We list at most ~12 days inline; beyond that the legend would
   // wrap awkwardly so we collapse to a "Day 1 = <date> · Day N =
@@ -207,11 +200,11 @@ function legendHtml(projectDays: ReadonlyArray<string>): string {
   if (projectDays.length <= 12) {
     return `
       <div class="ms-legend">
-        <strong>Day key:</strong>
+        <strong>${escHtml(copy.dayKey)}:</strong>
         ${projectDays
           .map(
             (d, i) =>
-              `<span class="ms-legend-item">${i + 1} = ${escHtml(fmtDateShort(d))}</span>`,
+              `<span class="ms-legend-item">${i + 1} = ${escHtml(fmtDateShort(d, locale))}</span>`,
           )
           .join("")}
       </div>`;
@@ -220,29 +213,29 @@ function legendHtml(projectDays: ReadonlyArray<string>): string {
   const last = projectDays[projectDays.length - 1]!;
   return `
     <div class="ms-legend">
-      <strong>Day key:</strong>
-      <span class="ms-legend-item">1 = ${escHtml(fmtDateShort(first))}</span>
-      <span class="ms-legend-item">${projectDays.length} = ${escHtml(fmtDateShort(last))}</span>
-      <span class="ms-legend-item ms-legend-hint">(numbered left-to-right by date)</span>
+      <strong>${escHtml(copy.dayKey)}:</strong>
+      <span class="ms-legend-item">1 = ${escHtml(fmtDateShort(first, locale))}</span>
+      <span class="ms-legend-item">${projectDays.length} = ${escHtml(fmtDateShort(last, locale))}</span>
+      <span class="ms-legend-item ms-legend-hint">(${escHtml(copy.numberedByDate)})</span>
     </div>`;
 }
 
 export function openMasterSheet(input: MasterSheetInput): { ok: boolean } {
-  const generated = fmtGeneratedNow();
-  const projectName = input.briefName || "Untitled brief";
+  const generated = fmtGeneratedNow(input.locale);
+  const projectName = input.briefName || input.copy.untitledBrief;
   const venue = input.venue || "—";
   const productionHeaders = input.showProductionDetails
     ? `
-        <th class="ms-num">Call</th>
-        <th class="ms-num">Off</th>
-        <th class="ms-num">Day rate</th>`
+        <th class="ms-num">${escHtml(input.copy.table.call)}</th>
+        <th class="ms-num">${escHtml(input.copy.table.off)}</th>
+        <th class="ms-num">${escHtml(input.copy.table.dayRate)}</th>`
     : "";
 
   const html = `<!doctype html>
-<html lang="en">
+<html lang="${input.locale === "no" ? "nb-NO" : "en"}">
 <head>
   <meta charset="utf-8" />
-  <title>${escHtml(projectName)} — Crew & Logistics</title>
+  <title>${escHtml(projectName)} — ${escHtml(input.copy.documentTitle)}</title>
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
@@ -444,13 +437,13 @@ export function openMasterSheet(input: MasterSheetInput): { ok: boolean } {
   <div class="ms-page">
     <div class="ms-band">
       <div>
-        <div class="ms-band-sub">Crew &amp; Logistics — master sheet</div>
+        <div class="ms-band-sub">${escHtml(input.copy.title)}</div>
         <h1>${escHtml(projectName)}</h1>
         <div class="ms-band-venue">${escHtml(venue)}</div>
       </div>
       <div class="ms-band-right">
-        Generated ${escHtml(generated)}
-        <span class="ms-band-count">${input.rows.length} on roster</span>
+        ${escHtml(input.copy.generated)} ${escHtml(generated)}
+        <span class="ms-band-count">${escHtml(input.copy.rosterCount(input.rows.length))}</span>
         ${(() => {
           let rooms = 0;
           let nights = 0;
@@ -462,37 +455,37 @@ export function openMasterSheet(input: MasterSheetInput): { ok: boolean } {
             }
           }
           return rooms > 0
-            ? `<div style="font-size:11px;color:#15683a;font-weight:600;margin-top:2px;">🏨 ${rooms} room${rooms === 1 ? "" : "s"} · ${nights} night${nights === 1 ? "" : "s"}</div>`
+            ? `<div style="font-size:11px;color:#15683a;font-weight:600;margin-top:2px;">🏨 ${escHtml(input.copy.hotelSummary(rooms, nights))}</div>`
             : "";
         })()}
       </div>
     </div>
     ${
       input.rows.length === 0
-        ? '<div class="ms-empty-state">No crew on this brief yet.</div>'
+        ? `<div class="ms-empty-state">${escHtml(input.copy.empty)}</div>`
         : `<table class="ms-table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Role</th>
-          <th>Status</th>
-          <th>Days</th>
-          <th>Hotel</th>
-          <th>Food</th>
-          <th>Phone</th>
-          <th>Notes</th>${productionHeaders}
+          <th>${escHtml(input.copy.table.name)}</th>
+          <th>${escHtml(input.copy.table.role)}</th>
+          <th>${escHtml(input.copy.table.status)}</th>
+          <th>${escHtml(input.copy.table.days)}</th>
+          <th>${escHtml(input.copy.table.hotel)}</th>
+          <th>${escHtml(input.copy.table.food)}</th>
+          <th>${escHtml(input.copy.table.phone)}</th>
+          <th>${escHtml(input.copy.table.notes)}</th>${productionHeaders}
         </tr>
       </thead>
       <tbody>
         ${rowsHtml(input)}
       </tbody>
     </table>
-    ${legendHtml(input.projectDays)}`
+    ${legendHtml(input.projectDays, input.locale, input.copy)}`
     }
-    <div class="ms-foot">EHS Production Tool · Crew &amp; Logistics master sheet</div>
+    <div class="ms-foot">${escHtml(input.copy.footer)}</div>
   </div>
   <div class="ms-noprint">
-    <button onclick="window.print()">Print / Save as PDF</button>
+    <button onclick="window.print()">${escHtml(input.copy.print)}</button>
   </div>
 </body>
 </html>`;

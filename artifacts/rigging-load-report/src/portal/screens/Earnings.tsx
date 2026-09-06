@@ -43,19 +43,19 @@ function csvEscape(value: string): string {
 
 function buildCsv(gigs: Gig[], t: ReturnType<typeof useT>): string {
   const header = [
-    "Status",
-    "Project",
-    "Client",
-    "Role",
-    "Venue",
-    "Start",
-    "End",
-    "Hours",
-    "Rate (NOK)",
-    "Flat fee (NOK)",
-    "Total (NOK)",
-    "Notes",
-  ].join(",");
+    t("portal.earnings.csv.status"),
+    t("portal.earnings.csv.project"),
+    t("portal.earnings.csv.client"),
+    t("portal.earnings.csv.role"),
+    t("portal.earnings.csv.venue"),
+    t("portal.earnings.csv.start"),
+    t("portal.earnings.csv.end"),
+    t("portal.earnings.csv.hours"),
+    t("portal.earnings.csv.rate"),
+    t("portal.earnings.csv.flatFee"),
+    t("portal.earnings.csv.total"),
+    t("portal.earnings.csv.notes"),
+  ].map(csvEscape).join(",");
   const rows = gigs.map((g) =>
     [
       statusLabelT(g.status, t),

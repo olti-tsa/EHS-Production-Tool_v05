@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { Search, Plus, MapPin, ChevronRight, ArrowLeft, Edit2, Save, Trash2 } from "lucide-react";
+import { useT } from "../../lib/i18n/I18nContext";
 
 export type VenueRiggingSpecs = {
   maxPointLoad: string;
@@ -52,6 +53,7 @@ interface Props {
 }
 
 export function VenuesDatabasePage({ getToken }: Props) {
+  const t = useT();
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -69,7 +71,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
       const res = await fetch("/api/venues", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error("Failed to load venues");
+      if (!res.ok) throw new Error(t("venues.error.load"));
       const json = await res.json();
       setVenues(json.venues || []);
       setError("");
@@ -82,7 +84,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
 
   useEffect(() => {
     fetchVenues();
-  }, [getToken]);
+  }, [getToken, t]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return venues;
@@ -112,7 +114,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
         body: JSON.stringify(venueDraft)
       });
       
-      if (!res.ok) throw new Error("Failed to save venue");
+      if (!res.ok) throw new Error(t("venues.error.save"));
       const json = await res.json();
       
       await fetchVenues();
@@ -130,7 +132,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
 
   const handleDelete = async () => {
     if (!activeVenueId || activeVenueId === "new") return;
-    if (!confirm("Are you sure you want to delete this venue? This action cannot be undone.")) return;
+    if (!confirm(t("venues.deleteConfirm"))) return;
     
     setSaving(true);
     try {
@@ -139,7 +141,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error("Failed to delete venue");
+      if (!res.ok) throw new Error(t("venues.error.delete"));
       
       await fetchVenues();
       setActiveVenueId(null);
@@ -189,7 +191,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
                 style={{ width: "100%", minHeight: 120, resize: "vertical" }}
                 value={(v[field] as string) || ""}
                 onChange={e => setVenueDraft(prev => ({ ...prev, [field]: e.target.value }))}
-                placeholder={`Enter ${label.toLowerCase()}...`}
+                placeholder={t("venues.placeholder.enter", { field: label.toLowerCase() })}
               />
             </div>
           );
@@ -203,7 +205,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
               style={{ width: "100%" }}
               value={(v[field] as string) || ""}
               onChange={e => setVenueDraft(prev => ({ ...prev, [field]: e.target.value }))}
-              placeholder={`Enter ${label.toLowerCase()}...`}
+              placeholder={t("venues.placeholder.enter", { field: label.toLowerCase() })}
             />
           </div>
         );
@@ -240,7 +242,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
                     const currentField = (prev[field] as Record<string, string> | null) || {};
                     return { ...prev, [field]: { ...currentField, [key]: e.target.value } };
                   })}
-                  placeholder={`Enter ${label.toLowerCase()}...`}
+                  placeholder={t("venues.placeholder.enter", { field: label.toLowerCase() })}
                 />
               </div>
             ))}
@@ -275,7 +277,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
             style={{ padding: "6px 12px", marginLeft: -12, marginBottom: 16 }}
             onClick={() => {
               if (isEditing && !isNew) {
-                if (confirm("Discard unsaved changes?")) {
+                if (confirm(t("venues.discardConfirm"))) {
                   setIsEditing(false);
                 }
               } else {
@@ -283,14 +285,14 @@ export function VenuesDatabasePage({ getToken }: Props) {
               }
             }}
           >
-            <ArrowLeft size={16} /> Back to Venues
+            <ArrowLeft size={16} /> {t("venues.action.back")}
           </button>
           
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <h2 style={{ fontSize: "2rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)", display: "flex", alignItems: "center", gap: 12 }}>
                 <MapPin size={28} color="var(--primary)" />
-                {isNew ? "New Venue" : (v.name || "Unnamed Venue")}
+                {isNew ? t("venues.newVenue") : (v.name || t("venues.unnamedVenue"))}
               </h2>
               {!isNew && !isEditing && (
                 <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: 0 }}>
@@ -303,20 +305,20 @@ export function VenuesDatabasePage({ getToken }: Props) {
                 <>
                   {!isNew && (
                     <button className="ehs-ghost-btn" onClick={() => setIsEditing(false)} disabled={saving}>
-                      Cancel
+                       {t("common.cancel")}
                     </button>
                   )}
                   <button className="ehs-primary-btn" onClick={handleSave} disabled={saving}>
-                    <Save size={16} /> {saving ? "Saving..." : "Save Venue"}
+                     <Save size={16} /> {saving ? t("common.saving") : t("venues.action.save")}
                   </button>
                 </>
               ) : (
                 <>
                   <button className="ehs-ghost-btn text-danger" onClick={handleDelete} disabled={saving}>
-                    <Trash2 size={16} /> Delete
+                     <Trash2 size={16} /> {t("common.delete")}
                   </button>
                   <button className="ehs-primary-btn" onClick={() => { setVenueDraft(activeVenue || {}); setIsEditing(true); }}>
-                    <Edit2 size={16} /> Edit
+                     <Edit2 size={16} /> {t("common.edit")}
                   </button>
                 </>
               )}
@@ -326,11 +328,11 @@ export function VenuesDatabasePage({ getToken }: Props) {
 
         <div className="ehs-tabs" style={{ display: "flex", gap: 24, borderBottom: "1px solid var(--border-color)", marginBottom: 32 }}>
           {[
-            { id: "general", label: "General Info" },
-            { id: "rigging", label: "Rigging & Stage" },
-            { id: "power", label: "Power & Cable" },
-            { id: "logistics", label: "Logistics & Access" },
-            { id: "facilities", label: "Facilities & Comms" }
+             { id: "general", label: t("venues.tab.general") },
+             { id: "rigging", label: t("venues.tab.rigging") },
+             { id: "power", label: t("venues.tab.power") },
+             { id: "logistics", label: t("venues.tab.logistics") },
+             { id: "facilities", label: t("venues.tab.facilities") }
           ].map(tab => (
             <button
               key={tab.id}
@@ -356,70 +358,56 @@ export function VenuesDatabasePage({ getToken }: Props) {
           {activeTab === "general" && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 24 }}>
               <div>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>Venue Details</h3>
-                <Input label="Venue Name" field="name" />
-                <Input label="Address" field="address" multiline />
-                <Input label="Website" field="website" />
+                 <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>{t("venues.general.venueDetails")}</h3>
+                 <Input label={t("venues.general.venueName")} field="name" />
+                 <Input label={t("venues.general.address")} field="address" multiline />
+                 <Input label={t("venues.general.website")} field="website" />
               </div>
               <div>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>Technical Contact</h3>
-                <Input label="Contact Name" field="technicalContactName" />
-                <Input label="Phone Number" field="technicalContactPhone" />
-                <Input label="Email Address" field="technicalContactEmail" />
+                 <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>{t("venues.general.techContact")}</h3>
+                 <Input label={t("venues.general.contactName")} field="technicalContactName" />
+                 <Input label={t("venues.general.phoneNumber")} field="technicalContactPhone" />
+                 <Input label={t("venues.general.emailAddress")} field="technicalContactEmail" />
               </div>
             </div>
           )}
 
           {activeTab === "rigging" && (
             <StructuredInput
-              title="Rigging & Stage Specs"
+              title={t("venues.rigging.title")}
               field="riggingSpecs"
               labels={{
-                maxPointLoad: "Max Point Load",
-                roofTrussCapacity: "Roof Truss Capacity",
-                beamHeight: "Beam Height",
-                stageDimensions: "Stage Dimensions"
+                maxPointLoad: t("venues.rigging.maxPointLoad"), roofTrussCapacity: t("venues.rigging.roofTrussCapacity"), beamHeight: t("venues.rigging.beamHeight"), stageDimensions: t("venues.rigging.stageDimensions")
               }}
             />
           )}
 
           {activeTab === "power" && (
             <StructuredInput
-              title="Power Infrastructure"
+              title={t("venues.power.title")}
               field="powerInfrastructure"
               labels={{
-                cee32A: "CEE 32A",
-                cee63A: "CEE 63A",
-                cee125A: "CEE 125A",
-                panelLocations: "Panel Locations",
-                shorePower: "Shore Power"
+                cee32A: t("venues.power.cee32A"), cee63A: t("venues.power.cee63A"), cee125A: t("venues.power.cee125A"), panelLocations: t("venues.power.panelLocations"), shorePower: t("venues.power.shorePower")
               }}
             />
           )}
 
           {activeTab === "logistics" && (
             <StructuredInput
-              title="Logistics & Access"
+              title={t("venues.logistics.title")}
               field="logisticsAccess"
               labels={{
-                loadingDockDimensions: "Loading Dock Dimensions",
-                doorClearanceHeight: "Door Clearance Height",
-                rampAccess: "Ramp Access",
-                freightElevatorLimits: "Freight Elevator Limits",
-                truckParkingRules: "Truck Parking Rules"
+                loadingDockDimensions: t("venues.logistics.loadingDockDimensions"), doorClearanceHeight: t("venues.logistics.doorClearanceHeight"), rampAccess: t("venues.logistics.rampAccess"), freightElevatorLimits: t("venues.logistics.freightElevatorLimits"), truckParkingRules: t("venues.logistics.truckParkingRules")
               }}
             />
           )}
 
           {activeTab === "facilities" && (
             <StructuredInput
-              title="Site Facilities"
+              title={t("venues.facilities.title")}
               field="siteFacilities"
               labels={{
-                wifiCredentials: "Wi-Fi Credentials",
-                productionOfficeLocations: "Production Office Locations",
-                dressingRooms: "Dressing Rooms",
-                stageDimensions: "Stage Dimensions"
+                wifiCredentials: t("venues.facilities.wifiCredentials"), productionOfficeLocations: t("venues.facilities.productionOfficeLocations"), dressingRooms: t("venues.facilities.dressingRooms"), stageDimensions: t("venues.rigging.stageDimensions")
               }}
             />
           )}
@@ -433,14 +421,14 @@ export function VenuesDatabasePage({ getToken }: Props) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)" }}>
-            Venue Directory
+            {t("venues.title")}
           </h2>
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>
-            Technical specifications and logistics for production venues.
+            {t("venues.subtitle")}
           </p>
         </div>
         <button className="ehs-primary-btn" onClick={openNew}>
-          <Plus size={16} /> New Venue
+          <Plus size={16} /> {t("venues.action.new")}
         </button>
       </div>
 
@@ -450,7 +438,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
             <Search size={16} color="var(--text-muted)" />
             <input 
               type="text" 
-              placeholder="Search venues by name or city..." 
+               placeholder={t("venues.searchPlaceholder")}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -459,7 +447,7 @@ export function VenuesDatabasePage({ getToken }: Props) {
 
         {loading ? (
           <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
-            Loading venue database...
+             {t("venues.loading")}
           </div>
         ) : error ? (
           <div style={{ padding: 40, textAlign: "center", color: "var(--danger)", fontSize: 14 }}>
@@ -470,15 +458,14 @@ export function VenuesDatabasePage({ getToken }: Props) {
             <div className="ehs-empty-state-icon">
               <MapPin size={24} />
             </div>
-            <h3>No venues found</h3>
+             <h3>{t("venues.empty.title")}</h3>
             <p>
               {venues.length === 0 
-                ? "Your venue directory is empty. Add your first venue to get started."
-                : "No venues match your search."}
+                 ? t("venues.empty.body") : t("venues.empty.search")}
             </p>
             {venues.length === 0 && (
               <button className="ehs-primary-btn" onClick={openNew}>
-                <Plus size={16} /> Add Venue
+                 <Plus size={16} /> {t("venues.action.add")}
               </button>
             )}
           </div>
@@ -487,17 +474,17 @@ export function VenuesDatabasePage({ getToken }: Props) {
             <table className="ehs-table">
               <thead>
                 <tr>
-                  <th>Venue Name</th>
-                  <th>Location</th>
-                  <th>Tech Contact</th>
-                  <th>Contact Phone</th>
+                   <th>{t("venues.table.name")}</th>
+                   <th>{t("venues.table.location")}</th>
+                   <th>{t("venues.table.techContact")}</th>
+                   <th>{t("venues.table.contactPhone")}</th>
                   <th style={{ width: 40 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(v => (
                   <tr key={v.id} className="is-clickable" onClick={() => openVenue(v)}>
-                    <td style={{ fontWeight: 600 }}>{v.name || "Untitled"}</td>
+                     <td style={{ fontWeight: 600 }}>{v.name || t("venues.table.untitled")}</td>
                     <td style={{ maxWidth: 250, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.address || "—"}</td>
                     <td style={{ maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v.technicalContactName || "—"}</td>
                     <td style={{ whiteSpace: "nowrap" }}>{v.technicalContactPhone || "—"}</td>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { Search, Plus, Building2, ChevronRight, ArrowLeft, Edit2, Save, Trash2, Copy, Calendar as CalendarIcon, Briefcase } from "lucide-react";
+import { useT } from "../../lib/i18n/I18nContext";
 
 export type ClientPrimaryContact = {
   name: string;
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
+  const t = useT();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -55,7 +57,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
       const res = await fetch("/api/clients", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error("Failed to load clients");
+      if (!res.ok) throw new Error(t("clients.error.load"));
       const json = await res.json();
       setClients(json.clients || []);
       setError("");
@@ -77,7 +79,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to load client details");
+      if (!res.ok) throw new Error(json.error || t("clients.error.loadDetail"));
       setActiveClientFull({ ...json.client, projects: json.projects });
     } catch (err: any) {
       alert(err.message);
@@ -110,7 +112,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
         body: JSON.stringify(clientDraft)
       });
       
-      if (!res.ok) throw new Error("Failed to save client");
+      if (!res.ok) throw new Error(t("clients.error.save"));
       const json = await res.json();
       
       await fetchClients();
@@ -132,7 +134,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
 
   const handleDelete = async () => {
     if (!activeClientId || activeClientId === "new") return;
-    if (!confirm("Are you sure you want to delete this client? This action cannot be undone.")) return;
+    if (!confirm(t("clients.deleteConfirm"))) return;
     
     setSaving(true);
     try {
@@ -141,7 +143,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error("Failed to delete client");
+      if (!res.ok) throw new Error(t("clients.error.delete"));
       
       await fetchClients();
       setActiveClientId(null);
@@ -170,7 +172,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
           easyjob_number: cloneModal.easyjob_number || undefined
         })
       });
-      if (!res.ok) throw new Error("Failed to clone project");
+      if (!res.ok) throw new Error(t("clients.error.clone"));
       const json = await res.json();
       
       setCloneModal(null);
@@ -223,7 +225,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
                 style={{ width: "100%", minHeight: 80, resize: "vertical" }}
                 value={(c[field] as string) || ""}
                 onChange={e => setClientDraft(prev => ({ ...prev, [field]: e.target.value }))}
-                placeholder={`Enter ${label.toLowerCase()}...`}
+                placeholder={t("clients.placeholder.enter", { field: label.toLowerCase() })}
               />
             </div>
           );
@@ -237,7 +239,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
               style={{ width: "100%" }}
               value={c[field] || ""}
               onChange={e => setClientDraft(prev => ({ ...prev, [field]: type === "number" ? Number(e.target.value) : e.target.value }))}
-              placeholder={`Enter ${label.toLowerCase()}...`}
+              placeholder={t("clients.placeholder.enter", { field: label.toLowerCase() })}
             />
           </div>
         );
@@ -247,7 +249,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
         <div style={{ marginBottom: 24 }}>
           <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</label>
           <div style={{ fontSize: 14, color: c[field] !== undefined ? "var(--text-main)" : "var(--text-muted)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-            {c[field] !== undefined && c[field] !== "" ? (type === "number" && field === "defaultPaymentTermsDays" ? `${c[field]} days` : c[field]) : "—"}
+                {c[field] !== undefined && c[field] !== "" ? (type === "number" && field === "defaultPaymentTermsDays" ? t("clients.table.days", { days: c[field] as number }) : c[field]) : "—"}
           </div>
         </div>
       );
@@ -258,11 +260,11 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
         {cloneModal && (
           <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
             <div style={{ background: "var(--card-bg)", padding: 24, borderRadius: 12, width: 400, border: "1px solid var(--border-color)" }}>
-              <h3 style={{ margin: "0 0 16px 0", fontSize: 18 }}>Clone Past Project</h3>
-              <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "var(--text-muted)" }}>This will create a new planning project using the venue, equipment, and settings from this archived event.</p>
+              <h3 style={{ margin: "0 0 16px 0", fontSize: 18 }}>{t("clients.modal.clone.title")}</h3>
+              <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "var(--text-muted)" }}>{t("clients.modal.clone.subtitle")}</p>
               
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase" }}>New Project Name</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase" }}>{t("clients.modal.clone.newName")}</label>
                 <input 
                   type="text" 
                   className="ehs-input" 
@@ -273,7 +275,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
               </div>
               
               <div style={{ marginBottom: 24 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase" }}>New Easyjob Number (Optional)</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase" }}>{t("clients.modal.clone.newEasyjob")}</label>
                 <input 
                   type="text" 
                   className="ehs-input" 
@@ -284,9 +286,9 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
-                <button className="ehs-ghost-btn" onClick={() => setCloneModal(null)} disabled={saving}>Cancel</button>
+                <button className="ehs-ghost-btn" onClick={() => setCloneModal(null)} disabled={saving}>{t("common.cancel")}</button>
                 <button className="ehs-primary-btn" onClick={handleCloneProject} disabled={saving || !cloneModal.name.trim()}>
-                  {saving ? "Cloning..." : "Create Project"}
+                  {saving ? t("clients.modal.clone.cloning") : t("clients.modal.clone.action")}
                 </button>
               </div>
             </div>
@@ -299,7 +301,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
             style={{ padding: "6px 12px", marginLeft: -12, marginBottom: 16 }}
             onClick={() => {
               if (isEditing && !isNew) {
-                if (confirm("Discard unsaved changes?")) {
+                if (confirm(t("clients.discardConfirm"))) {
                   setIsEditing(false);
                 }
               } else {
@@ -308,18 +310,18 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
               }
             }}
           >
-            <ArrowLeft size={16} /> Back to Clients
+            <ArrowLeft size={16} /> {t("clients.action.back")}
           </button>
           
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <h2 style={{ fontSize: "2rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)", display: "flex", alignItems: "center", gap: 12 }}>
                 <Building2 size={28} color="var(--primary)" />
-                {isNew ? "New Client" : (c.companyName || "Unnamed Client")}
+                {isNew ? t("clients.newClient") : (c.companyName || t("clients.unnamedClient"))}
               </h2>
               {!isNew && !isEditing && c.organizationNumber && (
                 <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: 0, fontFamily: "monospace" }}>
-                  Org No: {c.organizationNumber}
+                  {t("clients.orgNo", { org: c.organizationNumber })}
                 </p>
               )}
             </div>
@@ -328,20 +330,20 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
                 <>
                   {!isNew && (
                     <button className="ehs-ghost-btn" onClick={() => setIsEditing(false)} disabled={saving}>
-                      Cancel
+                      {t("common.cancel")}
                     </button>
                   )}
                   <button className="ehs-primary-btn" onClick={handleSave} disabled={saving}>
-                    <Save size={16} /> {saving ? "Saving..." : "Save Client"}
+                    <Save size={16} /> {saving ? t("common.saving") : t("clients.action.save")}
                   </button>
                 </>
               ) : (
                 <>
                   <button className="ehs-ghost-btn text-danger" onClick={handleDelete} disabled={saving}>
-                    <Trash2 size={16} /> Delete
+                    <Trash2 size={16} /> {t("common.delete")}
                   </button>
                   <button className="ehs-primary-btn" onClick={() => { setClientDraft(activeClientFull || {}); setIsEditing(true); }}>
-                    <Edit2 size={16} /> Edit
+                    <Edit2 size={16} /> {t("common.edit")}
                   </button>
                 </>
               )}
@@ -351,8 +353,8 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
 
         <div className="ehs-tabs" style={{ display: "flex", gap: 24, borderBottom: "1px solid var(--border-color)", marginBottom: 32 }}>
           {[
-            { id: "general", label: "Client Info" },
-            { id: "projects", label: "Completed Productions" },
+            { id: "general", label: t("clients.tab.general") },
+            { id: "projects", label: t("clients.tab.projects") },
           ].map(tab => (
             <button
               key={tab.id}
@@ -379,15 +381,15 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
           {activeTab === "general" && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: 24 }}>
               <div>
-                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>Company Details</h3>
-                <Input label="Company Name" field="companyName" />
-                <Input label="Organization Number" field="organizationNumber" />
-                <Input label="Billing Address" field="billingAddress" multiline />
-                <Input label="Default Payment Terms (Days)" field="defaultPaymentTermsDays" type="number" />
+                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>{t("clients.general.companyDetails")}</h3>
+                <Input label={t("clients.general.companyName")} field="companyName" />
+                <Input label={t("clients.general.orgNumber")} field="organizationNumber" />
+                <Input label={t("clients.general.billingAddress")} field="billingAddress" multiline />
+                <Input label={t("clients.general.paymentTerms")} field="defaultPaymentTermsDays" type="number" />
               </div>
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Contact Personnel</h3>
+                   <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>{t("clients.general.contactPersonnel")}</h3>
                   {isEditing && (
                     <button 
                       className="ehs-ghost-btn" 
@@ -397,7 +399,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
                         primaryContacts: [...(prev.primaryContacts || []), { name: "", role: "", phone: "", email: "" }] 
                       }))}
                     >
-                      <Plus size={12} style={{ marginRight: 4 }} /> Add Contact
+                      <Plus size={12} style={{ marginRight: 4 }} /> {t("clients.general.addContact")}
                     </button>
                   )}
                 </div>
@@ -409,6 +411,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
                         <button 
                           className="ehs-ghost-btn text-danger" 
                           style={{ position: "absolute", top: 8, right: 8, padding: 4 }}
+                          aria-label={t("common.remove")}
                           onClick={() => setClientDraft(prev => ({
                             ...prev,
                             primaryContacts: (prev.primaryContacts || []).filter((_, i) => i !== idx)
@@ -417,22 +420,22 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
                           <Trash2 size={14} />
                         </button>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginTop: 4 }}>
-                          <input type="text" className="ehs-input" placeholder="Name" value={contact.name} onChange={e => {
+                          <input type="text" className="ehs-input" placeholder={t("clients.general.contact.name")} value={contact.name} onChange={e => {
                             const newContacts = [...(clientDraft.primaryContacts || [])];
                             newContacts[idx] = { ...newContacts[idx], name: e.target.value };
                             setClientDraft(prev => ({ ...prev, primaryContacts: newContacts }));
                           }} />
-                          <input type="text" className="ehs-input" placeholder="Role" value={contact.role} onChange={e => {
+                          <input type="text" className="ehs-input" placeholder={t("clients.general.contact.role")} value={contact.role} onChange={e => {
                             const newContacts = [...(clientDraft.primaryContacts || [])];
                             newContacts[idx] = { ...newContacts[idx], role: e.target.value };
                             setClientDraft(prev => ({ ...prev, primaryContacts: newContacts }));
                           }} />
-                          <input type="text" className="ehs-input" placeholder="Phone" value={contact.phone} onChange={e => {
+                          <input type="text" className="ehs-input" placeholder={t("clients.general.contact.phone")} value={contact.phone} onChange={e => {
                             const newContacts = [...(clientDraft.primaryContacts || [])];
                             newContacts[idx] = { ...newContacts[idx], phone: e.target.value };
                             setClientDraft(prev => ({ ...prev, primaryContacts: newContacts }));
                           }} />
-                          <input type="email" className="ehs-input" placeholder="Email" value={contact.email} onChange={e => {
+                          <input type="email" className="ehs-input" placeholder={t("clients.general.contact.email")} value={contact.email} onChange={e => {
                             const newContacts = [...(clientDraft.primaryContacts || [])];
                             newContacts[idx] = { ...newContacts[idx], email: e.target.value };
                             setClientDraft(prev => ({ ...prev, primaryContacts: newContacts }));
@@ -442,7 +445,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
                     ))}
                     {(!c.primaryContacts || c.primaryContacts.length === 0) && (
                       <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>
-                        No contacts added.
+                         {t("clients.general.noContacts")}
                       </div>
                     )}
                   </div>
@@ -450,7 +453,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
                   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                     {(c.primaryContacts || []).map((contact, idx) => (
                       <div key={idx} style={{ background: "var(--input-bg)", padding: 12, borderRadius: 8 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{contact.name || "Unnamed"}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{contact.name || t("clients.table.unnamed")}</div>
                         {contact.role && <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>{contact.role}</div>}
                         {contact.phone && <div style={{ fontSize: 13, marginTop: 4 }}>📞 {contact.phone}</div>}
                         {contact.email && <div style={{ fontSize: 13, marginTop: 2 }}>✉️ {contact.email}</div>}
@@ -458,7 +461,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
                     ))}
                     {(!c.primaryContacts || c.primaryContacts.length === 0) && (
                       <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                        No contacts available.
+                        {t("clients.general.noContactsAvailable")}
                       </div>
                     )}
                   </div>
@@ -470,14 +473,14 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
           {activeTab === "projects" && !isNew && (
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Production Archive</h3>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Past events for this client</span>
+                 <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>{t("clients.projects.title")}</h3>
+                 <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{t("clients.projects.subtitle")}</span>
               </div>
               
               {!activeClientFull?.projects || activeClientFull.projects.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 0", color: "var(--text-muted)" }}>
                   <Briefcase size={32} style={{ margin: "0 auto 12px auto", opacity: 0.5 }} />
-                  <p style={{ margin: 0, fontSize: 14 }}>No archived projects for this client yet.</p>
+                   <p style={{ margin: 0, fontSize: 14 }}>{t("clients.projects.empty")}</p>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -488,19 +491,19 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12, color: "var(--text-muted)" }}>
                           <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
                             <CalendarIcon size={12} /> 
-                            {p.start_date ? (p.end_date ? `${p.start_date} to ${p.end_date}` : p.start_date) : "No dates"}
+                            {p.start_date ? (p.end_date ? `${p.start_date} ${t("calendar.project.to")} ${p.end_date}` : p.start_date) : t("clients.projects.noDates")}
                           </span>
-                          <span>Venue: {p.venue || "Unknown"}</span>
-                          {p.easyjob_number && <span>Easyjob: <span style={{ fontFamily: "monospace" }}>{p.easyjob_number}</span></span>}
-                          {p.status && <span>Status: <span style={{ textTransform: "capitalize" }}>{p.status}</span></span>}
+                          <span>{t("clients.projects.venue", { venue: p.venue || t("clients.projects.unknownVenue") })}</span>
+                          {p.easyjob_number && <span>{t("clients.projects.easyjob")} <span style={{ fontFamily: "monospace" }}>{p.easyjob_number}</span></span>}
+                          {p.status && <span>{t("clients.projects.status", { status: p.status })}</span>}
                         </div>
                       </div>
                       <button 
                         className="ehs-ghost-btn" 
-                        title="Clone this project to create a new event"
+                         title={t("clients.projects.cloneTitle")}
                         onClick={() => setCloneModal({ projectId: p.id, name: `${p.name} (Copy)`, easyjob_number: "" })}
                       >
-                        <Copy size={16} style={{ marginRight: 6 }} /> Clone Event
+                         <Copy size={16} style={{ marginRight: 6 }} /> {t("clients.projects.action.clone")}
                       </button>
                     </div>
                   ))}
@@ -518,14 +521,14 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)" }}>
-            Client Management
+            {t("clients.title")}
           </h2>
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>
-            Central repository of all production clients and billing records.
+            {t("clients.subtitle")}
           </p>
         </div>
         <button className="ehs-primary-btn" onClick={openNew}>
-          <Plus size={16} /> New Client
+          <Plus size={16} /> {t("clients.action.new")}
         </button>
       </div>
 
@@ -535,7 +538,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
             <Search size={16} color="var(--text-muted)" />
             <input 
               type="text" 
-              placeholder="Search clients by name or org number..." 
+              placeholder={t("clients.searchPlaceholder")}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -544,7 +547,7 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
 
         {loading ? (
           <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
-            Loading client database...
+            {t("clients.loading")}
           </div>
         ) : error ? (
           <div style={{ padding: 40, textAlign: "center", color: "var(--danger)", fontSize: 14 }}>
@@ -555,15 +558,15 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
             <div className="ehs-empty-state-icon">
               <Building2 size={24} />
             </div>
-            <h3>No clients found</h3>
+            <h3>{t("clients.empty.title")}</h3>
             <p>
               {clients.length === 0 
-                ? "Your client database is empty. Add your first client to get started."
-                : "No clients match your search."}
+                ? t("clients.empty.body")
+                : t("clients.empty.search")}
             </p>
             {clients.length === 0 && (
               <button className="ehs-primary-btn" onClick={openNew}>
-                <Plus size={16} /> Add Client
+                <Plus size={16} /> {t("clients.action.add")}
               </button>
             )}
           </div>
@@ -572,21 +575,21 @@ export function ClientsDatabasePage({ getToken, onProjectCloned }: Props) {
             <table className="ehs-table">
               <thead>
                 <tr>
-                  <th>Company Name</th>
-                  <th>Org Number</th>
-                  <th>Billing Terms</th>
-                  <th>Contact Info</th>
+                  <th>{t("clients.table.companyName")}</th>
+                  <th>{t("clients.table.orgNumber")}</th>
+                  <th>{t("clients.table.billingTerms")}</th>
+                  <th>{t("clients.table.contactInfo")}</th>
                   <th style={{ width: 40 }}></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(c => (
                   <tr key={c.id} className="is-clickable" onClick={() => openClient(c)}>
-                    <td style={{ fontWeight: 600, maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.companyName || "Untitled"}</td>
+                    <td style={{ fontWeight: 600, maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.companyName || t("clients.table.untitled")}</td>
                     <td style={{ fontFamily: "monospace", color: "var(--text-muted)" }}>{c.organizationNumber || "—"}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{c.defaultPaymentTermsDays ? `${c.defaultPaymentTermsDays} days` : "—"}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{c.defaultPaymentTermsDays ? t("clients.table.days", { days: c.defaultPaymentTermsDays }) : "—"}</td>
                     <td style={{ maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {(c.primaryContacts && c.primaryContacts.length > 0) ? c.primaryContacts[0].name || c.primaryContacts[0].email || "Unnamed" : "—"}
+                      {(c.primaryContacts && c.primaryContacts.length > 0) ? c.primaryContacts[0].name || c.primaryContacts[0].email || t("clients.table.unnamed") : "—"}
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <ChevronRight size={16} color="var(--text-muted)" />

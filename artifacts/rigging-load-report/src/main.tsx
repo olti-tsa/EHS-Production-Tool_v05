@@ -736,7 +736,7 @@ function SignInScreen({
 
         <div
           role="tablist"
-          aria-label="Authentication mode"
+          aria-label={t("signin.tab.aria")}
           style={{
             display: "flex",
             alignSelf: "stretch",
@@ -946,6 +946,15 @@ function FreelancerGuard() {
 }
 
 function Root() {
+  return (
+    <I18nProvider>
+      <LocalizedRoot />
+    </I18nProvider>
+  );
+}
+
+function LocalizedRoot() {
+  const t = useT();
   const [pref, setPref] = useState<ThemePreference>(() =>
     loadInitialThemePreference(),
   );
@@ -989,29 +998,27 @@ function Root() {
   }, [pref]);
 
   return (
-    <I18nProvider>
-      <ClerkProvider
+    <ClerkProvider
         publishableKey={clerkPubKey!}
         proxyUrl={clerkProxyUrl}
         appearance={buildAppearance(theme)}
         localization={{
           signIn: {
             start: {
-              title: "Sign in",
-              subtitle: "EHS Production Tool",
+              title: t("signin.clerk.signInTitle"),
+              subtitle: t("signin.clerk.product"),
             },
           },
           signUp: {
             start: {
-              title: "Create your account",
-              subtitle: "EHS Production Tool",
+              title: t("signin.clerk.signUpTitle"),
+              subtitle: t("signin.clerk.product"),
             },
           },
         }}
       >
         <AuthGate theme={theme} pref={pref} setPref={setPref} />
-      </ClerkProvider>
-    </I18nProvider>
+    </ClerkProvider>
   );
 }
 
@@ -1223,6 +1230,7 @@ function ClearUserRoleOnSignedOut() {
 
 function DevSigningInScreen({ theme }: { theme: ThemeMode }) {
   const c = PALETTE[theme];
+  const t = useT();
   return (
     <div
       style={{
@@ -1244,7 +1252,7 @@ function DevSigningInScreen({ theme }: { theme: ThemeMode }) {
         style={{ height: "60px", opacity: 0.85 }}
       />
       <div style={{ fontSize: "14px", color: c.muted }}>
-        Signing in as Admin (preview only)…
+        {t("signin.adminPreview")}
       </div>
     </div>
   );

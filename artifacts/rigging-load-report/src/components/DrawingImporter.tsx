@@ -17,6 +17,7 @@ import {
 } from "../lib/drawingAnalysis";
 import { fileToFloorPlan, type FloorPlan } from "../lib/floorPlan";
 import { OverlayEditor } from "./analyzer/OverlayEditor";
+import { useI18n, useT } from "../lib/i18n/I18nContext";
 
 type Props = {
   /** Current venue dimensions, sent as context to the analyser so it
@@ -51,8 +52,8 @@ function isAcceptedFile(f: File): boolean {
   return f.type.startsWith("image/") || isPdfFile(f);
 }
 
-const fmt = (n: number | null, d = 1): string =>
-  n == null ? "—" : n.toLocaleString("en-US", { maximumFractionDigits: d });
+const fmt = (n: number | null, locale: string, d = 1): string =>
+  n == null ? "—" : n.toLocaleString(locale, { maximumFractionDigits: d });
 
 /** Toggle one index in/out of an Immutable-ish Set without mutating the
  *  caller's reference (so React picks up the change). */
@@ -70,6 +71,9 @@ export function DrawingImporter({
   onUseAsFloorPlan,
   hasFloorPlan,
 }: Props) {
+  const t = useT();
+  const { locale } = useI18n();
+  const numberLocale = locale === "no" ? "nb-NO" : "en-US";
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -191,7 +195,7 @@ export function DrawingImporter({
 
   function pickFile(f: File) {
     if (!isAcceptedFile(f)) {
-      setError("Please choose a PDF or an image file (PNG, JPG, WebP or GIF).");
+      setError(t("drawing.error.unsupportedFile"));
       return;
     }
     // Size guard mirrors the server-side caps so the user gets immediate
@@ -201,8 +205,8 @@ export function DrawingImporter({
     if (f.size > cap) {
       setError(
         isPdf
-          ? "PDF is too large; please use one under ~8 MB."
-          : "Image is too large; please use one under ~4.5 MB.",
+          ? t("drawing.error.pdfTooLarge")
+          : t("drawing.error.imageTooLarge"),
       );
       return;
     }
@@ -232,7 +236,7 @@ export function DrawingImporter({
       setError(
         err instanceof Error
           ? err.message
-          : "Could not prepare this drawing for the floor plan.",
+          : t("drawing.error.floorPlan"),
       );
     } finally {
       setIsPreparingFloorPlan(false);
@@ -271,7 +275,7 @@ export function DrawingImporter({
       setExtractedMode(requestMode);
       setSelection(selectAll(result));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Analysis failed.");
+      setError(err instanceof Error ? err.message : t("drawing.error.analysis"));
     } finally {
       setIsAnalyzing(false);
     }
@@ -300,7 +304,7 @@ export function DrawingImporter({
       setError(
         err instanceof Error
           ? err.message
-          : "Could not prepare this drawing for editing.",
+          : t("drawing.error.editor"),
       );
     } finally {
       setIsPreparingEditor(false);
@@ -420,10 +424,9 @@ export function DrawingImporter({
   return (
     <section className="led-card drawing-import">
       <div className="led-card-head">
-        <h3>Import from drawing</h3>
+        <h3>{t("drawing.title")}</h3>
         <span className="led-hint">
-          Upload a stage / rigging plan you drew elsewhere — we&apos;ll read it and
-          fill the report tabs with what we find.
+          {t("drawing.subtitle")}
         </span>
       </div>
 
@@ -453,10 +456,9 @@ export function DrawingImporter({
             style={{ display: "none" }}
           />
           <div className="drawing-dropzone-inner">
-            <strong>Drop a drawing here</strong>
+            <strong>{t("drawing.drop.title")}</strong>
             <span>
-              or click to choose a PDF (max ~8 MB) or PNG / JPG / WebP / GIF
-              (max ~4 MB)
+              {t("drawing.drop.guidance")}
             </span>
           </div>
         </label>
@@ -466,9 +468,9 @@ export function DrawingImporter({
         <div className="drawing-preview-row">
           <div className="drawing-preview">
             {!previewUrl ? (
-              <div className="drawing-preview-empty">Loading preview…</div>
+              <div className="drawing-preview-empty">{t("drawing.preview.loading")}</div>
             ) : isPdfFile(file) ? (
-              <div className="drawing-preview-pdf" aria-label="PDF preview">
+              <div className="drawing-preview-pdf" aria-label={t("drawing.preview.pdfAria")}>
                 <span className="drawing-preview-pdf-badge">PDF</span>
                 <span className="drawing-preview-pdf-name">{file.name}</span>
               </div>
@@ -480,29 +482,29 @@ export function DrawingImporter({
             <strong>{file.name}</strong>
             <span className="led-sub">
               {(file.size / 1024 / 1024).toFixed(2)} MB ·{" "}
-              {isPdfFile(file) ? "PDF document" : file.type || "image"}
+              {isPdfFile(file) ? t("drawing.preview.pdfDocument") : file.type || t("drawing.preview.image")}
             </span>
             {memoryAvailable && projectName && projectName.trim() && (
               <div
                 className="drawing-memory-hint"
                 title={
                   memoryAvailable.updatedAt
-                    ? `Last updated ${new Date(memoryAvailable.updatedAt).toLocaleString()}`
+                    ? t("drawing.memory.updated", { date: new Date(memoryAvailable.updatedAt).toLocaleString(numberLocale) })
                     : undefined
                 }
               >
                 <span className="drawing-memory-hint-dot" aria-hidden="true" />
-                Past corrections found for{" "}
+                {t("drawing.memory.found")}{" "}
                 <strong>{memoryAvailable.venueName || projectName}</strong>.
-                The analyzer will use them as a hint for this drawing.
+                {t("drawing.memory.hint")}
               </div>
             )}
             <fieldset
               className="drawing-mode-toggle"
               disabled={isAnalyzing}
-              title="Classic uses the schema-only prompt. Geometry Expert applies rigging-logic rules (truss anchoring, fixture alignment, motor heuristics). Production Tech treats Instrument/Truss Count tables (Position L&R, LED TRUSS, Position C, etc.) as ground truth, uses Position labels as the grouping for the report, and flags visual/table mismatches in the notes."
+              title={t("drawing.mode.tooltip")}
             >
-              <legend>Detection mode</legend>
+              <legend>{t("drawing.mode.legend")}</legend>
               {/* Wrapping the radio labels in a dedicated row keeps the
                   fieldset's <legend> on its own line above them. Without
                   this wrapper, browsers position <legend> as part of the
@@ -511,9 +513,9 @@ export function DrawingImporter({
               <div className="drawing-mode-options">
                 {(
                   [
-                    { value: "classic", label: "Classic" },
-                    { value: "geometry", label: "Geometry Expert" },
-                    { value: "production", label: "Production Tech" },
+                    { value: "classic", labelKey: "drawing.mode.classic" },
+                    { value: "geometry", labelKey: "drawing.mode.geometry" },
+                    { value: "production", labelKey: "drawing.mode.production" },
                   ] as const
                 ).map((opt) => (
                   <label
@@ -530,7 +532,7 @@ export function DrawingImporter({
                       checked={analyzerMode === opt.value}
                       onChange={() => setAnalyzerMode(opt.value)}
                     />
-                    <span>{opt.label}</span>
+                    <span>{t(opt.labelKey)}</span>
                   </label>
                 ))}
               </div>
@@ -542,7 +544,7 @@ export function DrawingImporter({
                 onClick={runAnalyze}
                 disabled={isAnalyzing}
               >
-                {isAnalyzing ? "Analyzing…" : extracted ? "Re-analyze" : "Analyze drawing"}
+                {isAnalyzing ? t("drawing.action.analyzing") : extracted ? t("drawing.action.reanalyze") : t("drawing.action.analyze")}
               </button>
               {onUseAsFloorPlan && (
                 <button
@@ -552,17 +554,17 @@ export function DrawingImporter({
                   disabled={isPreparingFloorPlan || isAnalyzing}
                   title={
                     hasFloorPlan
-                      ? "Replace the current Smash It backdrop"
-                      : "Use this drawing as the Smash It backdrop"
+                      ? t("drawing.floorPlan.replaceTitle")
+                      : t("drawing.floorPlan.useTitle")
                   }
                 >
                   {isPreparingFloorPlan
-                    ? "Preparing…"
+                    ? t("drawing.action.preparing")
                     : floorPlanApplied
-                      ? "Floor plan set"
+                      ? t("drawing.floorPlan.set")
                       : hasFloorPlan
-                        ? "Replace floor plan"
-                        : "Use as floor plan"}
+                        ? t("drawing.floorPlan.replace")
+                        : t("drawing.floorPlan.use")}
                 </button>
               )}
               <button
@@ -571,7 +573,7 @@ export function DrawingImporter({
                 onClick={reset}
                 disabled={isAnalyzing || isPreparingFloorPlan}
               >
-                Choose another file
+                {t("drawing.action.chooseAnother")}
               </button>
             </div>
           </div>
@@ -585,21 +587,26 @@ export function DrawingImporter({
           <header className="drawing-results-head">
             <div>
               <h4>
-                Found {itemTotal} item{itemTotal === 1 ? "" : "s"}
+                {t(
+                  itemTotal === 1
+                    ? "drawing.results.foundOne"
+                    : "drawing.results.foundMany",
+                  { count: itemTotal },
+                )}
                 {extractedMode === "geometry" && (
                   <span
                     className="drawing-mode-badge"
-                    title="These detections were produced with the Rigging Geometry Expert prompt"
+                     title={t("drawing.mode.geometryResultTooltip")}
                   >
-                    Geometry Expert
+                     {t("drawing.mode.geometry")}
                   </span>
                 )}
                 {extractedMode === "production" && (
                   <span
                     className="drawing-mode-badge drawing-mode-badge-production"
-                    title="These detections were produced with the Production Technician prompt — quantities come from the drawing's count tables; visual/table mismatches are flagged in the item's notes with a 'MISMATCH:' prefix"
+                     title={t("drawing.mode.productionResultTooltip")}
                   >
-                    Production Tech
+                     {t("drawing.mode.production")}
                   </span>
                 )}
               </h4>
@@ -609,9 +616,9 @@ export function DrawingImporter({
               {memorySaved && projectName && projectName.trim() && (
                 <p
                   className="led-sub drawing-memory-saved"
-                  title="The next analysis of this venue will use these corrections as a hint"
+                   title={t("drawing.memory.savedTitle")}
                 >
-                  ✓ Saved corrections to venue memory for{" "}
+                   {t("drawing.memory.saved")}{" "}
                   <strong>{projectName}</strong>.
                 </p>
               )}
@@ -622,23 +629,23 @@ export function DrawingImporter({
                 className="btn btn-soft btn-sm"
                 onClick={openEditor}
                 disabled={isPreparingEditor}
-                title="Open the overlay editor to verify or correct the detected items on the drawing"
+                 title={t("drawing.action.editTitle")}
               >
-                {isPreparingEditor ? "Preparing…" : "Edit detections"}
+                 {isPreparingEditor ? t("drawing.action.preparing") : t("drawing.action.edit")}
               </button>
               <button
                 type="button"
                 className="btn btn-soft btn-sm"
                 onClick={() => setSelection(selectAll(extracted))}
               >
-                Select all
+                 {t("drawing.action.selectAll")}
               </button>
               <button
                 type="button"
                 className="btn btn-soft btn-sm"
                 onClick={() => setSelection(selectNone())}
               >
-                Select none
+                 {t("drawing.action.selectNone")}
               </button>
               <button
                 type="button"
@@ -653,7 +660,7 @@ export function DrawingImporter({
                   selection.soundIndexes.size === 0
                 }
               >
-                {applied ? "Applied — apply again" : "Apply to reports"}
+                 {applied ? t("drawing.action.applyAgain") : t("drawing.action.apply")}
               </button>
             </div>
           </header>
@@ -666,44 +673,53 @@ export function DrawingImporter({
                   const skipped = totalSkipped(appliedSummary);
                   const parts: string[] = [];
                   if (appliedSummary.venueApplied) {
-                    parts.push("Venue dimensions updated.");
+                    parts.push(t("drawing.applied.venue"));
                   }
                   if (added > 0) {
                     parts.push(
-                      `Added ${added} item${added === 1 ? "" : "s"} to the report.`,
+                      t(
+                        added === 1
+                          ? "drawing.applied.addedOne"
+                          : "drawing.applied.addedMany",
+                        { count: added },
+                      ),
                     );
                   }
                   if (skipped > 0) {
                     parts.push(
-                      `Skipped ${skipped} duplicate${skipped === 1 ? "" : "s"} that already exist.`,
+                      t(
+                        skipped === 1
+                          ? "drawing.applied.skippedOne"
+                          : "drawing.applied.skippedMany",
+                        { count: skipped },
+                      ),
                     );
                   }
                   if (parts.length === 0) {
-                    parts.push("Nothing to apply.");
+                    parts.push(t("drawing.applied.none"));
                   }
                   return parts.join(" ");
                 })()}
               </div>
               {totalSkipped(appliedSummary) > 0 && (
                 <div className="led-sub" style={{ marginTop: 4 }}>
-                  Duplicates skipped:{" "}
+                  {t("drawing.applied.duplicates")}{" "}
                   {(
                     [
-                      ["systems", appliedSummary.systems.skipped],
-                      ["fixtures", appliedSummary.fixtures.skipped],
-                      ["LED screens", appliedSummary.ledScreens.skipped],
-                      ["stages", appliedSummary.stages.skipped],
-                      ["sound items", appliedSummary.sound.skipped],
+                      ["drawing.duplicate.systems", appliedSummary.systems.skipped],
+                      ["drawing.duplicate.fixtures", appliedSummary.fixtures.skipped],
+                      ["drawing.duplicate.ledScreens", appliedSummary.ledScreens.skipped],
+                      ["drawing.duplicate.stages", appliedSummary.stages.skipped],
+                      ["drawing.duplicate.sound", appliedSummary.sound.skipped],
                     ] as const
                   )
                     .filter(([, n]) => n > 0)
-                    .map(([label, n]) => `${n} ${label}`)
+                    .map(([label, n]) => t(label, { count: n }))
                     .join(" · ")}
                 </div>
               )}
               <div className="led-sub" style={{ marginTop: 4 }}>
-                Open Rigging / Lighting / LED / Stage / Sound to review and
-                edit.
+                {t("drawing.applied.review")}
               </div>
             </div>
           )}
@@ -714,17 +730,21 @@ export function DrawingImporter({
               <label className="drawing-group-head">
                 <input
                   type="checkbox"
+                  aria-label={t("drawing.action.applyVenue")}
                   checked={selection.applyVenue}
                   onChange={(e) =>
                     setSelection((s) => ({ ...s, applyVenue: e.target.checked }))
                   }
                 />
-                <strong>Venue dimensions</strong>
-                <span className="led-sub">→ Smash It</span>
+                <strong>{t("drawing.venue.title")}</strong>
+                <span className="led-sub">{t("drawing.destination.smashIt")}</span>
               </label>
               <div className="drawing-group-body">
-                W {fmt(items.venue.widthM)} m · D {fmt(items.venue.depthM)} m ·
-                Ceiling {fmt(items.venue.ceilingM)} m
+                {t("drawing.venue.dimensions", {
+                  width: fmt(items.venue.widthM, numberLocale),
+                  depth: fmt(items.venue.depthM, numberLocale),
+                  ceiling: fmt(items.venue.ceilingM, numberLocale),
+                })}
               </div>
             </div>
           )}
@@ -732,8 +752,10 @@ export function DrawingImporter({
           {/* Trusses → Rigging Report */}
           {items.trusses.length > 0 && (
             <CategoryGroup
-              title="Trusses / rigging systems"
-              destination="→ Rigging Report"
+              title={t("drawing.category.trusses")}
+              destination={t("drawing.destination.rigging")}
+              selectAllLabel={t("drawing.action.selectAll")}
+              selectItemLabel={(index) => t("drawing.action.selectItem", { index })}
               count={items.trusses.length}
               selected={selection.trussIndexes}
               onToggle={(i) =>
@@ -749,16 +771,16 @@ export function DrawingImporter({
                 }))
               }
             >
-              {items.trusses.map((t, i) => (
+              {items.trusses.map((truss, i) => (
                 <div key={i}>
-                  <strong>{t.name}</strong>
+                  <strong>{truss.name}</strong>
                   <span className="led-sub">
-                    {fmt(t.lengthM)} m · {t.pointCount} pts
-                    {t.hoistKg != null
-                      ? ` · ${t.hoistKg >= 1000 ? "1 t" : `${t.hoistKg} kg`} motors`
+                    {fmt(truss.lengthM, numberLocale)} m · {t("drawing.item.points", { count: truss.pointCount })}
+                    {truss.hoistKg != null
+                      ? ` · ${t("drawing.item.motors", { value: truss.hoistKg >= 1000 ? "1 t" : `${truss.hoistKg} kg` })}`
                       : ""}
-                    {t.trimM != null ? ` · trim ${fmt(t.trimM)} m` : ""}
-                    {t.notes ? ` · ${t.notes}` : ""}
+                    {truss.trimM != null ? ` · ${t("drawing.item.trim", { value: fmt(truss.trimM, numberLocale) })}` : ""}
+                    {truss.notes ? ` · ${truss.notes}` : ""}
                   </span>
                 </div>
               ))}
@@ -768,8 +790,10 @@ export function DrawingImporter({
           {/* Lighting */}
           {items.lighting.length > 0 && (
             <CategoryGroup
-              title="Lighting fixtures"
-              destination="→ Lighting Report"
+              title={t("drawing.category.lighting")}
+              destination={t("drawing.destination.lighting")}
+              selectAllLabel={t("drawing.action.selectAll")}
+              selectItemLabel={(index) => t("drawing.action.selectItem", { index })}
               count={items.lighting.length}
               selected={selection.lightingIndexes}
               onToggle={(i) =>
@@ -791,9 +815,9 @@ export function DrawingImporter({
                     {f.qty}× {f.name}
                   </strong>
                   <span className="led-sub">
-                    {f.trussName ? `on ${f.trussName} · ` : ""}
-                    {f.weightKg != null ? `${fmt(f.weightKg)} kg ea` : "weight ?"}
-                    {f.watts != null ? ` · ${fmt(f.watts, 0)} W ea` : ""}
+                    {f.trussName ? `${t("drawing.item.on", { name: f.trussName })} · ` : ""}
+                    {f.weightKg != null ? t("drawing.item.weightEach", { value: fmt(f.weightKg, numberLocale) }) : t("drawing.item.weightUnknown")}
+                    {f.watts != null ? ` · ${t("drawing.item.wattsEach", { value: fmt(f.watts, numberLocale, 0) })}` : ""}
                     {f.notes ? ` · ${f.notes}` : ""}
                   </span>
                 </div>
@@ -804,8 +828,10 @@ export function DrawingImporter({
           {/* LED screens */}
           {items.ledScreens.length > 0 && (
             <CategoryGroup
-              title="LED screens"
-              destination="→ LED Screen Report"
+              title={t("drawing.category.led")}
+              destination={t("drawing.destination.led")}
+              selectAllLabel={t("drawing.action.selectAll")}
+              selectItemLabel={(index) => t("drawing.action.selectItem", { index })}
               count={items.ledScreens.length}
               selected={selection.ledIndexes}
               onToggle={(i) =>
@@ -824,11 +850,11 @@ export function DrawingImporter({
               {items.ledScreens.map((s, i) => {
                 // Prefer panel grid; fall back to metres if the drawing
                 // only labelled the screen size in metres ("5 x 3 m").
-                let size = "panel grid ?";
+                let size = t("drawing.item.panelGridUnknown");
                 if (s.panelsWide != null && s.panelsTall != null) {
-                  size = `${s.panelsWide} × ${s.panelsTall} panels`;
+                  size = t("drawing.item.panels", { wide: s.panelsWide, tall: s.panelsTall });
                 } else if (s.widthM != null && s.heightM != null) {
-                  size = `${fmt(s.widthM)} × ${fmt(s.heightM)} m`;
+                  size = `${fmt(s.widthM, numberLocale)} × ${fmt(s.heightM, numberLocale)} m`;
                 }
                 return (
                   <div key={i}>
@@ -846,8 +872,10 @@ export function DrawingImporter({
           {/* Stages */}
           {items.stages.length > 0 && (
             <CategoryGroup
-              title="Stages / decking"
-              destination="→ Stage Report"
+              title={t("drawing.category.stages")}
+              destination={t("drawing.destination.stage")}
+              selectAllLabel={t("drawing.action.selectAll")}
+              selectItemLabel={(index) => t("drawing.action.selectItem", { index })}
               count={items.stages.length}
               selected={selection.stageIndexes}
               onToggle={(i) =>
@@ -867,7 +895,7 @@ export function DrawingImporter({
                 <div key={i}>
                   <strong>{s.name}</strong>
                   <span className="led-sub">
-                    {fmt(s.widthM)} × {fmt(s.depthM)} m
+                    {fmt(s.widthM, numberLocale)} × {fmt(s.depthM, numberLocale)} m
                     {s.notes ? ` · ${s.notes}` : ""}
                   </span>
                 </div>
@@ -878,8 +906,10 @@ export function DrawingImporter({
           {/* Sound */}
           {items.sound.length > 0 && (
             <CategoryGroup
-              title="Sound / PA"
-              destination="→ Sound Report"
+              title={t("drawing.category.sound")}
+              destination={t("drawing.destination.sound")}
+              selectAllLabel={t("drawing.action.selectAll")}
+              selectItemLabel={(index) => t("drawing.action.selectItem", { index })}
               count={items.sound.length}
               selected={selection.soundIndexes}
               onToggle={(i) =>
@@ -901,8 +931,8 @@ export function DrawingImporter({
                     {s.qty}× {s.name}
                   </strong>
                   <span className="led-sub">
-                    {s.weightKg != null ? `${fmt(s.weightKg)} kg ea` : ""}
-                    {s.watts != null ? ` · ${fmt(s.watts, 0)} W ea` : ""}
+                    {s.weightKg != null ? t("drawing.item.weightEach", { value: fmt(s.weightKg, numberLocale) }) : ""}
+                    {s.watts != null ? ` · ${t("drawing.item.wattsEach", { value: fmt(s.watts, numberLocale, 0) })}` : ""}
                     {s.notes ? ` · ${s.notes}` : ""}
                   </span>
                 </div>
@@ -912,9 +942,7 @@ export function DrawingImporter({
 
           {itemTotal === 0 && !venueChanged && (
             <div className="led-empty">
-              The analyser could not extract any rigging items from this image.
-              Try a clearer drawing or one that shows trusses, fixtures or stage
-              decks more directly.
+              {t("drawing.empty")}
             </div>
           )}
         </div>
@@ -940,6 +968,8 @@ function CategoryGroup({
   onToggle,
   onSelectAll,
   children,
+  selectAllLabel,
+  selectItemLabel,
 }: {
   title: string;
   destination: string;
@@ -948,6 +978,8 @@ function CategoryGroup({
   onToggle: (i: number) => void;
   onSelectAll: () => void;
   children: React.ReactNode;
+  selectAllLabel: string;
+  selectItemLabel: (index: number) => string;
 }) {
   // Pull the <li> children out of the rendered tree so we can wrap each
   // with its own checkbox row tied to the parent's selection set.
@@ -965,7 +997,7 @@ function CategoryGroup({
           className="btn btn-soft btn-xs"
           onClick={onSelectAll}
         >
-          Select all
+          {selectAllLabel}
         </button>
       </div>
       <ul className="drawing-item-list">
@@ -973,6 +1005,7 @@ function CategoryGroup({
           <li key={i} className="drawing-item">
             <input
               type="checkbox"
+              aria-label={selectItemLabel(i + 1)}
               checked={selected.has(i)}
               onChange={() => onToggle(i)}
             />

@@ -319,7 +319,10 @@ export function Gigs({
       }
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "Network" };
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : t("portal.gigs.err.network"),
+      };
     }
   }
 
@@ -354,7 +357,10 @@ export function Gigs({
       }
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "Network" };
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : t("portal.gigs.err.network"),
+      };
     }
   }
 
@@ -378,7 +384,10 @@ export function Gigs({
       }
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "Network" };
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : t("portal.gigs.err.network"),
+      };
     }
   }
 
@@ -418,7 +427,7 @@ export function Gigs({
     // handles transactionally. Block the action here and explain.
     if (removed.briefId) {
       setSyncError(
-        "This gig was confirmed from a producer brief. Open the brief and tap Decline to release the booking — that keeps the producer's roster in sync.",
+        t("portal.gigs.err.briefLinkedDelete"),
       );
       return;
     }
@@ -573,13 +582,16 @@ export function Gigs({
       .filter(Boolean)
       .join("\n");
 
-    return buildGoogleCalendarUrl({
-      title: g.projectName || g.venue || t("portal.gigs.fallbackTitle"),
-      start,
-      end,
-      details,
-      location: g.venue,
-    });
+    return buildGoogleCalendarUrl(
+      {
+        title: g.projectName || g.venue || t("portal.gigs.fallbackTitle"),
+        start,
+        end,
+        details,
+        location: g.venue,
+      },
+      t("portal.gigs.googleCalendarInvalidDates"),
+    );
   }
 
   return (

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useSettings, type OrganizationSettings } from "../../lib/useSettings";
+import { useSettings, type OrganizationSettings, type SettingsErrorCode } from "../../lib/useSettings";
 import { Building2, Save, AlertCircle, RefreshCcw, Mail, Phone, MapPin, DollarSign, Image as ImageIcon, Briefcase, Plus, X } from "lucide-react";
 import { useT } from "../../lib/i18n/I18nContext";
 
@@ -10,6 +10,8 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const settingsError = (code: SettingsErrorCode) =>
+    t(`settings.error.${code}` as Parameters<typeof t>[0]);
 
   useEffect(() => {
     fetchSettings();
@@ -69,7 +71,7 @@ export function SettingsPage() {
       setTimeout(() => setSaveStatus("idle"), 3000);
     } else {
       setSaveStatus("error");
-      setSaveError(result.error || "Failed to save");
+      setSaveError(settingsError(result.error));
     }
   };
 
@@ -90,8 +92,8 @@ export function SettingsPage() {
         <div style={{ background: "color-mix(in srgb, var(--danger) 10%, transparent)", color: "var(--danger)", padding: 24, borderRadius: 12, border: "1px solid color-mix(in srgb, var(--danger) 30%, transparent)", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 16 }}>
           <AlertCircle size={40} />
           <div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px 0" }}>{t("settings.errorTitle", { default: "Failed to load settings" })}</h3>
-            <p style={{ margin: 0, opacity: 0.9, fontSize: 14 }}>{error === "Unauthorized" ? t("settings.unauthorized", { default: "You do not have permission to view or edit settings." }) : error}</p>
+            <h3 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px 0" }}>{t("settings.errorTitle")}</h3>
+            <p style={{ margin: 0, opacity: 0.9, fontSize: 14 }}>{settingsError(error)}</p>
           </div>
         </div>
       </div>
@@ -102,14 +104,14 @@ export function SettingsPage() {
     <div style={{ padding: "24px 16px 40px", maxWidth: 900, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
         <div>
-          <h1 style={{ fontSize: "2rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)" }}>{t("settings.title", { default: "System Settings" })}</h1>
-          <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>{t("settings.subtitle", { default: "Manage organization defaults and global configuration." })}</p>
+          <h1 style={{ fontSize: "2rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)" }}>{t("settings.title")}</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>{t("settings.subtitle")}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {saveStatus === "success" && (
             <span className="settings-status-success">
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)", display: "inline-block" }} />
-              {t("notif.saved", { default: "Saved." })}
+              {t("notif.saved")}
             </span>
           )}
           {saveStatus === "error" && (
@@ -127,12 +129,12 @@ export function SettingsPage() {
             {saving ? (
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <RefreshCcw size={16} className="spin" />
-                {t("common.saving", { default: "Saving..." })}
+                {t("common.saving")}
               </span>
             ) : (
               <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Save size={16} />
-                {t("common.save", { default: "Save Changes" })}
+                {t("settings.saveChanges")}
               </span>
             )}
           </button>
@@ -145,13 +147,13 @@ export function SettingsPage() {
           <div className="settings-section-header">
             <h2 className="settings-section-title">
               <Building2 size={18} color="var(--text-muted)" />
-              {t("settings.brand.title", { default: "Brand & Identity" })}
+              {t("settings.brand.title")}
             </h2>
           </div>
           <div className="settings-section-body">
             <div className="settings-grid cols-2">
               <div className="settings-field">
-                <label className="settings-label">{t("settings.brand.companyName", { default: "Company Name" })}</label>
+                <label className="settings-label">{t("settings.brand.companyName")}</label>
                 <input
                   type="text"
                   name="companyName"
@@ -165,7 +167,7 @@ export function SettingsPage() {
               <div className="settings-field">
                 <label className="settings-label">
                   <ImageIcon size={14} />
-                  {t("settings.brand.logoUrl", { default: "Logo URL" })}
+                  {t("settings.brand.logoUrl")}
                 </label>
                 <input
                   type="url"
@@ -185,7 +187,7 @@ export function SettingsPage() {
           <div className="settings-section-header">
             <h2 className="settings-section-title">
               <Phone size={18} color="var(--text-muted)" />
-              {t("settings.contact.title", { default: "Contact Information" })}
+              {t("settings.contact.title")}
             </h2>
           </div>
           <div className="settings-section-body">
@@ -193,7 +195,7 @@ export function SettingsPage() {
               <div className="settings-field">
                 <label className="settings-label">
                   <Mail size={14} />
-                  {t("settings.contact.email", { default: "Primary Email" })}
+                  {t("settings.contact.email")}
                 </label>
                 <input
                   type="email"
@@ -207,7 +209,7 @@ export function SettingsPage() {
               <div className="settings-field">
                 <label className="settings-label">
                   <Phone size={14} />
-                  {t("settings.contact.phone", { default: "Primary Phone" })}
+                  {t("settings.contact.phone")}
                 </label>
                 <input
                   type="tel"
@@ -221,7 +223,7 @@ export function SettingsPage() {
               <div className="settings-field" style={{ gridColumn: "1 / -1" }}>
                 <label className="settings-label">
                   <MapPin size={14} />
-                  {t("settings.contact.address", { default: "Office Address" })}
+                  {t("settings.contact.address")}
                 </label>
                 <textarea
                   name="contactAddress"
@@ -241,13 +243,13 @@ export function SettingsPage() {
           <div className="settings-section-header">
             <h2 className="settings-section-title">
               <DollarSign size={18} color="var(--text-muted)" />
-              {t("settings.finance.title", { default: "Financial Defaults" })}
+              {t("settings.finance.title")}
             </h2>
           </div>
           <div className="settings-section-body">
             <div className="settings-grid cols-3">
               <div className="settings-field">
-                <label className="settings-label">{t("settings.finance.currency", { default: "Default Currency" })}</label>
+                <label className="settings-label">{t("settings.finance.currency")}</label>
                 <input
                   type="text"
                   name="defaultCurrency"
@@ -261,7 +263,7 @@ export function SettingsPage() {
                 <div className="settings-hint">{t("settings.currencyHint")}</div>
               </div>
               <div className="settings-field">
-                <label className="settings-label">{t("settings.finance.vat", { default: "Default VAT (%)" })}</label>
+                <label className="settings-label">{t("settings.finance.vat")}</label>
                 <div className="settings-input-group">
                   <input
                     type="number"
@@ -283,7 +285,7 @@ export function SettingsPage() {
                 </div>
               </div>
               <div className="settings-field">
-                <label className="settings-label">{t("settings.finance.paymentTerms", { default: "Payment Terms (Days)" })}</label>
+                <label className="settings-label">{t("settings.finance.paymentTerms")}</label>
                 <input
                   type="number"
                   name="defaultPaymentTermsDays"
@@ -298,7 +300,7 @@ export function SettingsPage() {
               <div className="settings-divider" />
               
               <div className="settings-field">
-                <label className="settings-label">{t("settings.finance.dayRate", { default: "Fallback Day Rate" })}</label>
+                <label className="settings-label">{t("settings.finance.dayRate")}</label>
                 <input
                   type="number"
                   value={formData.fallbackDayRateMinor ? formData.fallbackDayRateMinor / 100 : 0}
@@ -315,7 +317,7 @@ export function SettingsPage() {
                 />
               </div>
               <div className="settings-field">
-                <label className="settings-label">{t("settings.finance.hourlyRate", { default: "Fallback Hourly Rate" })}</label>
+                <label className="settings-label">{t("settings.finance.hourlyRate")}</label>
                 <input
                   type="number"
                   value={formData.fallbackHourlyRateMinor ? formData.fallbackHourlyRateMinor / 100 : 0}
@@ -332,7 +334,7 @@ export function SettingsPage() {
                 />
               </div>
               <div className="settings-field">
-                <label className="settings-label">{t("settings.finance.overtimeMultiplier", { default: "Overtime Multiplier" })}</label>
+                <label className="settings-label">{t("settings.finance.overtimeMultiplier")}</label>
                 <div className="settings-input-group">
                   <input
                     type="number"
@@ -353,7 +355,7 @@ export function SettingsPage() {
                 </div>
               </div>
               <div className="settings-field">
-                <label className="settings-label">{t("settings.finance.overtimeThreshold", { default: "Overtime Threshold (Hours)" })}</label>
+                <label className="settings-label">{t("settings.finance.overtimeThreshold")}</label>
                 <input
                   type="number"
                   value={formData.overtimeThresholdMinutes ? formData.overtimeThresholdMinutes / 60 : 8}
@@ -379,7 +381,7 @@ export function SettingsPage() {
           <div className="settings-section-header">
             <h2 className="settings-section-title">
               <Briefcase size={18} color="var(--text-muted)" />
-              {t("settings.departments.title", { default: "Global Departments" })}
+              {t("settings.departments.title")}
             </h2>
             <button
               type="button"
@@ -387,13 +389,13 @@ export function SettingsPage() {
               style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "var(--primary)", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}
             >
               <Plus size={14} />
-              {t("settings.departments.add", { default: "Add Department" })}
+              {t("settings.departments.add")}
             </button>
           </div>
           <div className="settings-section-body">
             {(!formData.departments || formData.departments.length === 0) ? (
               <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--text-muted)", fontSize: 14, border: "2px dashed var(--border-color)", borderRadius: 8 }}>
-                {t("settings.departments.empty", { default: "No departments configured." })}
+                {t("settings.departments.empty")}
               </div>
             ) : (
               <div className="settings-grid cols-3" style={{ gap: 12 }}>
@@ -405,14 +407,14 @@ export function SettingsPage() {
                       onChange={(e) => handleDepartmentChange(idx, e.target.value)}
                       className="ehs-input"
                       style={{ flex: 1, minWidth: 0 }}
-                      placeholder={t("settings.departments.placeholder", { default: "Department Name" })}
+                      placeholder={t("settings.departments.placeholder")}
                       required
                     />
                     <button
                       type="button"
                       onClick={() => removeDepartment(idx)}
                       style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 6, background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", transition: "all 0.15s" }}
-                      title={t("common.remove", { default: "Remove" })}
+                      title={t("common.remove")}
                       onMouseOver={(e) => { e.currentTarget.style.color = "var(--danger)"; e.currentTarget.style.background = "color-mix(in srgb, var(--danger) 10%, transparent)"; }}
                       onMouseOut={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "transparent"; }}
                     >

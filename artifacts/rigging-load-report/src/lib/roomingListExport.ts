@@ -20,6 +20,7 @@
  *  4. Footer with brief id for cross-reference if the hotel emails the
  *     producer back about room changes.
  */
+import type { Locale } from "./i18n/types";
 
 type RoomShare = "twin" | "single" | "either";
 
@@ -48,6 +49,17 @@ export type RoomingListInput = {
    *  small "not staying at the hotel" footnote so the front desk knows
    *  who isn't on the manifest. */
   noHotelGuests: Array<{ name: string; role: string }>;
+  locale: Locale;
+  copy: RoomingListCopy;
+};
+
+export type RoomingListCopy = {
+  untitledProject: string; venueTba: string; documentTitle: (project: string, venue: string) => string;
+  rooms: string; twin: string; single: string; roomNights: string; dateRange: string;
+  room: (number: number) => string; twinRoom: string; singleRoom: string; singleSoloRoom: string;
+  locked: string; night: (count: number) => string; guest: string; role: string; phone: string;
+  checkIn: string; checkOut: string; notStaying: string; notStayingDetail: string;
+  title: string; generated: (date: string) => string; footer: (briefId: string) => string; print: string;
 };
 
 function escHtml(s: string): string {
@@ -61,11 +73,11 @@ function escHtml(s: string): string {
 
 /** UTC-stable date formatter — matches the catering sheet so producers
  *  see consistent date formatting across all printable handoffs. */
-function fmtDateLong(iso: string | null): string {
+function fmtDateLong(iso: string | null, locale: Locale): string {
   if (!iso) return "—";
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", {
+  return d.toLocaleDateString(locale === "no" ? "nb-NO" : "en-US", {
     weekday: "short",
     day: "2-digit",
     month: "long",
@@ -74,19 +86,19 @@ function fmtDateLong(iso: string | null): string {
   });
 }
 
-function fmtDateShort(iso: string | null): string {
+function fmtDateShort(iso: string | null, locale: Locale): string {
   if (!iso) return "—";
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", {
+  return d.toLocaleDateString(locale === "no" ? "nb-NO" : "en-US", {
     day: "2-digit",
     month: "short",
     timeZone: "UTC",
   });
 }
 
-function fmtGeneratedNow(): string {
-  return new Date().toLocaleString("en-GB", {
+function fmtGeneratedNow(locale: Locale): string {
+  return new Date().toLocaleString(locale === "no" ? "nb-NO" : "en-US", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -112,11 +124,11 @@ function nights(checkIn: string | null, checkOut: string | null): number {
  *  alone; a 2-occupant room is "Twin". This matches how Norwegian
  *  hotels actually code rooms (DBL/TWN/SGL) and saves the front desk
  *  having to think. */
-function roomType(guests: RoomingListGuest[]): string {
-  if (guests.length >= 2) return "Twin";
+function roomType(guests: RoomingListGuest[], copy: RoomingListCopy): string {
+  if (guests.length >= 2) return copy.twinRoom;
   const g = guests[0];
-  if (g && g.roomShare === "single") return "Single";
-  return "Single (solo)";
+  if (g && g.roomShare === "single") return copy.singleRoom;
+  return copy.singleSoloRoom;
 }
 
 /** Earliest check-in across occupants — used both to sort the room
@@ -143,6 +155,7 @@ function latestIso(guests: RoomingListGuest[]): string | null {
 }
 
 function summaryBlock(input: RoomingListInput): string {
+  const { copy, locale } = input;
   const totalRooms = input.rooms.length;
   let twinRooms = 0;
   let singleRooms = 0;
@@ -160,28 +173,28 @@ function summaryBlock(input: RoomingListInput): string {
   }
   const dateRange =
     earliestCheckIn && latestCheckOut
-      ? `${fmtDateShort(earliestCheckIn)} → ${fmtDateShort(latestCheckOut)}`
+      ? `${fmtDateShort(earliestCheckIn, locale)} → ${fmtDateShort(latestCheckOut, locale)}`
       : "—";
   return `
     <div class="rl-meta">
       <div class="rl-meta-cell">
-        <div class="rl-meta-key">Rooms</div>
+        <div class="rl-meta-key">${escHtml(copy.rooms)}</div>
         <div class="rl-meta-val">${totalRooms}</div>
       </div>
       <div class="rl-meta-cell">
-        <div class="rl-meta-key">Twin</div>
+        <div class="rl-meta-key">${escHtml(copy.twin)}</div>
         <div class="rl-meta-val">${twinRooms}</div>
       </div>
       <div class="rl-meta-cell">
-        <div class="rl-meta-key">Single</div>
+        <div class="rl-meta-key">${escHtml(copy.single)}</div>
         <div class="rl-meta-val">${singleRooms}</div>
       </div>
       <div class="rl-meta-cell">
-        <div class="rl-meta-key">Room-nights</div>
+        <div class="rl-meta-key">${escHtml(copy.roomNights)}</div>
         <div class="rl-meta-val">${totalRoomNights}</div>
       </div>
       <div class="rl-meta-cell rl-meta-cell-wide">
-        <div class="rl-meta-key">Date range</div>
+        <div class="rl-meta-key">${escHtml(copy.dateRange)}</div>
         <div class="rl-meta-val rl-meta-val-text">${escHtml(dateRange)}</div>
       </div>
     </div>`;
@@ -190,6 +203,8 @@ function summaryBlock(input: RoomingListInput): string {
 function roomBlock(
   room: RoomingListInput["rooms"][number],
   index: number,
+  locale: Locale,
+  copy: RoomingListCopy,
 ): string {
   const ci = earliestIso(room.guests);
   const co = latestIso(room.guests);
@@ -201,8 +216,8 @@ function roomBlock(
           <td><strong>${escHtml(g.name)}</strong></td>
           <td>${escHtml(g.role || "—")}</td>
           <td>${escHtml(g.phone || "—")}</td>
-          <td>${escHtml(fmtDateShort(g.checkInDate))}</td>
-          <td>${escHtml(fmtDateShort(g.checkOutDate))}</td>
+          <td>${escHtml(fmtDateShort(g.checkInDate, locale))}</td>
+          <td>${escHtml(fmtDateShort(g.checkOutDate, locale))}</td>
         </tr>`,
     )
     .join("");
@@ -213,27 +228,27 @@ function roomBlock(
     <section class="rl-room">
       <div class="rl-room-head">
         <div class="rl-room-head-left">
-          <h2>Room ${index + 1}</h2>
-          <span class="rl-room-type">${escHtml(roomType(room.guests))}</span>
-          ${room.locked ? `<span class="rl-room-locked">Locked</span>` : ""}
+          <h2>${escHtml(copy.room(index + 1))}</h2>
+          <span class="rl-room-type">${escHtml(roomType(room.guests, copy))}</span>
+          ${room.locked ? `<span class="rl-room-locked">${escHtml(copy.locked)}</span>` : ""}
         </div>
         <div class="rl-room-head-right">
           <span class="rl-room-dates">
-            ${escHtml(fmtDateShort(ci))} → ${escHtml(fmtDateShort(co))}
+            ${escHtml(fmtDateShort(ci, locale))} → ${escHtml(fmtDateShort(co, locale))}
           </span>
           <span class="rl-room-nights">
-            ${n} night${n === 1 ? "" : "s"}
+            ${escHtml(copy.night(n))}
           </span>
         </div>
       </div>
       <table class="rl-table">
         <thead>
           <tr>
-            <th style="width: 28%">Guest</th>
-            <th style="width: 22%">Role</th>
-            <th style="width: 18%">Phone</th>
-            <th style="width: 16%">Check-in</th>
-            <th style="width: 16%">Check-out</th>
+            <th style="width: 28%">${escHtml(copy.guest)}</th>
+            <th style="width: 22%">${escHtml(copy.role)}</th>
+            <th style="width: 18%">${escHtml(copy.phone)}</th>
+            <th style="width: 16%">${escHtml(copy.checkIn)}</th>
+            <th style="width: 16%">${escHtml(copy.checkOut)}</th>
           </tr>
         </thead>
         <tbody>${guestRows}</tbody>
@@ -258,15 +273,15 @@ export function openRoomingList(
     if (ai !== bi) return ai < bi ? -1 : 1;
     return a.roomKey < b.roomKey ? -1 : a.roomKey > b.roomKey ? 1 : 0;
   });
-  const generated = fmtGeneratedNow();
-  const projectName = input.brief.projectName || "Untitled project";
-  const venue = input.brief.venue || "Venue TBA";
+  const { copy, locale } = input;
+  const generated = fmtGeneratedNow(locale);
+  const projectName = input.brief.projectName || copy.untitledProject;
+  const venue = input.brief.venue || copy.venueTba;
 
   const noHotelNote =
     input.noHotelGuests.length > 0
       ? `<div class="rl-note">
-           <strong>Not staying at the hotel</strong> — for reference only,
-           do not assign rooms:
+            <strong>${escHtml(copy.notStaying)}</strong> — ${escHtml(copy.notStayingDetail)}
            ${input.noHotelGuests
              .map(
                (g) =>
@@ -279,10 +294,10 @@ export function openRoomingList(
       : "";
 
   const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="${locale === "no" ? "nb" : "en"}">
 <head>
   <meta charset="utf-8" />
-  <title>${escHtml(`Rooming list — ${projectName} · ${venue}`)}</title>
+  <title>${escHtml(copy.documentTitle(projectName, venue))}</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -502,19 +517,19 @@ export function openRoomingList(
   <div class="rl-page">
     <div class="rl-band">
       <div>
-        <div class="rl-band-sub">Rooming list — for the hotel front desk</div>
+        <div class="rl-band-sub">${escHtml(copy.title)}</div>
         <h1>${escHtml(projectName)}</h1>
         <div class="rl-band-venue">${escHtml(venue)}</div>
       </div>
-      <div class="rl-band-right">Generated ${escHtml(generated)}</div>
+      <div class="rl-band-right">${escHtml(copy.generated(generated))}</div>
     </div>
     ${summaryBlock({ ...input, rooms: sortedRooms })}
-    ${sortedRooms.map((r, i) => roomBlock(r, i)).join("")}
+    ${sortedRooms.map((r, i) => roomBlock(r, i, locale, copy)).join("")}
     ${noHotelNote}
-    <div class="rl-foot">EHS Production Tool · brief ${escHtml(input.brief.id)}</div>
+    <div class="rl-foot">${escHtml(copy.footer(input.brief.id))}</div>
   </div>
   <div class="rl-noprint">
-    <button onclick="window.print()">Print / Save as PDF</button>
+    <button onclick="window.print()">${escHtml(copy.print)}</button>
   </div>
 </body>
 </html>`;

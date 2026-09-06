@@ -10,7 +10,6 @@ import {
 import {
   computeCrewTotals,
   crewHours,
-  formatCrewDayRate,
   type CrewMember,
 } from "./crew";
 import { computeSoundTotals, type SoundItem } from "./sound";
@@ -94,17 +93,89 @@ export type ClientPackInput = {
   /** Pre-opened popup window from the click handler (sync open keeps
    *  the browser from classifying it as a programmatic pop-up). */
   targetWin: Window | null;
+  /** Locale and copy are supplied by the UI; this library deliberately
+   *  does not read React context or browser language preferences. */
+  locale: string;
+  copy: ClientPackExportCopy;
+};
+
+export type ClientPackExportCopy = {
+  clientPack: string;
+  downloadPdf: string;
+  print: string;
+  close: string;
+  generatingPdf: string;
+  pdfError: string;
+  footerAdvisory: string;
+  notSpecified: string;
+  generated: string;
+  riskSafe: string;
+  riskWarning: string;
+  riskOverload: string;
+  noIssuesDetected: string;
+  noIssuesDetail: string;
+  riskAreaRigging: string; riskAreaPower: string; riskAreaCrew: string; riskAreaSchedule: string;
+  riskPeakOverload: string; riskPeakWarning: string; riskFeederOverload: string;
+  riskFeederWarning: string; riskPhaseImbalance: string; riskUnpoweredOne: string;
+  riskUnpoweredMany: string; riskMissingCallOne: string; riskMissingCallMany: string;
+  riskNoCrew: string; riskUndatedSegmentOne: string; riskUndatedSegmentMany: string;
+  riskNoSchedule: string; unnamed: string; distroFallback: string; tbd: string;
+  processorFallback: string; ledScreenFallback: string; pixelMap: string;
+  filenameFallback: string;
+  /** Every presentation string used by the generated document. */
+  labels: {
+    brand: string; client: string; venue: string; date: string; preparedBy: string;
+    overviewSection: string; totalCrew: string; riggingSystems: string; lightingFixtures: string;
+    distros: string; soundItems: string; stages: string; ledScreens: string;
+    scheduleSection: string; phase: string; time: string;
+    crewSection: string; name: string; role: string; call: string; off: string;
+    hours: string; hotel: string; dayRate: string; hotelNeeded: string;
+    roomsOne: string; roomsMany: string; nightsOne: string; nightsMany: string;
+    crewTotalOne: string; crewTotalMany: string; totals: string;
+    riggingSection: string; system: string; trusses: string; pts: string; motor: string;
+    staticLoad: string; dynamicLoad: string; peakSwl: string; util: string; status: string;
+    lightingSection: string; fixtures: string; totalLoad: string; unpowered: string; phaseCount: string;
+    distro: string; feed: string; totalW: string; worstLeg: string; imbalance: string;
+    soundSection: string; item: string; category: string; qty: string; weight: string;
+    power: string; placementNotes: string; rowsOne: string; rowsMany: string;
+    piecesOne: string; piecesMany: string;
+    stageSection: string; stage: string; dimensions: string; legHeight: string; area: string;
+    buildWeight: string; loadCapacity: string; stageOne: string; stageMany: string;
+    ledSection: string; screens: string; cabinets: string; pixels: string; peakPower: string;
+    screen: string; panelType: string; grid: string; resolution: string; processor: string;
+    portsNeeded: string; processorLoad: string;
+    riskSection: string; riskArea: string; detail: string;
+    costSection: string; department: string; headcount: string; cost: string;
+    totalCrewCost: string; costFootnote: string;
+  };
 };
 
 // ─── Formatting helpers ───────────────────────────────────────────────
 
-const NS = "Not specified";
+let NS = "";
+let renderCopy: ClientPackExportCopy | null = null;
+const activeCopy = (): ClientPackExportCopy => {
+  if (!renderCopy) {
+    throw new Error("CLIENT_PACK_COPY_NOT_INITIALIZED");
+  }
+  return renderCopy;
+};
+const copyTemplate = (template: string, params: Record<string, string | number>) =>
+  Object.entries(params).reduce((text, [key, value]) => text.replaceAll(`{${key}}`, String(value)), template);
 
+let renderLocale = "und";
 const fmt = (n: number, d = 1): string =>
-  n.toLocaleString("en-US", { maximumFractionDigits: d });
+  n.toLocaleString(renderLocale, { maximumFractionDigits: d });
 
 const fmtInt = (n: number): string =>
-  Math.round(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
+  Math.round(n).toLocaleString(renderLocale, { maximumFractionDigits: 0 });
+
+const fmtCurrency = (n: number): string =>
+  n.toLocaleString(renderLocale, {
+    style: "currency",
+    currency: "NOK",
+    maximumFractionDigits: 0,
+  });
 
 const escapeHtml = (s: string): string =>
   s
@@ -114,7 +185,7 @@ const escapeHtml = (s: string): string =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-/** Render a value or "Not specified" if the value is empty / blank. */
+/** Render a value or the active locale's missing-value label. */
 const orNS = (v: string | number | null | undefined): string => {
   if (v === null || v === undefined) return NS;
   if (typeof v === "string" && v.trim() === "") return NS;
@@ -128,7 +199,7 @@ const fmtDate = (iso: string | undefined): string => {
   if (!iso) return NS;
   const d = new Date(iso + "T00:00:00");
   if (Number.isNaN(d.getTime())) return escapeHtml(iso);
-  return d.toLocaleDateString("en-GB", {
+  return d.toLocaleDateString(renderLocale, {
     weekday: "short",
     day: "2-digit",
     month: "short",
@@ -149,7 +220,11 @@ const riskPill = (level: RiskLevel, label?: string): string => {
   const dot = level === "danger" ? "🔴" : level === "warn" ? "🟠" : "🟢";
   const text =
     label ??
-    (level === "danger" ? "OVERLOAD" : level === "warn" ? "WARNING" : "SAFE");
+    (level === "danger"
+      ? activeCopy().riskOverload
+      : level === "warn"
+        ? activeCopy().riskWarning
+        : activeCopy().riskSafe);
   return `<span class="risk-pill risk-${level}">${dot} ${escapeHtml(text)}</span>`;
 };
 
@@ -174,47 +249,47 @@ function collectRisks(
     if (m.swl > 0 && m.peak > m.swl) {
       out.push({
         level: "danger",
-        area: `Rigging · ${sys.name}`,
-        message: `Peak point load ${fmtInt(m.peak)} kg exceeds hoist SWL ${fmtInt(m.swl)} kg (${fmt((m.peak / m.swl) * 100, 0)} %).`,
+        area: `${input.copy.riskAreaRigging} · ${sys.name}`,
+        message: copyTemplate(input.copy.riskPeakOverload, { peak: fmtInt(m.peak), swl: fmtInt(m.swl), percent: fmt((m.peak / m.swl) * 100, 0) }),
       });
     } else if (m.swl > 0 && m.peak / m.swl > 0.85) {
       out.push({
         level: "warn",
-        area: `Rigging · ${sys.name}`,
-        message: `Peak point load at ${fmt((m.peak / m.swl) * 100, 0)} % of SWL — review before show.`,
+        area: `${input.copy.riskAreaRigging} · ${sys.name}`,
+        message: copyTemplate(input.copy.riskPeakWarning, { percent: fmt((m.peak / m.swl) * 100, 0) }),
       });
     }
   }
 
   // Power risks: per-distro overload + imbalance
   loads.forEach((d) => {
-    const name = d.distro.name || "Distro";
+    const name = d.distro.name || input.copy.distroFallback;
     if (d.feederUtilization > 1) {
       out.push({
         level: "danger",
-        area: `Power · ${name}`,
-        message: `Feeder utilization ${fmt(d.feederUtilization * 100, 0)} % — over breaker rating.`,
+        area: `${input.copy.riskAreaPower} · ${name}`,
+        message: copyTemplate(input.copy.riskFeederOverload, { percent: fmt(d.feederUtilization * 100, 0) }),
       });
     } else if (d.feederUtilization > 0.85) {
       out.push({
         level: "warn",
-        area: `Power · ${name}`,
-        message: `Feeder utilization ${fmt(d.feederUtilization * 100, 0)} % — close to breaker limit.`,
+        area: `${input.copy.riskAreaPower} · ${name}`,
+        message: copyTemplate(input.copy.riskFeederWarning, { percent: fmt(d.feederUtilization * 100, 0) }),
       });
     }
     if (d.distro.feedPhases === 3 && d.imbalance > 0.2) {
       out.push({
         level: "warn",
-        area: `Power · ${name}`,
-        message: `Phase imbalance ${fmt(d.imbalance * 100, 0)} % — re-balance L1 / L2 / L3.`,
+        area: `${input.copy.riskAreaPower} · ${name}`,
+        message: copyTemplate(input.copy.riskPhaseImbalance, { percent: fmt(d.imbalance * 100, 0) }),
       });
     }
   });
   if (unpoweredFixtureCount > 0) {
     out.push({
       level: "warn",
-      area: "Power",
-      message: `${unpoweredFixtureCount} fixture${unpoweredFixtureCount === 1 ? "" : "s"} not yet assigned to any distro channel.`,
+      area: input.copy.riskAreaPower,
+      message: copyTemplate(unpoweredFixtureCount === 1 ? input.copy.riskUnpoweredOne : input.copy.riskUnpoweredMany, { count: unpoweredFixtureCount }),
     });
   }
 
@@ -223,17 +298,18 @@ function collectRisks(
   if (missingCall.length > 0) {
     out.push({
       level: "warn",
-      area: "Crew",
-      message: `${missingCall.length} crew member${missingCall.length === 1 ? "" : "s"} missing call time: ${missingCall
-        .map((c) => c.name || "(unnamed)")
-        .join(", ")}.`,
+      area: input.copy.riskAreaCrew,
+      message: copyTemplate(missingCall.length === 1 ? input.copy.riskMissingCallOne : input.copy.riskMissingCallMany, {
+        count: missingCall.length,
+        names: missingCall.map((c) => c.name || input.copy.unnamed).join(", "),
+      }),
     });
   }
   if (input.crew.length === 0) {
     out.push({
       level: "warn",
-      area: "Crew",
-      message: "No crew assigned yet.",
+      area: input.copy.riskAreaCrew,
+      message: input.copy.riskNoCrew,
     });
   }
 
@@ -243,16 +319,16 @@ function collectRisks(
     if (blank.length > 0) {
       out.push({
         level: "warn",
-        area: `Schedule · ${phase.label}`,
-        message: `${blank.length} segment${blank.length === 1 ? "" : "s"} without dates.`,
+        area: `${input.copy.riskAreaSchedule} · ${phase.label}`,
+        message: copyTemplate(blank.length === 1 ? input.copy.riskUndatedSegmentOne : input.copy.riskUndatedSegmentMany, { count: blank.length }),
       });
     }
   }
   if (input.schedule.length === 0) {
     out.push({
       level: "warn",
-      area: "Schedule",
-      message: "No schedule phases defined.",
+      area: input.copy.riskAreaSchedule,
+      message: input.copy.riskNoSchedule,
     });
   }
 
@@ -262,6 +338,7 @@ function collectRisks(
 // ─── Section renderers ────────────────────────────────────────────────
 
 function renderCover(p: ClientPackProject, logoDataUrl: string | null): string {
+  const l = activeCopy().labels;
   const dateLabel =
     p.endDate && p.endDate !== p.date
       ? `${fmtDate(p.date)} → ${fmtDate(p.endDate)}`
@@ -269,19 +346,20 @@ function renderCover(p: ClientPackProject, logoDataUrl: string | null): string {
   return `
 <section class="cover">
   ${logoDataUrl ? `<img src="${logoDataUrl}" alt="EHS" class="cover-logo" />` : ""}
-  <div class="cover-brand">EHS Production · Client Pack</div>
+  <div class="cover-brand">${escapeHtml(l.brand)}</div>
   <h1 class="cover-title">${orNS(p.eventName) === NS ? orNS(p.venue) : escapeHtml(p.eventName)}</h1>
   <div class="cover-meta">
-    <div><span class="cover-meta-label">Client</span><span class="cover-meta-value">${orNS(p.client)}</span></div>
-    <div><span class="cover-meta-label">Venue</span><span class="cover-meta-value">${orNS(p.venue)}</span></div>
-    <div><span class="cover-meta-label">Date</span><span class="cover-meta-value">${dateLabel}</span></div>
-    <div><span class="cover-meta-label">EHS Production</span><span class="cover-meta-value">${orNS(p.preparedBy)}</span></div>
+    <div><span class="cover-meta-label">${escapeHtml(l.client)}</span><span class="cover-meta-value">${orNS(p.client)}</span></div>
+    <div><span class="cover-meta-label">${escapeHtml(l.venue)}</span><span class="cover-meta-value">${orNS(p.venue)}</span></div>
+    <div><span class="cover-meta-label">${escapeHtml(l.date)}</span><span class="cover-meta-value">${dateLabel}</span></div>
+    <div><span class="cover-meta-label">${escapeHtml(l.preparedBy)}</span><span class="cover-meta-value">${orNS(p.preparedBy)}</span></div>
   </div>
-  <div class="cover-footer">Generated ${escapeHtml(new Date().toLocaleString())}</div>
+  <div class="cover-footer">${escapeHtml(activeCopy().generated)} ${escapeHtml(new Date().toLocaleString(renderLocale))}</div>
 </section>`;
 }
 
 function renderOverview(input: ClientPackInput): string {
+  const l = input.copy.labels;
   const totalFixtures = input.fixtures.reduce(
     (sum, f) =>
       sum +
@@ -301,24 +379,28 @@ function renderOverview(input: ClientPackInput): string {
 
   return `
 <section class="section">
-  <h2>2 · Overview</h2>
+  <h2>${escapeHtml(l.overviewSection)}</h2>
   <p class="lead">${summary}</p>
   <div class="overview-grid">
-    <div class="ov-card"><div class="ov-label">Total crew</div><div class="ov-value">${totalCrew}</div></div>
-    <div class="ov-card"><div class="ov-label">Rigging systems</div><div class="ov-value">${input.systems.length}</div></div>
-    <div class="ov-card"><div class="ov-label">Lighting fixtures</div><div class="ov-value">${totalFixtures}</div></div>
-    <div class="ov-card"><div class="ov-label">Distros</div><div class="ov-value">${totalDistros}</div></div>
-    <div class="ov-card"><div class="ov-label">Sound items</div><div class="ov-value">${totalSound}</div></div>
-    <div class="ov-card"><div class="ov-label">Stages</div><div class="ov-value">${totalStages}</div></div>
-    <div class="ov-card"><div class="ov-label">LED screens</div><div class="ov-value">${totalLed}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.totalCrew)}</div><div class="ov-value">${totalCrew}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.riggingSystems)}</div><div class="ov-value">${input.systems.length}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.lightingFixtures)}</div><div class="ov-value">${totalFixtures}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.distros)}</div><div class="ov-value">${totalDistros}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.soundItems)}</div><div class="ov-value">${totalSound}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.stages)}</div><div class="ov-value">${totalStages}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.ledScreens)}</div><div class="ov-value">${totalLed}</div></div>
   </div>
 </section>`;
 }
 
-function renderSchedule(phases: ClientPackSchedulePhase[]): string {
+function renderSchedule(
+  phases: ClientPackSchedulePhase[],
+  copy: ClientPackExportCopy,
+): string {
+  const l = copy.labels;
   if (phases.length === 0) {
     return `<section class="section">
-  <h2>3 · Schedule</h2>
+  <h2>${escapeHtml(l.scheduleSection)}</h2>
   <p class="muted">${NS}</p>
 </section>`;
   }
@@ -334,7 +416,7 @@ function renderSchedule(phases: ClientPackSchedulePhase[]): string {
                 ? `${fmtDate(seg.from)} → ${fmtDate(seg.to)}`
                 : fmtDate(seg.from || seg.to);
             const time = seg.timeTbd
-              ? "TBD"
+              ? escapeHtml(copy.tbd)
               : fmtTimeRange(seg.fromTime, seg.toTime);
             return `<tr>
               <td><strong>${escapeHtml(phase.label)}</strong></td>
@@ -346,18 +428,19 @@ function renderSchedule(phases: ClientPackSchedulePhase[]): string {
     .join("");
   return `
 <section class="section">
-  <h2>3 · Schedule</h2>
+  <h2>${escapeHtml(l.scheduleSection)}</h2>
   <table>
-    <thead><tr><th>Phase</th><th>Date</th><th>Time</th></tr></thead>
+    <thead><tr><th>${escapeHtml(l.phase)}</th><th>${escapeHtml(l.date)}</th><th>${escapeHtml(l.time)}</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
 </section>`;
 }
 
 function renderCrew(crew: CrewMember[]): string {
+  const l = activeCopy().labels;
   if (crew.length === 0) {
     return `<section class="section">
-  <h2>4 · Crew List</h2>
+  <h2>${escapeHtml(l.crewSection)}</h2>
   <p class="muted">${NS}</p>
 </section>`;
   }
@@ -373,9 +456,9 @@ function renderCrew(crew: CrewMember[]): string {
       }
       const hotelCell =
         nights > 0
-          ? `🏨 ${nights}n`
+          ? `🏨 ${escapeHtml(copyTemplate(nights === 1 ? l.nightsOne : l.nightsMany, { count: nights }))}`
           : c.needsHotel
-            ? `hotel`
+            ? escapeHtml(l.hotelNeeded)
             : `<span class="muted">—</span>`;
       return `<tr>
         <td>${orNS(c.name)}</td>
@@ -384,29 +467,29 @@ function renderCrew(crew: CrewMember[]): string {
         <td>${orNS(c.offTime)}</td>
         <td class="num">${hours > 0 ? `${fmt(hours, 1)} h` : `<span class="muted">—</span>`}</td>
         <td>${hotelCell}</td>
-        <td class="num">${c.dayRate > 0 ? escapeHtml(formatCrewDayRate(c.dayRate)) : `<span class="muted">—</span>`}</td>
+        <td class="num">${c.dayRate > 0 ? escapeHtml(fmtCurrency(c.dayRate)) : `<span class="muted">—</span>`}</td>
       </tr>`;
     })
     .join("");
   const totals = computeCrewTotals(crew);
   const hotelTotal =
     totalRooms > 0
-      ? `${totalRooms} room${totalRooms === 1 ? "" : "s"} · ${totalNights} night${totalNights === 1 ? "" : "s"}`
+      ? `${copyTemplate(totalRooms === 1 ? l.roomsOne : l.roomsMany, { count: totalRooms })} · ${copyTemplate(totalNights === 1 ? l.nightsOne : l.nightsMany, { count: totalNights })}`
       : `<span class="muted">—</span>`;
   return `
 <section class="section">
-  <h2>4 · Crew List</h2>
+  <h2>${escapeHtml(l.crewSection)}</h2>
   <table>
     <thead>
-      <tr><th>Name</th><th>Role</th><th>Call</th><th>Off</th><th class="num">Hours</th><th>Hotel</th><th class="num">Day rate</th></tr>
+      <tr><th>${escapeHtml(l.name)}</th><th>${escapeHtml(l.role)}</th><th>${escapeHtml(l.call)}</th><th>${escapeHtml(l.off)}</th><th class="num">${escapeHtml(l.hours)}</th><th>${escapeHtml(l.hotel)}</th><th class="num">${escapeHtml(l.dayRate)}</th></tr>
     </thead>
     <tbody>${rows}</tbody>
     <tfoot>
       <tr class="row-total">
-        <td colspan="4">Totals · ${totals.count} crew · ${fmt(totals.totalHours, 1)} h</td>
+        <td colspan="4">${escapeHtml(l.totals)} · ${escapeHtml(copyTemplate(totals.count === 1 ? l.crewTotalOne : l.crewTotalMany, { count: totals.count }))} · ${fmt(totals.totalHours, 1)} h</td>
         <td class="num">${fmt(totals.totalHours, 1)} h</td>
         <td>${hotelTotal}</td>
-        <td class="num">${escapeHtml(formatCrewDayRate(totals.totalCost))}</td>
+        <td class="num">${escapeHtml(fmtCurrency(totals.totalCost))}</td>
       </tr>
     </tfoot>
   </table>
@@ -421,9 +504,10 @@ function rigSwlLevel(m: ClientPackSystem["metrics"]): RiskLevel {
 }
 
 function renderRigging(systems: ClientPackSystem[]): string {
+  const l = activeCopy().labels;
   if (systems.length === 0) {
     return `<section class="section">
-  <h2>5 · Rigging</h2>
+  <h2>${escapeHtml(l.riggingSection)}</h2>
   <p class="muted">${NS}</p>
 </section>`;
   }
@@ -446,19 +530,19 @@ function renderRigging(systems: ClientPackSystem[]): string {
     .join("");
   return `
 <section class="section">
-  <h2>5 · Rigging</h2>
+  <h2>${escapeHtml(l.riggingSection)}</h2>
   <table>
     <thead>
       <tr>
-        <th>System</th>
-        <th>Trusses</th>
-        <th class="num">Pts</th>
-        <th>Motor</th>
-        <th class="num">Static</th>
-        <th class="num">Dynamic</th>
-        <th class="num">Peak / SWL</th>
-        <th class="num">Util</th>
-        <th>Status</th>
+        <th>${escapeHtml(l.system)}</th>
+        <th>${escapeHtml(l.trusses)}</th>
+        <th class="num">${escapeHtml(l.pts)}</th>
+        <th>${escapeHtml(l.motor)}</th>
+        <th class="num">${escapeHtml(l.staticLoad)}</th>
+        <th class="num">${escapeHtml(l.dynamicLoad)}</th>
+        <th class="num">${escapeHtml(l.peakSwl)}</th>
+        <th class="num">${escapeHtml(l.util)}</th>
+        <th>${escapeHtml(l.status)}</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -478,6 +562,7 @@ function renderLighting(input: ClientPackInput): {
   loads: DistroLoad[];
   unpoweredFixtureCount: number;
 } {
+  const l = input.copy.labels;
   const wattsLookup = makeFixtureWattsLookup(input.fixtures);
   const loads = input.power.distros.map((d) =>
     computeDistroLoad(d, wattsLookup),
@@ -500,7 +585,7 @@ function renderLighting(input: ClientPackInput): {
       loads,
       unpoweredFixtureCount,
       html: `<section class="section">
-  <h2>6 · Lighting (v2.2)</h2>
+  <h2>${escapeHtml(l.lightingSection)}</h2>
   <p class="muted">${NS}</p>
 </section>`,
     };
@@ -522,7 +607,7 @@ function renderLighting(input: ClientPackInput): {
             const dist = d.distro;
             return `<tr>
             <td><strong>${orNS(dist.name)}</strong></td>
-            <td>${escapeHtml(`${dist.feedVoltage} V · ${dist.feedAmps} A · ${dist.feedPhases}ph`)}</td>
+            <td>${escapeHtml(`${dist.feedVoltage} V · ${dist.feedAmps} A · ${copyTemplate(l.phaseCount, { count: dist.feedPhases })}`)}</td>
             <td class="num">${fmtInt(d.totalWatts)} W</td>
             <td class="num">${fmt(d.feederWorstAmps, 1)} A</td>
             <td class="num">${fmt(d.feederUtilization * 100, 0)} %</td>
@@ -538,25 +623,25 @@ function renderLighting(input: ClientPackInput): {
     unpoweredFixtureCount,
     html: `
 <section class="section">
-  <h2>6 · Lighting (v2.2)</h2>
+  <h2>${escapeHtml(l.lightingSection)}</h2>
   <div class="overview-grid lighting-summary">
-    <div class="ov-card"><div class="ov-label">Fixtures</div><div class="ov-value">${fixtureCount}</div></div>
-    <div class="ov-card"><div class="ov-label">Distros</div><div class="ov-value">${loads.length}</div></div>
-    <div class="ov-card"><div class="ov-label">Total load</div><div class="ov-value">${fmtInt(totals.totalWatts)} <span class="ov-unit">W</span></div></div>
-    <div class="ov-card"><div class="ov-label">Unpowered</div><div class="ov-value">${unpoweredFixtureCount}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.fixtures)}</div><div class="ov-value">${fixtureCount}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.distros)}</div><div class="ov-value">${loads.length}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.totalLoad)}</div><div class="ov-value">${fmtInt(totals.totalWatts)} <span class="ov-unit">W</span></div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.unpowered)}</div><div class="ov-value">${unpoweredFixtureCount}</div></div>
   </div>
-  ${unpoweredFixtureCount > 0 ? `<div class="warn">⚠ ${unpoweredFixtureCount} fixture${unpoweredFixtureCount === 1 ? "" : "s"} not yet assigned to a distro channel.</div>` : ""}
+  ${unpoweredFixtureCount > 0 ? `<div class="warn">⚠ ${escapeHtml(copyTemplate(unpoweredFixtureCount === 1 ? input.copy.riskUnpoweredOne : input.copy.riskUnpoweredMany, { count: unpoweredFixtureCount }))}</div>` : ""}
   <table>
     <thead>
       <tr>
-        <th>Distro</th>
-        <th>Feed</th>
-        <th class="num">Total W</th>
-        <th class="num">Worst leg A</th>
-        <th class="num">Util</th>
-        <th class="num">Imbalance</th>
+        <th>${escapeHtml(l.distro)}</th>
+        <th>${escapeHtml(l.feed)}</th>
+        <th class="num">${escapeHtml(l.totalW)}</th>
+        <th class="num">${escapeHtml(l.worstLeg)}</th>
+        <th class="num">${escapeHtml(l.util)}</th>
+        <th class="num">${escapeHtml(l.imbalance)}</th>
         <th>L1 · L2 · L3</th>
-        <th>Status</th>
+        <th>${escapeHtml(l.status)}</th>
       </tr>
     </thead>
     <tbody>${distroRows}</tbody>
@@ -566,9 +651,10 @@ function renderLighting(input: ClientPackInput): {
 }
 
 function renderSound(items: SoundItem[]): string {
+  const l = activeCopy().labels;
   if (items.length === 0) {
     return `<section class="section">
-  <h2>7 · Sound</h2>
+  <h2>${escapeHtml(l.soundSection)}</h2>
   <p class="muted">${NS}</p>
 </section>`;
   }
@@ -587,19 +673,19 @@ function renderSound(items: SoundItem[]): string {
     .join("");
   return `
 <section class="section">
-  <h2>7 · Sound</h2>
+  <h2>${escapeHtml(l.soundSection)}</h2>
   <table>
     <thead>
       <tr>
-        <th>Item</th><th>Category</th>
-        <th class="num">Qty</th><th class="num">Weight</th>
-        <th class="num">Power</th><th>Placement / notes</th>
+        <th>${escapeHtml(l.item)}</th><th>${escapeHtml(l.category)}</th>
+        <th class="num">${escapeHtml(l.qty)}</th><th class="num">${escapeHtml(l.weight)}</th>
+        <th class="num">${escapeHtml(l.power)}</th><th>${escapeHtml(l.placementNotes)}</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
     <tfoot>
       <tr class="row-total">
-        <td colspan="2">Totals · ${totals.rowCount} rows · ${totals.totalQty} pieces</td>
+        <td colspan="2">${escapeHtml(l.totals)} · ${escapeHtml(copyTemplate(totals.rowCount === 1 ? l.rowsOne : l.rowsMany, { count: totals.rowCount }))} · ${escapeHtml(copyTemplate(totals.totalQty === 1 ? l.piecesOne : l.piecesMany, { count: totals.totalQty }))}</td>
         <td class="num">${totals.totalQty}</td>
         <td class="num">${fmt(totals.totalWeight, 0)} kg</td>
         <td class="num">${fmtInt(totals.totalPower)} W</td>
@@ -611,9 +697,10 @@ function renderSound(items: SoundItem[]): string {
 }
 
 function renderStage(stages: Stage[]): string {
+  const l = activeCopy().labels;
   if (stages.length === 0) {
     return `<section class="section">
-  <h2>8 · Stage</h2>
+  <h2>${escapeHtml(l.stageSection)}</h2>
   <p class="muted">${NS}</p>
 </section>`;
   }
@@ -634,18 +721,18 @@ function renderStage(stages: Stage[]): string {
     .join("");
   return `
 <section class="section">
-  <h2>8 · Stage</h2>
+  <h2>${escapeHtml(l.stageSection)}</h2>
   <table>
     <thead>
       <tr>
-        <th>Stage</th><th>Dimensions</th><th class="num">Leg height</th>
-        <th class="num">Area</th><th class="num">Build weight</th><th class="num">Load capacity</th>
+        <th>${escapeHtml(l.stage)}</th><th>${escapeHtml(l.dimensions)}</th><th class="num">${escapeHtml(l.legHeight)}</th>
+        <th class="num">${escapeHtml(l.area)}</th><th class="num">${escapeHtml(l.buildWeight)}</th><th class="num">${escapeHtml(l.loadCapacity)}</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
     <tfoot>
       <tr class="row-total">
-        <td colspan="3">Totals · ${totals.stageCount} stage${totals.stageCount === 1 ? "" : "s"}</td>
+        <td colspan="3">${escapeHtml(l.totals)} · ${escapeHtml(copyTemplate(totals.stageCount === 1 ? l.stageOne : l.stageMany, { count: totals.stageCount }))}</td>
         <td class="num">${fmt(totals.totalArea, 1)} m²</td>
         <td class="num">${fmtInt(totals.totalWeight)} kg</td>
         <td class="num">${fmtInt(totals.totalLoadCapacityKg)} kg</td>
@@ -656,9 +743,10 @@ function renderStage(stages: Stage[]): string {
 }
 
 function renderLed(input: ClientPackInput): string {
+  const l = input.copy.labels;
   if (input.ledScreens.length === 0) {
     return `<section class="section">
-  <h2>9 · LED Screen</h2>
+  <h2>${escapeHtml(l.ledSection)}</h2>
   <p class="muted">${NS}</p>
 </section>`;
   }
@@ -680,7 +768,7 @@ function renderLed(input: ClientPackInput): string {
     return list
       .map((p) => {
         const name =
-          NOVASTAR_PROCESSOR_CATALOG[p.model]?.name ?? p.model ?? "Processor";
+          NOVASTAR_PROCESSOR_CATALOG[p.model]?.name ?? p.model ?? input.copy.processorFallback;
         return p.label ? `${name} (${p.label})` : name;
       })
       .join(", ");
@@ -713,7 +801,7 @@ function renderLed(input: ClientPackInput): string {
     input.ledSettings.portLimit > 0 && totals.pixels > 0
       ? riskPill(
           totals.portsNeeded > 8 ? "warn" : "safe",
-          `${totals.portsNeeded} ports needed`,
+          copyTemplate(l.portsNeeded, { count: totals.portsNeeded }),
         )
       : "";
 
@@ -724,10 +812,10 @@ function renderLed(input: ClientPackInput): string {
       if (!dataUrl) return "";
       const procLabels = procLabelsFor(s);
       const caption = procLabels && procLabels !== NS
-        ? `${escapeHtml(s.name || "LED screen")} — pixel map · Processor: ${escapeHtml(procLabels)}`
-        : `${escapeHtml(s.name || "LED screen")} — pixel map`;
+        ? `${escapeHtml(s.name || input.copy.ledScreenFallback)} — ${escapeHtml(input.copy.pixelMap)} · ${escapeHtml(input.copy.processorFallback)}: ${escapeHtml(procLabels)}`
+        : `${escapeHtml(s.name || input.copy.ledScreenFallback)} — ${escapeHtml(input.copy.pixelMap)}`;
       return `<figure class="led-figure">
-        <img src="${dataUrl}" alt="${escapeHtml(s.name || "LED screen")} pixel map" />
+        <img src="${dataUrl}" alt="${escapeHtml(s.name || input.copy.ledScreenFallback)} ${escapeHtml(input.copy.pixelMap)}" />
         <figcaption>${caption}</figcaption>
       </figure>`;
     })
@@ -736,20 +824,20 @@ function renderLed(input: ClientPackInput): string {
 
   return `
 <section class="section">
-  <h2>9 · LED Screen</h2>
+  <h2>${escapeHtml(l.ledSection)}</h2>
   <div class="overview-grid lighting-summary">
-    <div class="ov-card"><div class="ov-label">Screens</div><div class="ov-value">${totals.screens}</div></div>
-    <div class="ov-card"><div class="ov-label">Cabinets</div><div class="ov-value">${totals.panels}</div></div>
-    <div class="ov-card"><div class="ov-label">Pixels</div><div class="ov-value">${fmtInt(totals.pixels)}</div></div>
-    <div class="ov-card"><div class="ov-label">Peak power</div><div class="ov-value">${fmtInt(totals.powerW)} <span class="ov-unit">W</span></div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.screens)}</div><div class="ov-value">${totals.screens}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.cabinets)}</div><div class="ov-value">${totals.panels}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.pixels)}</div><div class="ov-value">${fmtInt(totals.pixels)}</div></div>
+    <div class="ov-card"><div class="ov-label">${escapeHtml(l.peakPower)}</div><div class="ov-value">${fmtInt(totals.powerW)} <span class="ov-unit">W</span></div></div>
   </div>
-  ${portStatus ? `<p>Processor load: ${portStatus}</p>` : ""}
+  ${portStatus ? `<p>${escapeHtml(l.processorLoad)}: ${portStatus}</p>` : ""}
   <table>
     <thead>
       <tr>
-        <th>Screen</th><th>Panel type</th>
-        <th class="num">Grid (W×H)</th><th class="num">Cabinets</th><th class="num">Resolution</th>
-        <th>Processor</th>
+        <th>${escapeHtml(l.screen)}</th><th>${escapeHtml(l.panelType)}</th>
+        <th class="num">${escapeHtml(l.grid)}</th><th class="num">${escapeHtml(l.cabinets)}</th><th class="num">${escapeHtml(l.resolution)}</th>
+        <th>${escapeHtml(l.processor)}</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -759,10 +847,11 @@ function renderLed(input: ClientPackInput): string {
 }
 
 function renderRiskSummary(risks: RiskItem[]): string {
+  const l = activeCopy().labels;
   if (risks.length === 0) {
     return `<section class="section">
-  <h2>10 · Risk Summary</h2>
-  <div class="risk-empty">${riskPill("safe", "No issues detected")} — all systems within limits and complete.</div>
+  <h2>${escapeHtml(l.riskSection)}</h2>
+  <div class="risk-empty">${riskPill("safe", activeCopy().noIssuesDetected)} — ${escapeHtml(activeCopy().noIssuesDetail)}</div>
 </section>`;
   }
   // Sort danger first, then warn
@@ -782,19 +871,20 @@ function renderRiskSummary(risks: RiskItem[]): string {
     .join("");
   return `
 <section class="section">
-  <h2>10 · Risk Summary</h2>
+  <h2>${escapeHtml(l.riskSection)}</h2>
   <table>
-    <thead><tr><th>Status</th><th>Area</th><th>Detail</th></tr></thead>
+    <thead><tr><th>${escapeHtml(l.status)}</th><th>${escapeHtml(l.riskArea)}</th><th>${escapeHtml(l.detail)}</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
 </section>`;
 }
 
 function renderCostSummary(crew: CrewMember[]): string {
+  const l = activeCopy().labels;
   const totals = computeCrewTotals(crew);
   if (crew.length === 0 || totals.totalCost === 0) {
     return `<section class="section">
-  <h2>11 · Total Cost Summary</h2>
+  <h2>${escapeHtml(l.costSection)}</h2>
   <p class="muted">${NS}</p>
 </section>`;
   }
@@ -806,34 +896,37 @@ function renderCostSummary(crew: CrewMember[]): string {
       (r) => `<tr>
         <td>${escapeHtml(String(r))}</td>
         <td class="num">${totals.countsByRole[r]}</td>
-        <td class="num">${escapeHtml(formatCrewDayRate(totals.costsByRole[r]))}</td>
+        <td class="num">${escapeHtml(fmtCurrency(totals.costsByRole[r]))}</td>
       </tr>`,
     )
     .join("");
   return `
 <section class="section">
-  <h2>11 · Total Cost Summary</h2>
+  <h2>${escapeHtml(l.costSection)}</h2>
   <table>
-    <thead><tr><th>Department</th><th class="num">Headcount</th><th class="num">Cost (NOK)</th></tr></thead>
+    <thead><tr><th>${escapeHtml(l.department)}</th><th class="num">${escapeHtml(l.headcount)}</th><th class="num">${escapeHtml(l.cost)}</th></tr></thead>
     <tbody>${byRoleRows}</tbody>
     <tfoot>
       <tr class="row-total">
-        <td>Total crew cost</td>
+        <td>${escapeHtml(l.totalCrewCost)}</td>
         <td class="num">${totals.count}</td>
-        <td class="num">${escapeHtml(formatCrewDayRate(totals.totalCost))}</td>
+        <td class="num">${escapeHtml(fmtCurrency(totals.totalCost))}</td>
       </tr>
     </tfoot>
   </table>
-  <p class="muted footnote">Day-rate totals only. Equipment, transport and venue costs are not tracked in this tool — confirm with EHS Production.</p>
+  <p class="muted footnote">${escapeHtml(l.costFootnote)}</p>
 </section>`;
 }
 
 // ─── Document assembly ────────────────────────────────────────────────
 
 function renderHtml(input: ClientPackInput): string {
+  renderLocale = input.locale;
+  renderCopy = input.copy;
+  NS = input.copy.notSpecified;
   const cover = renderCover(input.project, input.logoDataUrl);
   const overview = renderOverview(input);
-  const schedule = renderSchedule(input.schedule);
+  const schedule = renderSchedule(input.schedule, input.copy);
   const crew = renderCrew(input.crew);
   const rigging = renderRigging(input.systems);
   const lighting = renderLighting(input);
@@ -845,15 +938,15 @@ function renderHtml(input: ClientPackInput): string {
   const costSummary = renderCostSummary(input.crew);
 
   const projTitle =
-    input.project.eventName.trim() || input.project.venue.trim() || "Client Pack";
-  const generatedAt = new Date().toLocaleString();
+    input.project.eventName.trim() || input.project.venue.trim() || input.copy.filenameFallback;
+  const generatedAt = new Date().toLocaleString(input.locale);
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(input.locale)}">
 <head>
 <meta charset="utf-8" />
-<title>Client Pack — ${escapeHtml(projTitle)}</title>
-<meta name="ehs-pdf-name" content="${escapeHtml(projTitle)} — Client Pack.pdf" />
+<title>${escapeHtml(input.copy.clientPack)} — ${escapeHtml(projTitle)}</title>
+<meta name="ehs-pdf-name" content="${escapeHtml(projTitle)} — ${escapeHtml(input.copy.clientPack)}.pdf" />
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -1017,9 +1110,9 @@ function renderHtml(input: ClientPackInput): string {
 </head>
 <body>
 <div class="print-bar no-print">
-  <button id="ehs-download-pdf" class="primary">Download PDF</button>
-  <button onclick="window.print()">Print</button>
-  <button onclick="window.close()">Close</button>
+   <button id="ehs-download-pdf" class="primary">${escapeHtml(input.copy.downloadPdf)}</button>
+   <button onclick="window.print()">${escapeHtml(input.copy.print)}</button>
+   <button onclick="window.close()">${escapeHtml(input.copy.close)}</button>
 </div>
 <script>
 (function () {
@@ -1036,10 +1129,10 @@ function renderHtml(input: ClientPackInput): string {
     var filename = (meta && meta.getAttribute('content')) || (document.title + '.pdf');
     var orig = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Generating PDF…';
+     btn.textContent = ${JSON.stringify(input.copy.generatingPdf)};
     Promise.resolve(fn(window, filename)).catch(function (err) {
       console.error(err);
-      alert('Could not generate the PDF. Falling back to the browser print dialog.');
+       alert(${JSON.stringify(input.copy.pdfError)});
       window.print();
     }).then(function () {
       btn.disabled = false;
@@ -1062,8 +1155,7 @@ ${riskSummary}
 ${costSummary}
 
 <div class="muted footnote" style="margin-top:24px;text-align:center;border-top:1px solid #e2e8f0;padding-top:12px">
-  Generated by EHS Production Tool · ${escapeHtml(generatedAt)} ·
-  Risk indicators are advisory and based on data entered by the producer.
+   ${escapeHtml(input.copy.footerAdvisory)} · ${escapeHtml(generatedAt)}
 </div>
 
 </body>

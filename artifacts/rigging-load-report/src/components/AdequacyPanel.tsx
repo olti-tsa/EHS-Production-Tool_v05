@@ -5,6 +5,7 @@ import {
   type AdequacyMetrics,
   type AdequacySuggestion,
 } from "../lib/crewAdequacy";
+import { useT, type Translator } from "../lib/i18n/I18nContext";
 
 /** Crew Adequacy panel — Phase C, Slice 3.
  *
@@ -47,6 +48,7 @@ export function AdequacyPanel({
    *  "Stage") still works. */
   rosterRoles: ReadonlyArray<string>;
 }) {
+  const t = useT();
   // Project-profile inputs are local component state. Persisting
   // them is overkill for Slice 3 — the meter is recomputed every
   // render and the producer can re-tick on reload. If usage shows
@@ -90,11 +92,9 @@ export function AdequacyPanel({
     <section className="led-card adequacy-card">
       <div className="led-card-head">
         <div>
-          <h3>Role Coverage</h3>
+          <h3>{t("adequacy.title")}</h3>
           <p className="led-report-sub">
-            Suggested headcount per role for this project's size, compared
-            to who's on the roster. Always a range — your call on the exact
-            number.
+            {t("adequacy.subtitle")}
           </p>
         </div>
       </div>
@@ -103,7 +103,7 @@ export function AdequacyPanel({
           dominate the tab. */}
       <div className="adequacy-profile">
         <label className="adequacy-field">
-          <span>Setup days</span>
+          <span>{t("adequacy.setupDays")}</span>
           <input
             type="number"
             min={0}
@@ -114,7 +114,7 @@ export function AdequacyPanel({
           />
         </label>
         <label className="adequacy-field">
-          <span>LED walls</span>
+          <span>{t("adequacy.ledWalls")}</span>
           <input
             type="number"
             min={0}
@@ -130,19 +130,18 @@ export function AdequacyPanel({
             checked={ticketed}
             onChange={(e) => setTicketed(e.target.checked)}
           />
-          <span>Ticketed show</span>
+          <span>{t("adequacy.ticketed")}</span>
         </label>
       </div>
 
       {visible.length === 0 ? (
         <div className="led-empty">
-          No project-scope numbers entered yet — fill in the rigging, LED,
-          lighting and stage tabs to see suggestions.
+          {t("adequacy.empty")}
         </div>
       ) : (
         <ul className="adequacy-list">
           {visible.map((s) => (
-            <AdequacyRow key={s.role} s={s} />
+            <AdequacyRow key={s.role} s={s} t={t} />
           ))}
         </ul>
       )}
@@ -150,7 +149,7 @@ export function AdequacyPanel({
   );
 }
 
-function AdequacyRow({ s }: { s: AdequacySuggestion }) {
+function AdequacyRow({ s, t }: { s: AdequacySuggestion; t: Translator }) {
   // Always render as a range, even when min === max. The whole
   // point of the meter is to communicate "this is a suggestion,
   // not a hard number" — collapsing "3–3" to "3" makes the
@@ -171,12 +170,12 @@ function AdequacyRow({ s }: { s: AdequacySuggestion }) {
     const maxShort = Math.max(0, s.max - s.current);
     verdict =
       minShort === maxShort
-        ? `likely short by ${minShort}`
-        : `likely short by ${minShort}–${maxShort}`;
+        ? t("adequacy.verdict.short", { count: minShort })
+        : t("adequacy.verdict.shortRange", { min: minShort, max: maxShort });
   } else if (s.over > 0) {
-    verdict = `${s.over} over the suggested max`;
+    verdict = t("adequacy.verdict.over", { count: s.over });
   } else {
-    verdict = "covered";
+    verdict = t("adequacy.verdict.covered");
   }
 
   // Modifier list rendered as a tooltip on the small "why" hint
@@ -185,29 +184,51 @@ function AdequacyRow({ s }: { s: AdequacySuggestion }) {
   // empty.
   const reasonsTitle =
     s.modifiers.length > 0
-      ? s.modifiers.join("\n")
-      : "Base ratio for this role.";
+      ? s.modifiers.map((modifier) => translateAdequacyModifier(modifier, t)).join("\n")
+      : t("adequacy.baseRatio");
 
   return (
     <li className={`adequacy-row adequacy-row-${tone}`}>
       <div className="adequacy-row-head">
-        <strong>{s.label}</strong>
+        <strong>{t(`adequacy.role.${s.role}` as Parameters<typeof t>[0])}</strong>
         <span className="adequacy-range">
-          Suggested <strong>{rangeLabel}</strong>
+          {t("adequacy.suggested")} <strong>{rangeLabel}</strong>
         </span>
       </div>
       <div className="adequacy-row-body">
         <span className="adequacy-current">
-          You have <strong>{s.current}</strong>
+          {t("adequacy.youHave")} <strong>{s.current}</strong>
         </span>
         <span className="adequacy-arrow">→</span>
         <span className={`adequacy-verdict adequacy-verdict-${tone}`}>
           {verdict}
         </span>
         <span className="adequacy-why" title={reasonsTitle}>
-          why?
+          {t("adequacy.why")}
         </span>
       </div>
     </li>
   );
+}
+
+function translateAdequacyModifier(modifier: string, t: Translator): string {
+  const number = modifier.match(/(\d+(?:\.\d+)?)/)?.[1] ?? "";
+  if (modifier.startsWith("Tight setup window") && modifier.includes("toprigger")) return t("adequacy.reason.tightToprigger");
+  if (modifier.startsWith("Tight setup window") && modifier.includes("stagehands")) return t("adequacy.reason.tightStagehands");
+  if (modifier.startsWith("LED area")) return t("adequacy.reason.ledArea", { value: number });
+  if (modifier.startsWith("Stage area")) return t("adequacy.reason.stageArea", { value: number });
+  if (modifier.startsWith("Lighting fixtures")) return t("adequacy.reason.fixtures", { value: number });
+  if (modifier.includes("Lights FOH")) return t("adequacy.reason.lightsBaseline");
+  if (modifier.startsWith("~1 LD per")) {
+    const values = modifier.match(/\d+(?:\.\d+)?/g) ?? [];
+    return t("adequacy.reason.ldRatio", { per: values[0] ?? "", count: values[1] ?? "" });
+  }
+  if (modifier.includes("AV FOH")) return t("adequacy.reason.avBaseline");
+  if (modifier.startsWith("1 video op")) {
+    const values = modifier.match(/\d+(?:\.\d+)?/g) ?? [];
+    return t("adequacy.reason.videoWalls", { count: values[1] ?? "" });
+  }
+  if (modifier.includes("Sound FOH")) return t("adequacy.reason.soundBaseline");
+  if (modifier.startsWith("Ticketed show")) return t("adequacy.reason.ticketed");
+  return t("adequacy.baseRatio");
 }

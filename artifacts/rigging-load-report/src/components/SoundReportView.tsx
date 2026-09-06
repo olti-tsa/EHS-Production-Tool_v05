@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { NumberField } from "./NumberField";
+import { useI18n, useT } from "../lib/i18n/I18nContext";
 import {
   SOUND_CATEGORIES,
   computeSoundTotals,
@@ -18,12 +19,6 @@ type Props = {
   onDuplicate: (id: string) => void;
 };
 
-const fmtNum = (n: number, d = 1) =>
-  n.toLocaleString("en-US", { maximumFractionDigits: d });
-
-const fmtInt = (n: number) =>
-  n.toLocaleString("en-US", { maximumFractionDigits: 0 });
-
 export function SoundReportView({
   items,
   onAdd,
@@ -32,25 +27,46 @@ export function SoundReportView({
   onRemove,
   onDuplicate,
 }: Props) {
+  const t = useT();
+  const { locale } = useI18n();
   const totals = useMemo(() => computeSoundTotals(items), [items]);
+  const numberLocale = locale === "no" ? "nb-NO" : "en-US";
+  const fmtNum = (n: number, d = 1) =>
+    n.toLocaleString(numberLocale, { maximumFractionDigits: d });
+  const fmtInt = (n: number) =>
+    n.toLocaleString(numberLocale, { maximumFractionDigits: 0 });
+  const categoryLabels = useMemo<Record<SoundCategory, string>>(
+    () => ({
+      "PA Mains": t("sound.category.paMains"),
+      Subs: t("sound.category.subs"),
+      Monitors: t("sound.category.monitors"),
+      IEMs: t("sound.category.iems"),
+      Console: t("sound.category.console"),
+      "Mic Wired": t("sound.category.micWired"),
+      "Mic Wireless": t("sound.category.micWireless"),
+      DI: t("sound.category.di"),
+      Stand: t("sound.category.stand"),
+      Cable: t("sound.category.cable"),
+      Other: t("sound.category.other"),
+    }),
+    [t],
+  );
 
   return (
     <div className="led-report">
       <header className="led-report-header">
         <div>
-          <h2>Sound Report</h2>
+          <h2>{t("sound.title")}</h2>
           <p className="led-report-sub">
-            Audio inventory for the show — PA, monitors, console, microphones
-            and accessories. Quantity, weight and power roll up into the
-            dashboard.
+            {t("sound.subtitle")}
           </p>
         </div>
         <div className="led-report-meta">
           <span className="badge">
-            <strong>{totals.rowCount}</strong> rows
+            <strong>{totals.rowCount}</strong> {t("sound.rows")}
           </span>
           <span className="badge">
-            <strong>{fmtInt(totals.totalQty)}</strong> pieces
+            <strong>{fmtInt(totals.totalQty)}</strong> {t("sound.pieces")}
           </span>
           <span className="badge">
             <strong>{fmtNum(totals.totalWeight, 1)}</strong> kg
@@ -65,7 +81,7 @@ export function SoundReportView({
       <div className="led-dashboard">
         {SOUND_CATEGORIES.map((cat) => (
           <div className="led-stat" key={cat}>
-            <div className="led-stat-label">{cat}</div>
+            <div className="led-stat-label">{categoryLabels[cat]}</div>
             <div className="led-stat-value">
               {totals.countsByCategory[cat]}
             </div>
@@ -81,37 +97,37 @@ export function SoundReportView({
       {/* Inventory list */}
       <section className="led-card">
         <div className="led-card-head">
-          <h3>Inventory</h3>
+          <h3>{t("sound.inventory")}</h3>
           <div className="led-controls">
             {onAddFromLibrary && (
               <button className="btn btn-soft" onClick={onAddFromLibrary}>
-                + From EHS Library
+                {t("sound.fromLibrary")}
               </button>
             )}
             <button className="btn btn-primary" onClick={onAdd}>
-              + Add item
+              {t("sound.addItem")}
             </button>
           </div>
         </div>
 
         {items.length === 0 ? (
           <div className="led-empty">
-            No sound gear yet — add the first item to start your inventory.
+            {t("sound.empty")}
           </div>
         ) : (
           <div className="led-table-wrap">
             <table className="led-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Category</th>
-                  <th className="led-num">Qty</th>
-                  <th className="led-num">Weight/unit (kg)</th>
-                  <th className="led-num">Power/unit (W)</th>
-                  <th className="led-num">Subtotal weight</th>
-                  <th className="led-num">Subtotal power</th>
-                  <th>Notes</th>
-                  <th></th>
+                  <th>{t("sound.table.name")}</th>
+                  <th>{t("sound.table.category")}</th>
+                  <th className="led-num">{t("sound.table.qty")}</th>
+                  <th className="led-num">{t("sound.table.weightUnit")}</th>
+                  <th className="led-num">{t("sound.table.powerUnit")}</th>
+                  <th className="led-num">{t("sound.table.subtotalWeight")}</th>
+                  <th className="led-num">{t("sound.table.subtotalPower")}</th>
+                  <th>{t("sound.table.notes")}</th>
+                  <th aria-label={t("sound.table.actions")}></th>
                 </tr>
               </thead>
               <tbody>
@@ -122,6 +138,8 @@ export function SoundReportView({
                     onUpdate={(patch) => onUpdate(it.id, patch)}
                     onRemove={() => onRemove(it.id)}
                     onDuplicate={() => onDuplicate(it.id)}
+                    categoryLabels={categoryLabels}
+                    numberLocale={numberLocale}
                   />
                 ))}
               </tbody>
@@ -138,14 +156,23 @@ function SoundRow({
   onUpdate,
   onRemove,
   onDuplicate,
+  categoryLabels,
+  numberLocale,
 }: {
   item: SoundItem;
   onUpdate: (patch: Partial<SoundItem>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
+  categoryLabels: Record<SoundCategory, string>;
+  numberLocale: string;
 }) {
+  const t = useT();
   const w = itemWeight(item);
   const p = itemPower(item);
+  const fmtNum = (n: number, d = 1) =>
+    n.toLocaleString(numberLocale, { maximumFractionDigits: d });
+  const fmtInt = (n: number) =>
+    n.toLocaleString(numberLocale, { maximumFractionDigits: 0 });
 
   return (
     <tr>
@@ -155,20 +182,22 @@ function SoundRow({
           type="text"
           value={item.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
-          placeholder="e.g. L'Acoustics K2"
+          placeholder={t("sound.placeholder.name")}
+          aria-label={t("sound.table.name")}
         />
       </td>
       <td>
         <select
           className="led-input"
           value={item.category}
+          aria-label={t("sound.table.category")}
           onChange={(e) =>
             onUpdate({ category: e.target.value as SoundCategory })
           }
         >
           {SOUND_CATEGORIES.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {categoryLabels[c]}
             </option>
           ))}
         </select>
@@ -176,6 +205,7 @@ function SoundRow({
       <td>
         <NumberField
           className="led-input led-input-num"
+          aria-label={t("sound.table.qty")}
           min={1}
           step={1}
           value={item.qty}
@@ -187,6 +217,7 @@ function SoundRow({
       <td>
         <NumberField
           className="led-input led-input-num"
+          aria-label={t("sound.table.weightUnit")}
           min={0}
           step={0.5}
           value={item.weightPerUnit}
@@ -198,6 +229,7 @@ function SoundRow({
       <td>
         <NumberField
           className="led-input led-input-num"
+          aria-label={t("sound.table.powerUnit")}
           min={0}
           step={50}
           value={item.powerPerUnit}
@@ -214,7 +246,8 @@ function SoundRow({
           type="text"
           value={item.notes}
           onChange={(e) => onUpdate({ notes: e.target.value })}
-          placeholder="e.g. Front fill, spare"
+          placeholder={t("sound.placeholder.notes")}
+          aria-label={t("sound.table.notes")}
         />
       </td>
       <td className="led-actions">
@@ -222,17 +255,17 @@ function SoundRow({
           type="button"
           className="btn btn-soft btn-sm"
           onClick={onDuplicate}
-          title="Duplicate"
+          title={t("sound.duplicate")}
         >
-          Copy
+          {t("sound.copy")}
         </button>
         <button
           type="button"
           className="btn btn-danger btn-sm"
           onClick={onRemove}
-          title="Remove"
+          title={t("sound.remove")}
         >
-          Delete
+          {t("sound.delete")}
         </button>
       </td>
     </tr>

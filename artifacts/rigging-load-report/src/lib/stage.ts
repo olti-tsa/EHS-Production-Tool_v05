@@ -788,7 +788,7 @@ export function computeStageTotals(
  * crash the renderer on `stage.rails.front`. Anything missing or out of
  * range falls back to a safe default.
  */
-export function normalizeStage(raw: Partial<Stage>): Stage {
+export function normalizeStage(raw: Partial<Stage>, fallbackName: string): Stage {
   const validHeights = new Set(STAGE_LEG_HEIGHTS_CM);
   const id =
     typeof raw.id === "string" && raw.id.length > 0
@@ -913,7 +913,7 @@ export function normalizeStage(raw: Partial<Stage>): Stage {
   }
   return {
     id,
-    name: typeof raw.name === "string" ? raw.name : "Stage",
+    name: typeof raw.name === "string" ? raw.name : fallbackName,
     width: Math.max(0.5, width),
     depth: Math.max(0.5, depth),
     legHeightCm,

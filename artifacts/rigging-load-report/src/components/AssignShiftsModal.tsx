@@ -12,12 +12,13 @@ import {
   type CrewShiftWindowMap,
 } from "../lib/crewShiftAssignments";
 import type { CrewMember } from "../lib/crew";
+import { useT } from "../lib/i18n/I18nContext";
 
 const PHASES = [
-  { key: "setup", label: "Setup" },
-  { key: "rehearsal", label: "Rehearsal" },
-  { key: "show", label: "Show" },
-  { key: "downrig", label: "Load Out" },
+  { key: "setup", labelKey: "portal.brief.phase.setup" },
+  { key: "rehearsal", labelKey: "portal.brief.phase.rehearsal" },
+  { key: "show", labelKey: "portal.brief.phase.show" },
+  { key: "downrig", labelKey: "portal.brief.phase.loadOut" },
 ] as const;
 
 type ShiftMode = "full" | "four" | "custom";
@@ -125,6 +126,7 @@ export function AssignShiftsModal({
   onSave,
   onApplyToRole,
 }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Set<string>>(new Set());
   const [windows, setWindows] = useState<CrewShiftWindowMap>({});
@@ -368,7 +370,7 @@ export function AssignShiftsModal({
       setSaveError(
         error instanceof Error
           ? error.message
-          : "Could not save shifts. Please try again.",
+          : t("crew.shifts.error.save"),
       );
     } finally {
       setSaving(false);
@@ -393,7 +395,7 @@ export function AssignShiftsModal({
       setSaveError(
         error instanceof Error
           ? error.message
-          : "Could not save shifts. Please try again.",
+          : t("crew.shifts.error.save"),
       );
     } finally {
       setSaving(false);
@@ -403,7 +405,7 @@ export function AssignShiftsModal({
   const barsForDate = (date: string) => {
     const current = {
       id: crew.id,
-      name: crew.name || "Selected crew",
+      name: crew.name || t("crew.shifts.selectedCrew"),
       windows: selectedWindows,
       selected: true,
     };
@@ -449,7 +451,7 @@ export function AssignShiftsModal({
         onClick={openModal}
         disabled={days.length === 0}
       >
-        Edit shifts{selectedDayCount ? ` (${selectedDayCount}d)` : ""}
+         {t("crew.shifts.edit")}{selectedDayCount ? ` (${selectedDayCount}d)` : ""}
       </button>
       {open && typeof document !== "undefined"
         ? createPortal(
@@ -457,7 +459,7 @@ export function AssignShiftsModal({
               <button
                 type="button"
                 className="crew-shift-matrix-backdrop"
-                aria-label="Close shift assignment"
+                 aria-label={t("crew.shifts.closeAria")}
                 onClick={() => {
                   if (!saving) setOpen(false);
                 }}
@@ -465,8 +467,8 @@ export function AssignShiftsModal({
               <section className="crew-shift-matrix" role="dialog" aria-modal="true" aria-busy={saving}>
                 <header className="crew-shift-matrix-header">
                   <div>
-                    <p className="crew-shift-matrix-eyebrow">Crew booking · {crew.role}</p>
-                    <h3>Assign shifts — {crew.name || "Crew member"}</h3>
+                     <p className="crew-shift-matrix-eyebrow">{t("crew.shifts.booking")} · {crew.role}</p>
+                     <h3>{t("crew.shifts.assign", { name: crew.name || t("crew.shifts.crewMember") })}</h3>
                   </div>
                   <div className="shift-role-actions">
                     <button type="button" className="crew-shift-matrix-close" onClick={() => setOpen(false)} disabled={saving}>×</button>
@@ -489,40 +491,40 @@ export function AssignShiftsModal({
                           return (
                             <div className="shift-preset-row" key={key}>
                               <div className="shift-preset-title">
-                                <strong>{phase.label}</strong>
-                                <small>{standard?.timeTbd ? "Time TBD" : standard ? `${standard.startTime}–${standard.endTime}` : "No standard time"}</small>
+                                 <strong>{t(phase.labelKey)}</strong>
+                                 <small>{standard?.timeTbd ? t("crew.shifts.timeTbd") : standard ? `${standard.startTime}–${standard.endTime}` : t("crew.shifts.noStandardTime")}</small>
                               </div>
                               <div className="shift-preset-buttons">
                                 <button
                                   type="button"
                                   className={mode === "full" ? "is-active" : ""}
                                   disabled={!hasStandardStart || minutes(standard?.endTime ?? "") == null}
-                                  title={!hasStandardStart ? "Add a project phase time to use this preset" : undefined}
+                                   title={!hasStandardStart ? t("crew.shifts.addPhaseTimeHint") : undefined}
                                   onClick={() => setPreset(key, mode === "full" ? "clear" : "full", standard)}
                                 >
-                                  Full Phase
+                                   {t("crew.shifts.fullPhase")}
                                 </button>
                                 <button
                                   type="button"
                                   className={mode === "four" ? "is-active" : ""}
                                   disabled={!hasStandardStart}
-                                  title={!hasStandardStart ? "Add a project phase start time to use this preset" : undefined}
+                                   title={!hasStandardStart ? t("crew.shifts.addPhaseStartHint") : undefined}
                                   onClick={() => setPreset(key, mode === "four" ? "clear" : "four", standard)}
                                 >
-                                  4h Call
+                                   {t("crew.shifts.fourHourCall")}
                                 </button>
-                                <button type="button" className={mode === "custom" ? "is-active" : ""} onClick={() => setPreset(key, mode === "custom" ? "clear" : "custom", standard)}>Custom Hours</button>
-                                <button type="button" className="is-clear" onClick={() => setPreset(key, "clear")}>Clear</button>
+                                 <button type="button" className={mode === "custom" ? "is-active" : ""} onClick={() => setPreset(key, mode === "custom" ? "clear" : "custom", standard)}>{t("crew.shifts.customHours")}</button>
+                                 <button type="button" className="is-clear" onClick={() => setPreset(key, "clear")}>{t("crew.shifts.clear")}</button>
                               </div>
                               {mode === "custom" ? (
                                 <div className="shift-window-list">
                                   {(windows[key] ?? []).map((window, index) => (
                                     <div className="shift-custom-times" key={`${key}-${index}`}>
                                       <span className="shift-window-label">
-                                        Call {index + 1}
+                                         {t("crew.shifts.callNumber", { number: index + 1 })}
                                       </span>
                                       <label>
-                                        Start
+                                         {t("crew.shifts.start")}
                                         <input
                                           type="time"
                                           value={window.startTime}
@@ -538,7 +540,7 @@ export function AssignShiftsModal({
                                       </label>
                                       <span>→</span>
                                       <label>
-                                        End
+                                         {t("crew.shifts.end")}
                                         <input
                                           type="time"
                                           value={window.endTime}
@@ -556,10 +558,10 @@ export function AssignShiftsModal({
                                         <button
                                           type="button"
                                           className="shift-remove-window"
-                                          aria-label={`Remove call ${index + 1}`}
+                                           aria-label={t("crew.shifts.removeCall", { number: index + 1 })}
                                           onClick={() => removeWindow(key, index)}
                                         >
-                                          Remove
+                                           {t("common.remove")}
                                         </button>
                                       ) : null}
                                     </div>
@@ -572,11 +574,11 @@ export function AssignShiftsModal({
                                   className="shift-add-window"
                                   onClick={() => addWindow(key, standard)}
                                 >
-                                  + Add split call
+                                   {t("crew.shifts.addSplitCall")}
                                 </button>
                               ) : null}
                               <div className="shift-task-editor">
-                                <span>Tasks / Focus</span>
+                                 <span>{t("crew.shifts.tasks")}</span>
                                 <div className="shift-task-chips">
                                   {presetTasks.map((task) => (
                                     <button
@@ -596,7 +598,7 @@ export function AssignShiftsModal({
                                         key={task}
                                         type="button"
                                         className="is-active"
-                                        title="Remove custom task"
+                                         title={t("crew.shifts.removeCustomTask")}
                                         onClick={() => toggleTask(key, task)}
                                       >
                                         {task} ×
@@ -606,7 +608,7 @@ export function AssignShiftsModal({
                                 <div className="shift-custom-task">
                                   <input
                                     value={customTasks[key] ?? ""}
-                                    placeholder="+ Custom task"
+                                     placeholder={t("crew.shifts.customTaskPlaceholder")}
                                     disabled={!draft.has(key)}
                                     onChange={(event) => setCustomTasks((current) => ({ ...current, [key]: event.target.value }))}
                                     onKeyDown={(event) => {
@@ -616,7 +618,7 @@ export function AssignShiftsModal({
                                       }
                                     }}
                                   />
-                                  <button type="button" disabled={!draft.has(key)} onClick={() => addCustomTask(key)}>Add</button>
+                                   <button type="button" disabled={!draft.has(key)} onClick={() => addCustomTask(key)}>{t("common.add")}</button>
                                 </div>
                               </div>
                             </div>
@@ -629,7 +631,7 @@ export function AssignShiftsModal({
                   {days.length > 0 ? (
                     <section className="shift-overlap">
                       <div className="shift-overlap-heading">
-                        <div><strong>24-hour coverage</strong><small>Selected crew and other {crew.role}</small></div>
+                         <div><strong>{t("crew.shifts.coverage")}</strong><small>{t("crew.shifts.coverageHint", { role: crew.role })}</small></div>
                         {days.length > 1 ? (
                           <select value={focusDate} onChange={(event) => setFocusDate(event.target.value)}>
                             {days.map((day) => <option key={day} value={day}>{day}</option>)}
@@ -680,22 +682,22 @@ export function AssignShiftsModal({
 
                 <footer className="crew-shift-matrix-footer">
                   <div>
-                    <strong>Total Booked: {Number.isInteger(totalHours) ? totalHours : totalHours.toFixed(1)} hrs</strong>
+                     <strong>{t("crew.shifts.totalBooked", { hours: Number.isInteger(totalHours) ? totalHours : totalHours.toFixed(1) })}</strong>
                     {saveError ? <p className="shift-save-error" role="alert">{saveError}</p> : null}
                   </div>
                   <div className="crew-shift-matrix-actions">
-                    <button type="button" onClick={() => setOpen(false)} disabled={saving}>Cancel</button>
+                     <button type="button" onClick={() => setOpen(false)} disabled={saving}>{t("common.cancel")}</button>
                     {rolePeers.length > 1 ? (
                       <button
                         type="button"
                          onClick={() => void applyToRole()}
                          disabled={saving}
                       >
-                        Apply to all {crew.role}
+                         {t("crew.shifts.applyToRole", { role: crew.role })}
                       </button>
                     ) : null}
                     <button type="button" className="is-primary" onClick={() => void save()} disabled={saving}>
-                      {saving ? "Saving…" : "Save shifts"}
+                       {saving ? t("common.saving") : t("crew.shifts.save")}
                     </button>
                   </div>
                 </footer>

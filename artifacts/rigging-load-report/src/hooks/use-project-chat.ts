@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const API_BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
 export type ChatRole = "owner" | "editor" | "viewer";
+export type ProjectChatErrorCode = "loadFailed" | "sendFailed";
 
 export type ChatMember = {
   userId: string;
@@ -33,7 +34,7 @@ export function useProjectChat(projectId: string | null) {
   
   const [isInitializing, setIsInitializing] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ProjectChatErrorCode | null>(null);
   
   const isMountedRef = useRef(true);
   const latestMessageIdRef = useRef<string | null>(null);
@@ -116,7 +117,7 @@ export function useProjectChat(projectId: string | null) {
         isMountedRef.current &&
         activeProjectIdRef.current === requestedProjectId
       ) {
-        setError(err.message);
+        setError("loadFailed");
       }
     }
   }, [projectId, request]);
@@ -261,7 +262,7 @@ export function useProjectChat(projectId: string | null) {
         isMountedRef.current &&
         activeProjectIdRef.current === requestedProjectId
       ) {
-        setError(err instanceof Error ? err.message : "Failed to send message.");
+        setError("sendFailed");
       }
       throw err;
     } finally {

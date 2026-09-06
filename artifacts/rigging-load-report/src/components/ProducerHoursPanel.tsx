@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useI18n, type Translator } from "../lib/i18n/I18nContext";
 
 type TimeEntryStatus =
   | "draft"
@@ -49,34 +50,34 @@ function minToHHMM(m: number | null): string {
   return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
-function fmtHours(min: number): string {
-  return `${Math.round((min / 60) * 100) / 100}h`;
+function fmtHours(min: number, t: Translator): string {
+  return t("producerHours.hours", { hours: Math.round((min / 60) * 100) / 100 });
 }
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, locale: string): string {
   if (!iso) return "—";
   const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-GB", {
+  return d.toLocaleDateString(locale, {
     weekday: "short",
     day: "2-digit",
     month: "short",
   });
 }
 
-function statusInfo(s: TimeEntryStatus): { label: string; cls: string } {
+function statusInfo(s: TimeEntryStatus, t: Translator): { label: string; cls: string } {
   switch (s) {
     case "submitted":
-      return { label: "Submitted", cls: "acs-status-warn" };
+      return { label: t("producerHours.status.submitted"), cls: "acs-status-warn" };
     case "approved":
-      return { label: "Approved", cls: "acs-status-ok" };
+      return { label: t("producerHours.status.approved"), cls: "acs-status-ok" };
     case "rejected":
-      return { label: "Rejected", cls: "acs-status-bad" };
+      return { label: t("producerHours.status.rejected"), cls: "acs-status-bad" };
     case "flagged":
-      return { label: "Flagged", cls: "acs-status-bad" };
+      return { label: t("producerHours.status.flagged"), cls: "acs-status-bad" };
     case "locked":
-      return { label: "Locked", cls: "acs-status-ok" };
+      return { label: t("producerHours.status.locked"), cls: "acs-status-ok" };
     default:
-      return { label: "Draft", cls: "acs-status-warn" };
+      return { label: t("producerHours.status.draft"), cls: "acs-status-warn" };
   }
 }
 
@@ -87,23 +88,23 @@ function csvEscape(v: string): string {
   return s;
 }
 
-function buildPayrollCsv(entries: ProducerTimeEntry[]): string {
+function buildPayrollCsv(entries: ProducerTimeEntry[], t: Translator): string {
   const header = [
-    "Date",
-    "Project",
-    "Role",
-    "Freelancer ID",
-    "Start",
-    "End",
-    "Break (min)",
-    "Observed hours",
-    "Payable break (min)",
-    "Adjustment (min)",
-    "Overtime (min)",
-    "Payable hours",
-    "Status",
-    "Decided at",
-    "Notes",
+    t("producerHours.csv.date"),
+    t("producerHours.csv.project"),
+    t("producerHours.csv.role"),
+    t("producerHours.csv.freelancerId"),
+    t("producerHours.csv.start"),
+    t("producerHours.csv.end"),
+    t("producerHours.csv.breakMinutes"),
+    t("producerHours.csv.observedHours"),
+    t("producerHours.csv.payableBreakMinutes"),
+    t("producerHours.csv.adjustmentMinutes"),
+    t("producerHours.csv.overtimeMinutes"),
+    t("producerHours.csv.payableHours"),
+    t("producerHours.csv.status"),
+    t("producerHours.csv.decidedAt"),
+    t("producerHours.csv.notes"),
   ].join(",");
   const rows = entries.map((e) =>
     [
@@ -119,7 +120,7 @@ function buildPayrollCsv(entries: ProducerTimeEntry[]): string {
       String(e.producerAdjustmentMinutes),
       String(e.overtimeMinutes),
       String(Math.round((e.payableMinutes / 60) * 100) / 100),
-      e.status,
+      statusInfo(e.status, t).label,
       e.decidedAt ?? "",
       e.notes,
     ]
@@ -150,6 +151,7 @@ type Props = {
 };
 
 export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
+  const { locale, t } = useI18n();
   const [entries, setEntries] = useState<ProducerTimeEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -187,7 +189,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
       );
       if (!commit()) return;
       if (!res.ok) {
-        setError("Could not load hours.");
+        setError(t("producerHours.error.load"));
         return;
       }
       const json = (await res.json()) as {
@@ -196,16 +198,16 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
       };
       if (!commit()) return;
       if (!json.ok || !Array.isArray(json.entries)) {
-        setError("Could not load hours.");
+        setError(t("producerHours.error.load"));
         return;
       }
       setEntries(json.entries);
     } catch {
-      if (commit()) setError("Network error.");
+      if (commit()) setError(t("producerHours.error.network"));
     } finally {
       if (commit()) setLoading(false);
     }
-  }, [briefId, getToken]);
+  }, [briefId, getToken, t]);
 
   useEffect(() => {
     void reload();
@@ -285,7 +287,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
       };
       if (!stillCurrent()) return;
       if (!res.ok || !json.ok || !json.entry) {
-        setError(json.error ?? "Action failed.");
+        setError(json.error ?? t("producerHours.error.action"));
         // 409 / row drift — pull fresh server truth. reload() has
         // its own race guard so a brief switch in the meantime is
         // handled there too.
@@ -312,7 +314,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
       });
       if (!patched) await reload();
     } catch {
-      if (stillCurrent()) setError("Network error.");
+      if (stillCurrent()) setError(t("producerHours.error.network"));
     } finally {
       if (stillCurrent()) setBusyId(null);
     }
@@ -320,7 +322,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
 
   function onReject(id: string) {
     const reason = window.prompt(
-      "Reason for rejection (visible to the freelancer):",
+      t("producerHours.prompt.reject"),
       "",
     );
     if (reason == null) return;
@@ -329,7 +331,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
 
   function onFlag(id: string) {
     const reason = window.prompt(
-      "Flag reason (visible to the freelancer):",
+      t("producerHours.prompt.flag"),
       "",
     );
     if (!reason?.trim()) return;
@@ -338,21 +340,21 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
 
   function onAdjust(entry: ProducerTimeEntry) {
     const breakRaw = window.prompt(
-      "Payable meal break in minutes (observed time remains unchanged):",
+      t("producerHours.prompt.breakMinutes"),
       String(entry.producerBreakMinutes ?? entry.breakMinutes),
     );
     if (breakRaw == null) return;
     const adjustmentRaw = window.prompt(
-      "Additional payable-minute adjustment (negative or positive):",
+      t("producerHours.prompt.adjustmentMinutes"),
       String(entry.producerAdjustmentMinutes),
     );
     if (adjustmentRaw == null) return;
     const overtimeRaw = window.prompt(
-      "Minutes classified as overtime:",
+      t("producerHours.prompt.overtimeMinutes"),
       String(entry.overtimeMinutes),
     );
     if (overtimeRaw == null) return;
-    const reason = window.prompt("Reason for this adjustment:", entry.adjustmentReason);
+    const reason = window.prompt(t("producerHours.prompt.adjustmentReason"), entry.adjustmentReason);
     if (!reason?.trim()) return;
     const breakMinutes = Number(breakRaw);
     const adjustmentMinutes = Number(adjustmentRaw);
@@ -362,7 +364,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
       !Number.isInteger(adjustmentMinutes) ||
       !Number.isInteger(overtimeMinutes)
     ) {
-      setError("Adjustment values must be whole minutes.");
+      setError(t("producerHours.error.wholeMinutes"));
       return;
     }
     void act(entry.id, "adjust", reason.trim(), {
@@ -379,7 +381,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
     if (exportable.length === 0) return;
     downloadCsv(
       `ehs-payroll-hours-${new Date().toISOString().slice(0, 10)}.csv`,
-      buildPayrollCsv(exportable),
+      buildPayrollCsv(exportable, t),
     );
   }
 
@@ -388,11 +390,11 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
       <section className="acs-card" style={{ marginTop: 16 }}>
         <header className="acs-card-header">
           <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>
-            Crew hours
+            {t("producerHours.title")}
           </h3>
         </header>
         <p style={{ margin: "10px 0 0", color: "var(--ink-soft)", fontSize: 13 }}>
-          Push a crew request to surface freelancer-submitted hours here.
+          {t("producerHours.noBrief")}
         </p>
       </section>
     );
@@ -419,12 +421,16 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
         }}
       >
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, flex: 1 }}>
-          Crew hours
+          {t("producerHours.title")}
         </h3>
         <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>
-          {totals.pending} pending · {totals.approved} approved (
-          {fmtHours(totals.approvedMin)}) · {totals.locked} locked (
-          {fmtHours(totals.lockedMin)})
+          {t("producerHours.totals", {
+            pending: totals.pending,
+            approved: totals.approved,
+            approvedHours: fmtHours(totals.approvedMin, t),
+            locked: totals.locked,
+            lockedHours: fmtHours(totals.lockedMin, t),
+          })}
         </span>
         <button
           type="button"
@@ -441,7 +447,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
             cursor: loading ? "wait" : "pointer",
           }}
         >
-          {loading ? "Loading…" : "Refresh"}
+          {loading ? t("producerHours.loadingShort") : t("producerHours.refresh")}
         </button>
         <button
           type="button"
@@ -460,7 +466,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
             opacity: totals.approved + totals.locked === 0 ? 0.5 : 1,
           }}
         >
-          Export payroll CSV
+          {t("producerHours.export")}
         </button>
       </header>
 
@@ -479,8 +485,8 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
           }}
         >
           {loading
-            ? "Loading hours…"
-            : "No hours submitted yet for this brief."}
+            ? t("producerHours.loading")
+            : t("producerHours.empty")}
         </p>
       ) : (
         <div
@@ -495,24 +501,24 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
           >
             <thead>
               <tr style={{ background: "var(--surface-soft)" }}>
-                <Th>Date</Th>
-                <Th>Role / project</Th>
-                <Th>Freelancer</Th>
-                <Th>Start</Th>
-                <Th>End</Th>
-                <Th>Observed</Th>
-                <Th>Payable</Th>
-                <Th>Status</Th>
-                <Th>Actions</Th>
+                <Th>{t("producerHours.table.date")}</Th>
+                <Th>{t("producerHours.table.roleProject")}</Th>
+                <Th>{t("producerHours.table.freelancer")}</Th>
+                <Th>{t("producerHours.table.start")}</Th>
+                <Th>{t("producerHours.table.end")}</Th>
+                <Th>{t("producerHours.table.observed")}</Th>
+                <Th>{t("producerHours.table.payable")}</Th>
+                <Th>{t("producerHours.table.status")}</Th>
+                <Th>{t("producerHours.table.actions")}</Th>
               </tr>
             </thead>
             <tbody>
               {entries.map((e) => {
-                const s = statusInfo(e.status);
+                const s = statusInfo(e.status, t);
                 const name = resolveName?.(e.freelancerUserId) ?? null;
                 return (
                   <tr key={e.id} style={{ borderTop: "1px solid var(--border)" }}>
-                    <Td>{fmtDate(e.workDate)}</Td>
+                     <Td>{fmtDate(e.workDate, locale === "no" ? "nb-NO" : "en-GB")}</Td>
                     <Td>
                       <div style={{ fontWeight: 700 }}>{e.gigRole || "—"}</div>
                       <div style={{ fontSize: 11, color: "var(--ink-soft)" }}>
@@ -546,26 +552,25 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
                             marginTop: 2,
                           }}
                         >
-                          Reason: {e.rejectionReason}
+                           {t("producerHours.reason", { reason: e.rejectionReason })}
                         </div>
                       ) : null}
                     </Td>
                     <Td mono>{minToHHMM(e.startMinute)}</Td>
                     <Td mono>{minToHHMM(e.endMinute)}</Td>
                     <Td mono>
-                      {e.breakMinutes}m break · {fmtHours(e.workedMinutes)}
+                       {t("producerHours.observed", { minutes: e.breakMinutes, hours: fmtHours(e.workedMinutes, t) })}
                     </Td>
                     <Td mono>
-                      {e.producerBreakMinutes ?? e.breakMinutes}m break ·{" "}
-                      {fmtHours(e.payableMinutes)}
-                      {e.overtimeMinutes > 0 ? ` (${e.overtimeMinutes}m OT)` : ""}
+                       {t("producerHours.payable", { minutes: e.producerBreakMinutes ?? e.breakMinutes, hours: fmtHours(e.payableMinutes, t) })}
+                       {e.overtimeMinutes > 0 ? ` ${t("producerHours.overtime", { minutes: e.overtimeMinutes })}` : ""}
                       {e.producerAdjustmentMinutes !== 0 ? (
                         <div
                           style={{ fontSize: 11, color: "var(--ink-soft)" }}
                           title={e.adjustmentReason}
                         >
                           {e.producerAdjustmentMinutes > 0 ? "+" : ""}
-                          {e.producerAdjustmentMinutes}m adjustment
+                           {t("producerHours.adjustment", { minutes: e.producerAdjustmentMinutes })}
                         </div>
                       ) : null}
                     </Td>
@@ -583,6 +588,7 @@ export function ProducerHoursPanel({ briefId, getToken, resolveName }: Props) {
                         onFlag={() => onFlag(e.id)}
                         onAdjust={() => onAdjust(e)}
                         onLock={() => void act(e.id, "lock")}
+                        t={t}
                       />
                     </Td>
                   </tr>
@@ -644,6 +650,7 @@ function RowActions({
   onFlag,
   onAdjust,
   onLock,
+  t,
 }: {
   status: TimeEntryStatus;
   busy: boolean;
@@ -652,6 +659,7 @@ function RowActions({
   onFlag: () => void;
   onAdjust: () => void;
   onLock: () => void;
+  t: Translator;
 }) {
   const btn = (
     label: string,
@@ -685,23 +693,23 @@ function RowActions({
   if (status === "submitted") {
     return (
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-        {btn("Approve", onApprove, true)}
-        {btn("Adjust", onAdjust)}
-        {btn("Flag", onFlag, false, true)}
-        {btn("Reject", onReject, false, true)}
+        {btn(t("producerHours.action.approve"), onApprove, true)}
+        {btn(t("producerHours.action.adjust"), onAdjust)}
+        {btn(t("producerHours.action.flag"), onFlag, false, true)}
+        {btn(t("producerHours.action.reject"), onReject, false, true)}
       </div>
     );
   }
   if (status === "approved") {
-    return <div style={{ display: "flex", gap: 4 }}>{btn("Lock", onLock)}</div>;
+    return <div style={{ display: "flex", gap: 4 }}>{btn(t("producerHours.action.lock"), onLock)}</div>;
   }
   return (
     <span style={{ fontSize: 11, color: "var(--ink-soft)" }}>
       {status === "locked"
-        ? "—"
+          ? "—"
         : status === "rejected" || status === "flagged"
-          ? "Awaiting freelancer"
-          : "Not submitted"}
+          ? t("producerHours.awaitingFreelancer")
+          : t("producerHours.notSubmitted")}
     </span>
   );
 }

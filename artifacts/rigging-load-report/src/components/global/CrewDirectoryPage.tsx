@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { Search, Mail, Phone, MapPin, X, Users, CheckCircle, Clock, Edit2 } from "lucide-react";
 import { FreelancerProfileModal } from "./FreelancerProfileModal";
+import { useT } from "../../lib/i18n/I18nContext";
 
 export type FreelancerRow = {
   userId: string;
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function CrewDirectoryPage({ getToken }: Props) {
+  const t = useT();
   const [freelancers, setFreelancers] = useState<FreelancerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -44,7 +46,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
         const res = await fetch(`/api/portal/freelancers?${params.toString()}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-        if (!res.ok) throw new Error("Failed to load freelancers");
+        if (!res.ok) throw new Error(t("globalCrew.loadError"));
         const json = await res.json();
         if (mounted) {
           // ensure skills is an array
@@ -62,7 +64,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
     }
     load();
     return () => { mounted = false; };
-  }, [getToken]);
+  }, [getToken, t]);
 
   const filtered = useMemo(() => {
     let list = freelancers;
@@ -105,10 +107,10 @@ export function CrewDirectoryPage({ getToken }: Props) {
           skills: editingUser.skills
         })
       });
-      if (!res.ok) throw new Error("Failed to save changes");
+      if (!res.ok) throw new Error(t("globalCrew.saveError"));
       const json = await res.json();
       const updated = json.freelancer as Partial<FreelancerRow> | undefined;
-      if (!updated) throw new Error("The server did not return the updated profile");
+      if (!updated) throw new Error(t("globalCrew.missingUpdatedProfile"));
       setFreelancers(prev => prev.map(f =>
         f.userId === editingUser.userId
           ? { ...f, ...updated, userId: editingUser.userId, skills: Array.isArray(updated.skills) ? updated.skills : f.skills }
@@ -149,10 +151,10 @@ export function CrewDirectoryPage({ getToken }: Props) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)" }}>
-            Global Crew Directory
+            {t("globalCrew.title")}
           </h2>
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>
-            Central roster of all EHS freelancers.
+            {t("globalCrew.subtitle")}
           </p>
         </div>
       </div>
@@ -162,7 +164,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
           <Search size={16} color="var(--text-muted)" />
           <input 
             type="text" 
-            placeholder="Search by name, role, city, or skills..." 
+            placeholder={t("globalCrew.search")}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -171,8 +173,8 @@ export function CrewDirectoryPage({ getToken }: Props) {
           <MapPin size={16} color="var(--text-muted)" />
           <input
             type="text"
-            aria-label="Filter crew by home city or region"
-            placeholder="Filter by city or region..."
+            aria-label={t("globalCrew.locationAria")}
+            placeholder={t("globalCrew.location")}
             value={locationSearch}
             onChange={e => setLocationSearch(e.target.value)}
           />
@@ -181,7 +183,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
 
       {loading ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
-          Loading directory...
+          {t("globalCrew.loading")}
         </div>
       ) : error ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--danger)", fontSize: 14 }}>
@@ -192,8 +194,8 @@ export function CrewDirectoryPage({ getToken }: Props) {
           <div className="ehs-empty-state-icon">
             <Users size={24} />
           </div>
-          <h3>No crew found</h3>
-          <p>No freelancers match your search criteria.</p>
+          <h3>{t("globalCrew.emptyTitle")}</h3>
+          <p>{t("globalCrew.emptyText")}</p>
         </div>
       ) : (
         <div className="crew-grid">
@@ -203,7 +205,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
               className="crew-card"
               role="button"
               tabIndex={0}
-              aria-label={`Open ${f.fullName || "freelancer"} profile and booking history`}
+              aria-label={t("globalCrew.openProfile", { name: f.fullName || t("globalCrew.freelancer") })}
               style={{ cursor: "pointer", position: "relative" }}
               onClick={() => setProfileUserId(f.userId)}
               onKeyDown={(event) => {
@@ -221,7 +223,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
                   e.stopPropagation();
                   setEditingUser(f);
                 }}
-                title="Edit profile"
+                title={t("globalCrew.editProfile")}
               >
                 <Edit2 size={14} />
               </button>
@@ -231,7 +233,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
                 </div>
                 <div className="crew-info">
                   <h4>{f.fullName}</h4>
-                  <p>{f.primaryRole || "Freelancer"}</p>
+                  <p>{f.primaryRole || t("globalCrew.freelancer")}</p>
                 </div>
               </div>
               <div className="crew-meta">
@@ -252,13 +254,13 @@ export function CrewDirectoryPage({ getToken }: Props) {
                 )}
                 <div className="crew-meta-item" style={{ marginTop: 4 }}>
                   {f.availabilityStatus === "unavailable" ? (
-                    <><Clock size={12} color="var(--warning)" /> <span style={{ color: "var(--warning)" }}>Unavailable today</span></>
+                    <><Clock size={12} color="var(--warning)" /> <span style={{ color: "var(--warning)" }}>{t("globalCrew.unavailableToday")}</span></>
                   ) : f.availabilityStatus === "tentative" || f.availabilityStatus === "partial" ? (
-                    <><Clock size={12} color="var(--warning)" /> <span style={{ color: "var(--warning)" }}>Limited today</span></>
+                    <><Clock size={12} color="var(--warning)" /> <span style={{ color: "var(--warning)" }}>{t("globalCrew.limitedToday")}</span></>
                   ) : f.availabilityStatus === "full" ? (
-                    <><CheckCircle size={12} color="var(--success)" /> <span style={{ color: "var(--success)" }}>Available today</span></>
+                    <><CheckCircle size={12} color="var(--success)" /> <span style={{ color: "var(--success)" }}>{t("globalCrew.availableToday")}</span></>
                   ) : (
-                    <><Clock size={12} color="var(--text-muted)" /> <span>Availability unknown</span></>
+                    <><Clock size={12} color="var(--text-muted)" /> <span>{t("globalCrew.availabilityUnknown")}</span></>
                   )}
                 </div>
               </div>
@@ -287,7 +289,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
         <div className="ehs-modal-backdrop" onClick={() => !saving && setEditingUser(null)}>
           <div className="ehs-modal" role="dialog" aria-modal="true" aria-labelledby="crew-edit-title" onClick={e => e.stopPropagation()}>
             <div className="ehs-modal-header">
-              <h3 id="crew-edit-title">Edit Freelancer Profile</h3>
+              <h3 id="crew-edit-title">{t("globalCrew.editTitle")}</h3>
               <button className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setEditingUser(null)}>
                 <X size={16} />
               </button>
@@ -295,42 +297,42 @@ export function CrewDirectoryPage({ getToken }: Props) {
             <form onSubmit={handleSave}>
               <div className="ehs-modal-body">
                 <div className="ehs-form-group">
-                  <label>Full Name</label>
+                  <label>{t("globalCrew.fullName")}</label>
                   <input required className="ehs-input" value={editingUser.fullName} onChange={e => setEditingUser({...editingUser, fullName: e.target.value})} />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Email</label>
+                    <label>{t("globalCrew.email")}</label>
                     <input type="email" required className="ehs-input" value={editingUser.email} onChange={e => setEditingUser({...editingUser, email: e.target.value})} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Phone</label>
+                    <label>{t("globalCrew.phone")}</label>
                     <input className="ehs-input" value={editingUser.phone || ""} onChange={e => setEditingUser({...editingUser, phone: e.target.value})} />
                   </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Primary Role</label>
+                    <label>{t("globalCrew.primaryRole")}</label>
                     <input className="ehs-input" value={editingUser.primaryRole || ""} onChange={e => setEditingUser({...editingUser, primaryRole: e.target.value})} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>City / Base</label>
+                    <label>{t("globalCrew.cityBase")}</label>
                     <input className="ehs-input" value={editingUser.city || ""} onChange={e => setEditingUser({...editingUser, city: e.target.value})} />
                   </div>
                 </div>
                 <div className="ehs-form-group">
-                  <label>Default Day Rate (NOK)</label>
+                  <label>{t("globalCrew.dayRate")}</label>
                   <input type="number" className="ehs-input" value={editingUser.defaultDayRate || ""} onChange={e => setEditingUser({...editingUser, defaultDayRate: e.target.value ? Number(e.target.value) : null})} />
                 </div>
                 <div className="ehs-form-group">
-                  <label>Skills (comma separated)</label>
+                  <label>{t("globalCrew.skills")}</label>
                   <input className="ehs-input" value={(editingUser.skills || []).join(", ")} onChange={e => setEditingUser({...editingUser, skills: e.target.value.split(",").map(s => s.trim()).filter(Boolean)})} />
                 </div>
               </div>
               <div className="ehs-modal-footer">
-                <button type="button" className="ehs-ghost-btn" onClick={() => setEditingUser(null)}>Cancel</button>
+                <button type="button" className="ehs-ghost-btn" onClick={() => setEditingUser(null)}>{t("common.cancel")}</button>
                 <button type="submit" className="ehs-primary-btn" disabled={saving}>
-                  {saving ? "Saving..." : "Save Changes"}
+                  {saving ? t("common.saving") : t("globalCrew.saveChanges")}
                 </button>
               </div>
             </form>

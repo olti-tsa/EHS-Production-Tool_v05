@@ -18,11 +18,21 @@ export type OrganizationSettings = {
   departments: string[];
 };
 
+export type SettingsErrorCode =
+  | "notAuthenticated"
+  | "unauthorized"
+  | "fetchFailed"
+  | "updateFailed";
+
+export type SettingsUpdateResult =
+  | { ok: true }
+  | { ok: false; error: SettingsErrorCode };
+
 export function useSettings() {
   const { getToken } = useAuth();
   const [settings, setSettings] = useState<OrganizationSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SettingsErrorCode | null>(null);
   const loadingRef = useRef(false);
 
   const fetchSettings = useCallback(async () => {
@@ -32,22 +42,26 @@ export function useSettings() {
     setError(null);
     try {
       const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
+      if (!token) throw new Error("notAuthenticated");
       const res = await fetch("/api/settings", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 401 || res.status === 403) {
-        throw new Error("Unauthorized");
+        throw new Error("unauthorized");
       }
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to fetch settings");
+        throw new Error("fetchFailed");
       }
       const json = await res.json();
-      if (!json.ok) throw new Error(json.error || "Failed to fetch settings");
+      if (!json.ok) throw new Error("fetchFailed");
       setSettings(json.settings);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const code = err instanceof Error ? err.message : "fetchFailed";
+      setError(
+        code === "notAuthenticated" || code === "unauthorized"
+          ? code
+          : "fetchFailed",
+      );
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -55,7 +69,9 @@ export function useSettings() {
   }, [getToken]);
 
   const updateSettings = useCallback(
-    async (updates: Partial<OrganizationSettings>) => {
+    async (
+      updates: Partial<OrganizationSettings>,
+    ): Promise<SettingsUpdateResult> => {
       try {
         const editableUpdates = {
           companyName: updates.companyName,
@@ -73,7 +89,7 @@ export function useSettings() {
           departments: updates.departments,
         };
         const token = await getToken();
-        if (!token) throw new Error("Not authenticated");
+        if (!token) throw new Error("notAuthenticated");
         const res = await fetch("/api/settings", {
           method: "PUT",
           headers: {
@@ -83,25 +99,24 @@ export function useSettings() {
           body: JSON.stringify(editableUpdates),
         });
         if (res.status === 401 || res.status === 403) {
-          throw new Error("Unauthorized");
+          throw new Error("unauthorized");
         }
         if (!res.ok) {
-          const text = await res.text();
-          let msg = "Failed to update settings";
-          try {
-            const parsed = JSON.parse(text);
-            msg = parsed.error || msg;
-          } catch {
-            // ignore
-          }
-          throw new Error(msg);
+          throw new Error("updateFailed");
         }
         const json = await res.json();
-        if (!json.ok) throw new Error(json.error || "Failed to update settings");
+        if (!json.ok) throw new Error("updateFailed");
         setSettings(json.settings);
         return { ok: true };
-      } catch (err: any) {
-        return { ok: false, error: err.message };
+      } catch (err: unknown) {
+        const code = err instanceof Error ? err.message : "updateFailed";
+        return {
+          ok: false as const,
+          error: (code === "notAuthenticated" ||
+          code === "unauthorized"
+            ? code
+            : "updateFailed") as SettingsErrorCode,
+        };
       }
     },
     [getToken],

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { openCateringSheet } from "../lib/cateringSheetExport";
+import { useI18n, useT } from "../lib/i18n/I18nContext";
 
 /** Server response shape for `GET /api/portal/briefs/:id/catering`.
  *  Mirrors what `portalBriefs.ts` returns. Kept inline (not in
@@ -38,22 +39,14 @@ type DietaryTag =
   | "gluten-free"
   | "lactose-free";
 
-const CATEGORY_LABEL: Record<DietaryTag, string> = {
-  vegetarian: "Vegetarian",
-  vegan: "Vegan",
-  halal: "Halal",
-  "gluten-free": "Gluten-free",
-  "lactose-free": "Lactose-free",
-};
-
 /** UTC-stable date formatter. We get YYYY-MM-DD strings from the
  *  server and want to render them as e.g. "Mon 18 May" without
  *  shifting them into the browser's local timezone (which would
  *  display the wrong day for crew west of UTC). */
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, locale: "en" | "no"): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", {
+  return d.toLocaleDateString(locale === "no" ? "nb-NO" : "en-GB", {
     weekday: "short",
     day: "2-digit",
     month: "short",
@@ -75,6 +68,15 @@ type Props = {
  *  error banner if the producer somehow lands here without owning the
  *  brief (shouldn't happen via the UI, but defensive). */
 export function CateringView({ briefId, getToken }: Props) {
+  const t = useT();
+  const { locale } = useI18n();
+  const categoryLabel: Record<DietaryTag, string> = {
+    vegetarian: t("catering.category.vegetarian"),
+    vegan: t("catering.category.vegan"),
+    halal: t("catering.category.halal"),
+    "gluten-free": t("catering.category.glutenFree"),
+    "lactose-free": t("catering.category.lactoseFree"),
+  };
   const [data, setData] = useState<CateringResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,10 +102,10 @@ export function CateringView({ briefId, getToken }: Props) {
         if (!res.ok) {
           const msg =
             res.status === 403
-              ? "You don't own this brief."
+              ? t("catering.error.notOwner")
               : res.status === 404
-                ? "Brief not found."
-                : "Could not load catering data.";
+                ? t("catering.error.notFound")
+                : t("catering.error.load");
           setError(msg);
           setLoading(false);
           return;
@@ -111,7 +113,7 @@ export function CateringView({ briefId, getToken }: Props) {
         const json = (await res.json()) as CateringResponse;
         if (cancelled) return;
         if (!json.ok) {
-          setError(json.error ?? "Could not load catering data.");
+          setError(json.error ?? t("catering.error.load"));
           setLoading(false);
           return;
         }
@@ -123,17 +125,17 @@ export function CateringView({ briefId, getToken }: Props) {
         // Transient network error — keep showing the previous data
         // (if any) and let the next poll recover. Surface a quiet
         // banner so the producer knows the count might be stale.
-        setError("Connection lost — showing last known counts.");
+        setError(t("catering.error.connection"));
         setLoading(false);
       }
     };
     void fetchOnce();
-    const t = window.setInterval(fetchOnce, 60_000);
+    const pollTimer = window.setInterval(fetchOnce, 60_000);
     return () => {
       cancelled = true;
-      window.clearInterval(t);
+      window.clearInterval(pollTimer);
     };
-  }, [briefId, getToken]);
+  }, [briefId, getToken, t]);
 
   // Project-wide totals — sum across days, plus unique-people counts
   // so the producer can sanity-check their roster size separately.
@@ -176,9 +178,9 @@ export function CateringView({ briefId, getToken }: Props) {
     return (
       <div className="led-report">
         <header className="led-report-header">
-          <h2>Catering</h2>
+          <h2>{t("catering.title")}</h2>
         </header>
-        <div className="led-empty">Loading…</div>
+        <div className="led-empty">{t("common.loading")}</div>
       </div>
     );
   }
@@ -187,21 +189,18 @@ export function CateringView({ briefId, getToken }: Props) {
     <div className="led-report">
       <header className="led-report-header">
         <div>
-          <h2>Catering</h2>
+          <h2>{t("catering.title")}</h2>
           <p className="led-report-sub">
-            Per day, per venue: total meals plus dietary-category counts
-            and the full allergen roster with names. Updates live as
-            crew accept briefs and edit their assigned working days.
+            {t("catering.subtitle")}
           </p>
         </div>
         {summary && (
           <div className="led-report-meta">
             <span className="badge">
-              <strong>{summary.dayCount}</strong> day
-              {summary.dayCount === 1 ? "" : "s"}
+              {t("catering.daysCount", { count: summary.dayCount })}
             </span>
             <span className="badge">
-              <strong>{summary.mealsServed}</strong> meals total
+              {t("catering.mealsTotal", { count: summary.mealsServed })}
             </span>
             {/* One-click handoff to the venue chef. Disabled when
                 there are no days yet — nothing useful to hand over. */}
@@ -215,6 +214,27 @@ export function CateringView({ briefId, getToken }: Props) {
                   brief: data.brief,
                   days: data.days,
                   profilelessCount: data.missing?.profileless?.length ?? 0,
+                  locale,
+                  copy: {
+                    categoryLabel,
+                    days: t("catering.export.days"),
+                    totalMeals: t("catering.export.totalMeals"),
+                    noSpecialDietary: t("catering.export.noSpecialDietary"),
+                    noAllergens: t("catering.export.noAllergens"),
+                    name: t("catering.export.name"),
+                    role: t("catering.export.role"),
+                    allergens: t("catering.export.allergens"),
+                    meals: t("catering.export.meals"),
+                    cateringBrief: t("catering.export.brief"),
+                    generated: t("catering.export.generated"),
+                    profilelessNote: t("catering.export.profilelessNote", {
+                      count: data.missing?.profileless?.length ?? 0,
+                    }),
+                    untitledProject: t("catering.export.untitledProject"),
+                    venueTba: t("catering.export.venueTba"),
+                    print: t("catering.export.print"),
+                    footer: t("catering.export.footer", { id: data.brief.id }),
+                  },
                 });
               }}
               disabled={
@@ -241,9 +261,9 @@ export function CateringView({ briefId, getToken }: Props) {
                     ? 0.6
                     : 1,
               }}
-              title="Open a print-friendly sheet for the venue chef"
+              title={t("catering.printTitle")}
             >
-              Print sheet for chef
+              {t("catering.print")}
             </button>
           </div>
         )}
@@ -270,9 +290,9 @@ export function CateringView({ briefId, getToken }: Props) {
         <div className="led-dashboard">
           {(Object.keys(summary.mealsByCat) as DietaryTag[]).map((k) => (
             <div className="led-stat" key={k}>
-              <div className="led-stat-label">{CATEGORY_LABEL[k]}</div>
+              <div className="led-stat-label">{categoryLabel[k]}</div>
               <div className="led-stat-value">{summary.mealsByCat[k]}</div>
-              <div className="led-stat-sub">meals across run</div>
+              <div className="led-stat-sub">{t("catering.mealsAcrossRun")}</div>
             </div>
           ))}
         </div>
@@ -284,7 +304,7 @@ export function CateringView({ briefId, getToken }: Props) {
       {data?.missing?.profileless && data.missing.profileless.length > 0 && (
         <section className="led-card" style={{ marginBottom: 16 }}>
           <div className="led-card-head">
-            <h3>Missing dietary info</h3>
+            <h3>{t("catering.missing.title")}</h3>
           </div>
           <p
             style={{
@@ -293,9 +313,7 @@ export function CateringView({ briefId, getToken }: Props) {
               marginBottom: 8,
             }}
           >
-            These crew members haven't filled in their portal profile
-            yet, so they're counted in the meal total but not in any
-            category breakdown. Send them a quick reminder.
+            {t("catering.missing.body")}
           </p>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
             {data.missing.profileless.map((p) => (
@@ -311,8 +329,7 @@ export function CateringView({ briefId, getToken }: Props) {
           brief has no confirmed gigs with assigned working days yet. */}
       {!data?.days || data.days.length === 0 ? (
         <div className="led-empty">
-          No confirmed crew with assigned working days yet — counts
-          will appear here as freelancers accept the brief.
+          {t("catering.empty")}
         </div>
       ) : (
         <div
@@ -323,7 +340,7 @@ export function CateringView({ briefId, getToken }: Props) {
           }}
         >
           {data.days.map((day) => (
-            <DayCard key={day.date} day={day} />
+            <DayCard key={day.date} day={day} locale={locale} t={t} categoryLabel={categoryLabel} />
           ))}
         </div>
       )}
@@ -333,8 +350,14 @@ export function CateringView({ briefId, getToken }: Props) {
 
 function DayCard({
   day,
+  locale,
+  t,
+  categoryLabel,
 }: {
   day: NonNullable<CateringResponse["days"]>[number];
+  locale: "en" | "no";
+  t: ReturnType<typeof useT>;
+  categoryLabel: Record<DietaryTag, string>;
 }) {
   const tagsWithCounts = (Object.keys(day.byCategory) as DietaryTag[])
     .map((k) => ({ tag: k, count: day.byCategory[k] }))
@@ -344,13 +367,13 @@ function DayCard({
     <section className="led-card">
       <div className="led-card-head">
         <h3 style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span>{fmtDate(day.date)}</span>
+          <span>{fmtDate(day.date, locale)}</span>
           <span style={{ fontSize: 12, color: "var(--muted, #94a3b8)" }}>
             {day.date}
           </span>
         </h3>
         <span className="badge">
-          <strong>{day.total}</strong> meal{day.total === 1 ? "" : "s"}
+          {t("catering.mealsCount", { count: day.total })}
         </span>
       </div>
 
@@ -375,7 +398,7 @@ function DayCard({
                 fontWeight: 600,
               }}
             >
-              {CATEGORY_LABEL[tag]} · {count}
+              {categoryLabel[tag]} · {count}
             </span>
           ))}
         </div>
@@ -389,7 +412,7 @@ function DayCard({
             margin: "8px 0 0 0",
           }}
         >
-          No allergens reported for this day's crew.
+          {t("catering.noAllergens")}
         </p>
       ) : (
         <div style={{ marginTop: 8 }}>
@@ -403,7 +426,7 @@ function DayCard({
               marginBottom: 4,
             }}
           >
-            Allergens
+            {t("catering.allergens")}
           </div>
           <ul
             style={{

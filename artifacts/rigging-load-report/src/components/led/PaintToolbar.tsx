@@ -16,6 +16,8 @@ import { useRef, type RefObject } from "react";
 import { jsPDF } from "jspdf";
 import type { LedPortChain, LedPortMap, LedScreen } from "../../lib/led";
 import { pngRasterScale } from "../../lib/ledExport";
+import { useT } from "../../lib/i18n/I18nContext";
+import type { TranslationKey } from "../../lib/i18n/types";
 
 export type PaintMode = "off" | "power" | "signal";
 
@@ -27,6 +29,11 @@ const SIGNAL_PALETTE = [
   "#2A6FB0", "#1F6F8B", "#2980B9", "#3F51B5", "#1565C0",
   "#0288D1", "#5C6BC0", "#3949AB",
 ];
+const MODE_LABEL_KEYS: Record<PaintMode, TranslationKey> = {
+  off: "led.paint.mode.view",
+  power: "led.paint.mode.power",
+  signal: "led.paint.mode.signal",
+};
 
 export function newPortId(): string {
   return `p_${Math.random().toString(36).slice(2, 9)}`;
@@ -70,6 +77,7 @@ export function PaintToolbar({
   /** Ref to the parent pixel-map SVG — used by PNG/PDF export. */
   canvasSvgRef: RefObject<SVGSVGElement | null>;
 }) {
+  const t = useT();
   const ports: LedPortChain[] = map?.ports ?? [];
   const isPaint = mode !== "off";
   const canEdit = isPaint && selectedScreen !== null;
@@ -189,11 +197,11 @@ export function PaintToolbar({
     pdf.setFontSize(14);
     const title =
       mode === "power"
-        ? "Power plan"
+        ? t("led.paint.pdf.powerPlan")
         : mode === "signal"
-          ? "Signal plan"
-          : "Pixel map";
-    pdf.text(`${selectedScreen?.name || "Pixel Map"} — ${title}`, 14, 14);
+          ? t("led.paint.pdf.signalPlan")
+          : t("led.paint.pdf.pixelMap");
+    pdf.text(`${selectedScreen?.name || t("led.paint.pdf.pixelMap")} — ${title}`, 14, 14);
     const ratio = canvas.height / canvas.width;
     const drawW = pageW - 28;
     const drawH = Math.min(drawW * ratio, pageH - 40);
@@ -202,7 +210,7 @@ export function PaintToolbar({
     if (isPaint) {
       pdf.setFontSize(10);
       pdf.text(
-        `Ports: ${ports.length}    Trunk cables: ${trunks}    Link cables (hops): ${hops}    Total cables: ${trunks + hops}`,
+        t("led.paint.pdf.cableSummary", { ports: ports.length, trunks, hops, total: trunks + hops }),
         14,
         pageH - 12,
       );
@@ -215,8 +223,8 @@ export function PaintToolbar({
   return (
     <div className="paint-toolbar">
       <div className="paint-toolbar-row paint-toolbar-modes">
-        <span className="paint-toolbar-label">Canvas mode</span>
-        <div className="paint-mode-seg" role="radiogroup" aria-label="Canvas mode">
+        <span className="paint-toolbar-label">{t("led.paint.canvasMode")}</span>
+        <div className="paint-mode-seg" role="radiogroup" aria-label={t("led.paint.canvasMode")}>
           {(["off", "power", "signal"] as PaintMode[]).map((m) => (
             <button
               key={m}
@@ -226,7 +234,7 @@ export function PaintToolbar({
               className={`paint-mode-btn ${mode === m ? "is-active" : ""} paint-mode-${m}`}
               onClick={() => onModeChange(m)}
             >
-              {m === "off" ? "View" : m === "power" ? "Paint power" : "Paint signal"}
+              {t(MODE_LABEL_KEYS[m])}
             </button>
           ))}
         </div>
@@ -243,13 +251,15 @@ export function PaintToolbar({
         <div className="paint-toolbar-row paint-toolbar-ports">
           {!selectedScreen && (
             <span className="paint-hint">
-              Click a screen on the canvas to start painting.
+              {t("led.paint.pickScreen")}
             </span>
           )}
           {selectedScreen && ports.length === 0 && (
             <span className="paint-hint">
-              No {mode === "power" ? "power feeds" : "signal ports"} yet for{" "}
-              <strong>{selectedScreen.name}</strong> — click <em>+ Add</em> to start.
+              {t("led.paint.noPorts", {
+                type: t(mode === "power" ? "led.paint.powerFeeds" : "led.paint.signalPorts"),
+                name: selectedScreen.name,
+              })}
             </span>
           )}
           {selectedScreen &&
@@ -267,7 +277,8 @@ export function PaintToolbar({
                     onChange={(e) => recolorPort(p.id, e.target.value)}
                     onClick={(e) => e.stopPropagation()}
                     className="paint-port-color"
-                    title="Port color"
+                     title={t("led.paint.portColor")}
+                     aria-label={t("led.paint.portColor")}
                   />
                   <input
                     type="text"
@@ -276,23 +287,27 @@ export function PaintToolbar({
                     onClick={(e) => e.stopPropagation()}
                     className="paint-port-label"
                     style={{ width: Math.max(34, p.label.length * 9 + 12) }}
-                    title="Port label"
+                     title={t("led.paint.portLabel")}
+                     aria-label={t("led.paint.portLabel")}
                   />
                   <span className="paint-port-count">{p.cells.length}</span>
                   <button
                     className="paint-port-icon"
                     onClick={(e) => { e.stopPropagation(); reverseChain(p.id); }}
-                    title="Reverse chain order"
+                     title={t("led.paint.reverseChain")}
+                     aria-label={t("led.paint.reverseChain")}
                   >⇄</button>
                   <button
                     className="paint-port-icon"
                     onClick={(e) => { e.stopPropagation(); clearPort(p.id); }}
-                    title="Clear painted cells"
+                     title={t("led.paint.clearCells")}
+                     aria-label={t("led.paint.clearCells")}
                   >⌫</button>
                   <button
                     className="paint-port-icon paint-port-icon-danger"
                     onClick={(e) => { e.stopPropagation(); deletePort(p.id); }}
-                    title="Delete port"
+                     title={t("led.paint.deletePort")}
+                     aria-label={t("led.paint.deletePort")}
                   >×</button>
                 </div>
               );
@@ -303,13 +318,17 @@ export function PaintToolbar({
               className="btn btn-primary btn-sm"
               onClick={addPort}
             >
-              + Add {mode === "power" ? "power feed" : "signal port"}
+              {t(mode === "power" ? "led.paint.addPowerFeed" : "led.paint.addSignalPort")}
             </button>
           )}
           {selectedScreen && ports.length > 0 && (
             <span className="paint-cable-summary">
-              {ports.length} {ports.length === 1 ? "port" : "ports"} ·{" "}
-              {trunks} trunk · {hops} link · <strong>{trunks + hops} cables</strong>
+              {t(
+                ports.length === 1
+                  ? "led.paint.cableSummaryOne"
+                  : "led.paint.cableSummaryMany",
+                { ports: ports.length, trunks, hops, total: trunks + hops },
+              )}
             </span>
           )}
         </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { X, Mail, Phone, MapPin, DollarSign } from "lucide-react";
+import { useI18n, useT } from "../../lib/i18n/I18nContext";
 
 export type ProfileHistoryData = {
   freelancer: {
@@ -50,6 +51,8 @@ interface Props {
 }
 
 export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
+  const t = useT();
+  const { locale } = useI18n();
   const [data, setData] = useState<ProfileHistoryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,16 +69,16 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
         const res = await fetch(`${baseUrl}api/portal/freelancers/${encodeURIComponent(userId)}/profile-history`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-        if (!res.ok) throw new Error("Could not load freelancer profile");
+        if (!res.ok) throw new Error(t("freelancerProfile.error.load"));
         const json = await res.json();
         if (mounted) {
-          if (!json.ok) throw new Error(json.error || "Failed to load");
+          if (!json.ok) throw new Error(json.error || t("freelancerProfile.error.load"));
           // Format data correctly
           setData(json);
         }
       } catch (err: unknown) {
         if (mounted) {
-          setError(err instanceof Error ? err.message : "Could not load freelancer profile");
+          setError(err instanceof Error ? err.message : t("freelancerProfile.error.load"));
         }
       } finally {
         if (mounted) setLoading(false);
@@ -85,7 +88,7 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
     return () => {
       mounted = false;
     };
-  }, [userId, getToken]);
+  }, [userId, getToken, t]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
@@ -110,9 +113,9 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
   const formatGigDates = (gig: GigHistory) => {
     if (gig.assignedDates.length > 0) return gig.assignedDates.join(", ");
     if (gig.startDate && gig.endDate && gig.endDate !== gig.startDate) {
-      return `${gig.startDate} to ${gig.endDate}`;
+      return `${gig.startDate} ${t("freelancerProfile.dates.to")} ${gig.endDate}`;
     }
-    return gig.startDate ?? gig.endDate ?? "Dates not set";
+    return gig.startDate ?? gig.endDate ?? t("freelancerProfile.dates.notSet");
   };
 
   return (
@@ -132,7 +135,7 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
       <section
         role="dialog"
         aria-modal="true"
-        aria-label="Freelancer Profile and History"
+        aria-label={t("freelancerProfile.dialogLabel")}
         style={{
           width: "min(680px, 100%)",
           minWidth: "min(100vw - 32px, 320px)",
@@ -148,8 +151,8 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
         }}
       >
         <div style={{ padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)" }}>
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Freelancer Profile &amp; History</h3>
-          <button type="button" className="ehs-ghost-btn" onClick={onClose} style={{ padding: 6 }}>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{t("freelancerProfile.title")}</h3>
+          <button type="button" aria-label={t("common.close")} className="ehs-ghost-btn" onClick={onClose} style={{ padding: 6 }}>
             <X size={18} />
           </button>
         </div>
@@ -157,7 +160,7 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
         <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
           {loading ? (
             <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
-              Loading profile...
+              {t("freelancerProfile.loading")}
             </div>
           ) : error ? (
             <div style={{ padding: 40, textAlign: "center", color: "var(--danger)", fontSize: 14 }}>
@@ -179,7 +182,7 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
                   <div style={{ color: "var(--text-muted)", fontSize: 15, marginBottom: 12, display: "flex", flexWrap: "wrap", gap: "12px 16px" }}>
                     {data.freelancer.primaryRole && <span><strong>{data.freelancer.primaryRole}</strong></span>}
                     {data.freelancer.city && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><MapPin size={14}/>{data.freelancer.city}</span>}
-                    {data.freelancer.defaultDayRate != null && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><DollarSign size={14}/>{data.freelancer.defaultDayRate} NOK/day</span>}
+                   {data.freelancer.defaultDayRate != null && <span style={{ display: "flex", alignItems: "center", gap: 4 }}><DollarSign size={14}/>{data.freelancer.defaultDayRate.toLocaleString(locale === "no" ? "nb-NO" : "en-US")} {t("freelancerProfile.rateUnit")}</span>}
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 12, fontSize: 13 }}>
                     {data.freelancer.email && (
@@ -196,7 +199,7 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {data.freelancer.skills && data.freelancer.skills.length > 0 && (
                   <div>
-                    <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Skills</h4>
+                    <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>{t("freelancerProfile.skills")}</h4>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {data.freelancer.skills.map(s => <span key={s} className="crew-skill-pill">{s}</span>)}
                     </div>
@@ -204,7 +207,7 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
                 )}
                 {(data.freelancer.dietaryTags?.length || data.freelancer.allergenTags?.length) ? (
                   <div>
-                    <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Dietary & Allergens</h4>
+                    <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>{t("freelancerProfile.dietaryAllergens")}</h4>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {data.freelancer.dietaryTags?.map(t => <span key={t} style={{ padding: "4px 8px", borderRadius: 4, background: "rgba(22, 163, 74, 0.1)", color: "#16a34a", fontSize: 12, fontWeight: 600 }}>{t}</span>)}
                       {data.freelancer.allergenTags?.map(a => <span key={a} style={{ padding: "4px 8px", borderRadius: 4, background: "rgba(220, 38, 38, 0.1)", color: "#dc2626", fontSize: 12, fontWeight: 600 }}>{a}</span>)}
@@ -216,22 +219,22 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
               {/* Stats Row */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
                 <div style={{ background: "var(--input-bg)", border: "1px solid var(--border-color)", padding: 16, borderRadius: 12, textAlign: "center" }}>
-                  <div style={{ color: "var(--text-muted)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Past Gigs</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>{t("freelancerProfile.stats.pastGigs")}</div>
                   <div style={{ fontSize: 24, fontWeight: 800 }}>{data.stats.pastGigCount}</div>
                 </div>
                 <div style={{ background: "var(--input-bg)", border: "1px solid var(--border-color)", padding: 16, borderRadius: 12, textAlign: "center" }}>
-                  <div style={{ color: "var(--text-muted)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Hours Worked</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>{t("freelancerProfile.stats.hoursWorked")}</div>
                   <div style={{ fontSize: 24, fontWeight: 800 }}>{formatHours(data.stats.totalWorkedMinutes)}</div>
                 </div>
                 <div style={{ background: "var(--input-bg)", border: "1px solid var(--border-color)", padding: 16, borderRadius: 12, textAlign: "center" }}>
-                  <div style={{ color: "var(--text-muted)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Earnings (NOK)</div>
-                  <div style={{ fontSize: 24, fontWeight: 800 }}>{data.stats.totalEarnings.toLocaleString()}</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>{t("freelancerProfile.stats.earnings")}</div>
+                   <div style={{ fontSize: 24, fontWeight: 800 }}>{data.stats.totalEarnings.toLocaleString(locale === "no" ? "nb-NO" : "en-US")}</div>
                 </div>
               </div>
 
               {/* Upcoming Gigs */}
               <div>
-                <h4 style={{ margin: "0 0 12px", fontSize: 16, borderBottom: "2px solid var(--primary)", display: "inline-block", paddingBottom: 4 }}>Upcoming Gigs</h4>
+                <h4 style={{ margin: "0 0 12px", fontSize: 16, borderBottom: "2px solid var(--primary)", display: "inline-block", paddingBottom: 4 }}>{t("freelancerProfile.upcoming")}</h4>
                 {data.upcomingGigs.length > 0 ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {data.upcomingGigs.map(gig => (
@@ -251,14 +254,14 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
                   </div>
                 ) : (
                   <div style={{ padding: 16, border: "1px dashed var(--border-color)", borderRadius: 8, color: "var(--text-muted)", fontSize: 13 }}>
-                    No upcoming accepted gigs.
+                    {t("freelancerProfile.upcomingEmpty")}
                   </div>
                 )}
               </div>
 
               {/* Past Gigs */}
               <div>
-                <h4 style={{ margin: "0 0 12px", fontSize: 16, borderBottom: "2px solid var(--border-color)", display: "inline-block", paddingBottom: 4 }}>Past Gigs &amp; Stats</h4>
+                <h4 style={{ margin: "0 0 12px", fontSize: 16, borderBottom: "2px solid var(--border-color)", display: "inline-block", paddingBottom: 4 }}>{t("freelancerProfile.past")}</h4>
                 {data.pastGigs.length > 0 ? (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {data.pastGigs.map(gig => (
@@ -271,14 +274,14 @@ export function FreelancerProfileModal({ userId, getToken, onClose }: Props) {
                         </div>
                         <div style={{ textAlign: "right", fontSize: 13 }}>
                           <div style={{ fontWeight: 600 }}>{formatGigDates(gig)}</div>
-                          <div style={{ color: "var(--text-muted)", marginTop: 2 }}>{formatHours(gig.workedMinutes)} • {gig.earnings.toLocaleString()} NOK</div>
+                           <div style={{ color: "var(--text-muted)", marginTop: 2 }}>{formatHours(gig.workedMinutes)} • {gig.earnings.toLocaleString(locale === "no" ? "nb-NO" : "en-US")} NOK</div>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div style={{ padding: 16, border: "1px dashed var(--border-color)", borderRadius: 8, color: "var(--text-muted)", fontSize: 13 }}>
-                    No completed accepted gigs yet.
+                    {t("freelancerProfile.pastEmpty")}
                   </div>
                 )}
               </div>

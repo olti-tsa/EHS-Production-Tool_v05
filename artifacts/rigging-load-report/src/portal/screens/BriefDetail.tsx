@@ -3,7 +3,9 @@ import { useAuth } from "@clerk/react";
 import { Link, useLocation } from "wouter";
 import { PALETTE, type ThemeMode } from "../lib/portalTheme";
 import { ItinerarySection } from "./ItinerarySection";
-import { useT } from "../../lib/i18n/I18nContext";
+import { useI18n, useT } from "../../lib/i18n/I18nContext";
+import type { Translator } from "../../lib/i18n/I18nContext";
+import type { TranslationKey } from "../../lib/i18n/types";
 import {
   buildAcceptedSnapshot,
   gigFromBrief,
@@ -36,13 +38,13 @@ import {
   type ScheduleConflict,
 } from "../../lib/scheduleConflicts";
 
-const PHASE_LABELS: Record<BriefSchedulePhaseKey, string> = {
-  setup: "Setup",
-  rehearsal: "Rehearsal",
-  show: "Show",
+const PHASE_LABEL_KEYS: Record<BriefSchedulePhaseKey, TranslationKey> = {
+  setup: "portal.brief.phase.setup",
+  rehearsal: "portal.brief.phase.rehearsal",
+  show: "portal.brief.phase.show",
   // Internal key stays "downrig" (legacy from older briefs); user-facing
   // label is "Load Out" everywhere in the UI.
-  downrig: "Load Out",
+  downrig: "portal.brief.phase.loadOut",
 };
 const PHASE_ORDER: BriefSchedulePhaseKey[] = [
   "setup",
@@ -102,6 +104,7 @@ type AssignedPhaseBucket = {
 function groupAssignedDaysByPhase(
   assignedDates: ReadonlyArray<string>,
   schedule: BriefSchedule | undefined,
+  t: Translator,
 ): AssignedPhaseBucket[] {
   const dates = [...assignedDates].sort();
   if (dates.length === 0) return [];
@@ -120,7 +123,7 @@ function groupAssignedDaysByPhase(
         for (const d of phaseDays) remaining.delete(d);
         buckets.push({
           key,
-          label: PHASE_LABELS[key],
+          label: t(PHASE_LABEL_KEYS[key]),
           days: phaseDays.sort(),
         });
       }
@@ -129,7 +132,7 @@ function groupAssignedDaysByPhase(
   if (remaining.size > 0) {
     buckets.push({
       key: "extra",
-      label: "Extra days",
+      label: t("portal.brief.extraDays"),
       days: [...remaining].sort(),
     });
   }
@@ -200,7 +203,7 @@ export function BriefDetail({
   setData: React.Dispatch<React.SetStateAction<PortalData>>;
 }) {
   const c = PALETTE[theme];
-  const t = useT();
+  const { t, locale } = useI18n();
   const { getToken } = useAuth();
   const [, setLocation] = useLocation();
   // One project URL can contain several independently-bookable role slots.
@@ -288,7 +291,7 @@ export function BriefDetail({
         return {
           ok: false,
           status: res.status,
-          error: `Server returned ${res.status}`,
+          error: t("portal.brief.error.serverStatus", { status: res.status }),
         };
       }
       const json = (await res.json().catch(() => ({}))) as {
@@ -301,7 +304,7 @@ export function BriefDetail({
         return {
           ok: false,
           status: res.status,
-          error: json.error || "Server rejected the response",
+          error: json.error || t("portal.brief.error.rejected"),
         };
       }
       const serverGigId =
@@ -314,7 +317,7 @@ export function BriefDetail({
     } catch (e) {
       return {
         ok: false,
-        error: e instanceof Error ? e.message : "Network error",
+        error: e instanceof Error ? e.message : t("portal.brief.error.network"),
       };
     }
   };
@@ -378,8 +381,11 @@ export function BriefDetail({
   const diffs = useMemo<DiffEntry[]>(() => {
     if (!entry.acceptedSnapshot) return [];
     if (entry.acceptedSnapshot.generatedAt >= brief.generatedAt) return [];
-    return diffBriefAgainstSnapshot(entry.acceptedSnapshot, brief);
-  }, [entry.acceptedSnapshot, brief]);
+    return diffBriefAgainstSnapshot(entry.acceptedSnapshot, brief, {
+      locale,
+      tbdLabel: t("portal.brief.diff.value.tbd"),
+    });
+  }, [entry.acceptedSnapshot, brief, locale, t]);
 
   // Capture the pre-action snapshot once per click. We can't read this
   // off the React `data` prop inside the awaited callback because the
@@ -460,7 +466,7 @@ export function BriefDetail({
           : next;
       });
       setSyncError(
-        "Could not save your response — please check your connection and try again.",
+        t("portal.brief.error.saveResponse"),
       );
       return;
     }
@@ -525,7 +531,7 @@ export function BriefDetail({
         }, entry.assignmentId),
       );
       setSyncError(
-        "Could not acknowledge the changes — please try again in a moment.",
+        t("portal.brief.error.acknowledge"),
       );
     }
   }
@@ -576,7 +582,7 @@ export function BriefDetail({
           : next;
       });
       setSyncError(
-        "Could not save your decline — please try again in a moment.",
+        t("portal.brief.error.saveDecline"),
       );
     }
   }
@@ -623,7 +629,7 @@ export function BriefDetail({
           : next;
       });
       setSyncError(
-        "Could not undo your response — please try again in a moment.",
+        t("portal.brief.error.undo"),
       );
     }
   }
@@ -671,10 +677,17 @@ export function BriefDetail({
   }
 
   function openCallSheetWindow() {
-    const result = openCallSheet(brief);
+    const result = openCallSheet(brief, {
+      locale,
+      copy: {
+        phases: { setup: t("export.callSheet.phase.setup"), rehearsal: t("export.callSheet.phase.rehearsal"), show: t("export.callSheet.phase.show"), downrig: t("export.callSheet.phase.downrig") },
+        productionSchedule: t("export.callSheet.productionSchedule"), yourCall: t("export.callSheet.yourCall"), noAssignment: t("export.callSheet.noAssignment"), role: t("export.callSheet.role"), callTime: t("export.callSheet.callTime"), offTime: t("export.callSheet.offTime"), hours: t("export.callSheet.hours"), dayRate: t("export.callSheet.dayRate"), notes: t("export.callSheet.notes"), tbd: t("export.callSheet.tbd"), day: (day) => t("export.callSheet.day", { day }),
+        untitledShow: t("export.callSheet.untitledShow"), generated: (date) => t("export.callSheet.generated", { date }), documentTitle: (venue) => t("export.callSheet.documentTitle", { venue }), personalCallSheet: t("export.callSheet.personalCallSheet"), showDate: t("export.callSheet.showDate"), projectManager: t("export.callSheet.projectManager"), for: t("export.callSheet.for"), crew: t("export.callSheet.crew"), footer: (briefId) => t("export.callSheet.footer", { briefId }), print: t("export.callSheet.print"),
+      },
+    });
     if (!result.ok) {
       alert(
-        "Call Sheet couldn't open — please allow pop-ups for this site and try again.",
+        t("portal.brief.error.callSheet"),
       );
     }
   }
@@ -686,7 +699,7 @@ export function BriefDetail({
           href="/portal/briefs"
           style={{ color: c.muted, textDecoration: "none", fontWeight: 600 }}
         >
-          ← All briefs
+          ← {t("portal.brief.allBriefs")}
         </Link>
       </div>
 
@@ -791,7 +804,7 @@ export function BriefDetail({
             }}
           >
             <span style={{ color: c.muted, fontWeight: 700 }}>
-              Contact:
+              {t("portal.brief.contact")}:
             </span>{" "}
             <span style={{ color: c.text }}>{brief.project.clientContact}</span>
           </div>
@@ -1049,7 +1062,7 @@ export function BriefDetail({
             { k: "Systems", v: `${brief.rigging.systemCount}` },
             { k: "Hoist points", v: `${brief.rigging.hoistCount}` },
             {
-              k: "Total motor power",
+              k: t("portal.brief.metric.totalMotorPower"),
               v:
                 brief.rigging.totalMotorW > 0
                   ? watts(brief.rigging.totalMotorW)
@@ -1106,7 +1119,7 @@ export function BriefDetail({
           items={[
             { k: "Fixtures", v: `${brief.lighting.fixtureCount}` },
             {
-              k: "Total fixture power",
+              k: t("portal.brief.metric.totalFixturePower"),
               v: brief.lighting.totalFixtureWatts > 0
                 ? watts(brief.lighting.totalFixtureWatts)
                 : "—",
@@ -1119,13 +1132,13 @@ export function BriefDetail({
             },
             { k: "Power distros", v: `${brief.lighting.distroCount}` },
             {
-              k: "Total distro load",
+              k: t("portal.brief.metric.totalDistroLoad"),
               v: brief.lighting.totalDistroW > 0
                 ? watts(brief.lighting.totalDistroW)
                 : "—",
             },
             {
-              k: "Worst feeder",
+              k: t("portal.brief.power.worstFeeder"),
               v: brief.lighting.worstDistroFeederPct > 0
                 ? `${Math.round(brief.lighting.worstDistroFeederPct * 100)}%`
                 : "—",
@@ -1221,7 +1234,9 @@ export function BriefDetail({
                     </div>
                     {flagged ? (
                       <div style={{ color: "#dc2626", fontSize: 12, fontWeight: 600 }}>
-                        {d.feederOverload ? "Feeder over capacity" : "Channel over capacity"}
+                        {d.feederOverload
+                          ? t("portal.brief.power.feederOver")
+                          : t("portal.brief.power.channelOver")}
                       </div>
                     ) : warn ? (
                       <div style={{ color: "#b45309", fontSize: 12, fontWeight: 600 }}>
@@ -1247,7 +1262,10 @@ export function BriefDetail({
               theme={theme}
               items={[
                 { k: "Screens", v: `${brief.led.screenCount}` },
-                { k: "Total panels", v: `${brief.led.totalPanels}` },
+                {
+                  k: t("portal.brief.metric.totalPanels"),
+                  v: `${brief.led.totalPanels}`,
+                },
                 {
                   k: "Processor",
                   v: brief.led.processor || "—",
@@ -1367,9 +1385,12 @@ export function BriefDetail({
               theme={theme}
               items={[
                 { k: "Stages", v: `${brief.stage.stageCount}` },
-                { k: "Total area", v: `${formatNumber(brief.stage.totalArea, 1)} m²` },
                 {
-                  k: "Total load capacity",
+                  k: t("portal.brief.metric.totalArea"),
+                  v: `${formatNumber(brief.stage.totalArea, 1)} m²`,
+                },
+                {
+                  k: t("portal.brief.metric.totalLoadCapacity"),
                   v: `${formatNumber(brief.stage.totalLoadCapacityKg)} kg`,
                 },
               ]}
@@ -1442,13 +1463,16 @@ export function BriefDetail({
               theme={theme}
               items={[
                 { k: "Inventory rows", v: `${brief.sound.rowCount}` },
-                { k: "Total pieces", v: `${brief.sound.totalQty}` },
                 {
-                  k: "Total weight",
+                  k: t("portal.brief.metric.totalPieces"),
+                  v: `${brief.sound.totalQty}`,
+                },
+                {
+                  k: t("portal.brief.metric.totalWeight"),
                   v: `${formatNumber(brief.sound.totalWeight, 1)} kg`,
                 },
                 {
-                  k: "Total power",
+                  k: t("portal.brief.metric.totalPower"),
                   v: brief.sound.totalPower > 0 ? watts(brief.sound.totalPower) : "—",
                 },
               ]}
@@ -1464,10 +1488,10 @@ export function BriefDetail({
               >
                 <thead>
                   <tr style={{ color: c.muted, textAlign: "left" }}>
-                    <th style={{ padding: "6px 4px", fontWeight: 600 }}>Category</th>
-                    <th style={{ padding: "6px 4px", fontWeight: 600, textAlign: "right" }}>Rows</th>
-                    <th style={{ padding: "6px 4px", fontWeight: 600, textAlign: "right" }}>Weight</th>
-                    <th style={{ padding: "6px 4px", fontWeight: 600, textAlign: "right" }}>Power</th>
+                    <th style={{ padding: "6px 4px", fontWeight: 600 }}>{t("portal.brief.table.category")}</th>
+                    <th style={{ padding: "6px 4px", fontWeight: 600, textAlign: "right" }}>{t("portal.brief.table.rows")}</th>
+                    <th style={{ padding: "6px 4px", fontWeight: 600, textAlign: "right" }}>{t("portal.brief.table.weight")}</th>
+                    <th style={{ padding: "6px 4px", fontWeight: 600, textAlign: "right" }}>{t("portal.brief.table.power")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1589,6 +1613,7 @@ function AttachmentsList({
   attachments: BriefAttachment[];
 }) {
   const c = PALETTE[theme];
+  const t = useT();
   return (
     <ul
       style={{
@@ -1704,15 +1729,15 @@ function AssignmentCard({
   const t = useT();
   const fee = assignment.dayRate;
   const dayBreakdown = useMemo(
-    () => groupAssignedDaysByPhase(assignment.assignedDates, schedule),
-    [assignment.assignedDates, schedule],
+    () => groupAssignedDaysByPhase(assignment.assignedDates, schedule, t),
+    [assignment.assignedDates, schedule, t],
   );
   const shiftSlots = useMemo(() => {
     const phaseLabels: Record<string, string> = {
-      setup: "Load-in",
-      rehearsal: "Soundcheck",
-      show: "Show",
-      downrig: "Load-out",
+      setup: t("portal.brief.phase.setup"),
+      rehearsal: t("portal.brief.phase.rehearsal"),
+      show: t("portal.brief.phase.show"),
+      downrig: t("portal.brief.phase.loadOut"),
     };
     const phaseKeys = Array.from(
       new Set([
@@ -1743,11 +1768,15 @@ function AssignmentCard({
           dateKey,
           phaseLabel: phaseLabels[phaseKey] ?? phaseKey,
           callLabel:
-            timings.length > 1 ? `Call ${windowIndex + 1}` : "Shift",
+            timings.length > 1
+              ? t("portal.brief.assignment.callNumber", {
+                  number: windowIndex + 1,
+                })
+              : t("portal.brief.assignment.shift"),
           timing:
             timing.startTime && timing.endTime
               ? `${timing.startTime}–${timing.endTime}`
-              : "Times to be confirmed",
+              : t("portal.brief.assignment.timesToBeConfirmed"),
           tasks: assignment.assignedShiftTasks?.[key] ?? [],
         }));
     });
@@ -1755,12 +1784,12 @@ function AssignmentCard({
     return (assignment.assignedDates ?? []).map((dateKey) => ({
       key: `${dateKey}::day::0`,
       dateKey,
-      phaseLabel: "Working day",
-      callLabel: "Shift",
+      phaseLabel: t("portal.brief.assignment.workingDay"),
+      callLabel: t("portal.brief.assignment.shift"),
       timing:
         assignment.callTime && assignment.offTime
           ? `${assignment.callTime}–${assignment.offTime}`
-          : "Times to be confirmed",
+          : t("portal.brief.assignment.timesToBeConfirmed"),
       tasks: [] as string[],
     }));
   }, [
@@ -1771,6 +1800,7 @@ function AssignmentCard({
     assignment.assignedShiftWindows,
     assignment.callTime,
     assignment.offTime,
+    t,
   ]);
   const [draftResponses, setDraftResponses] = useState<ShiftResponseMap>({});
   useEffect(() => {
@@ -1821,7 +1851,12 @@ function AssignmentCard({
           marginTop: 12,
         }}
       >
-        <Field theme={theme} label="Role" value={assignment.role} strong />
+        <Field
+          theme={theme}
+          label={t("portal.brief.assignment.role")}
+          value={assignment.role}
+          strong
+        />
         <Field
           theme={theme}
           label="Call time"
@@ -1834,7 +1869,7 @@ function AssignmentCard({
         />
         <Field
           theme={theme}
-          label="Hours"
+          label={t("portal.brief.assignment.hours")}
           value={assignment.hours > 0 ? `${formatNumber(assignment.hours, 1)} h` : "—"}
         />
         <Field
@@ -2010,7 +2045,7 @@ function AssignmentCard({
               marginBottom: 8,
             }}
           >
-            Working days
+            {t("portal.brief.assignment.workingDays")}
           </div>
           <div
             style={{
@@ -2145,7 +2180,9 @@ function AssignmentCard({
           ) : (
             <>
               <span style={{ fontSize: 13, fontWeight: 700, color: c.muted }}>
-                {decision === "accepted" ? "Accepted" : "Declined"}
+                {decision === "accepted"
+                  ? t("portal.brief.decision.accepted")
+                  : t("portal.brief.decision.declined")}
               </span>
               {decision === "accepted" && acceptedGigId ? (
                 <button
@@ -2300,7 +2337,9 @@ function GenericNoticeCard({
                 cursor: "pointer",
               }}
             >
-              {conflicts.length > 0 ? "Add anyway" : "Add to logbook"}
+              {conflicts.length > 0
+                ? t("portal.brief.actions.addAnyway")
+                : t("portal.brief.actions.addToLogbook")}
             </button>
             <button
               type="button"
@@ -2486,15 +2525,16 @@ function CrewTable({
   myCrewId: string | null;
 }) {
   const c = PALETTE[theme];
+  const t = useT();
   if (assignments.length === 0) {
-    return <Empty theme={theme} text="No crew on this call sheet." />;
+    return <Empty theme={theme} text={t("portal.brief.crew.empty")} />;
   }
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
       <thead>
         <tr style={{ color: c.muted, textAlign: "left" }}>
-          <th style={{ padding: "6px 4px", fontWeight: 600 }}>Name</th>
-          <th style={{ padding: "6px 4px", fontWeight: 600 }}>Role</th>
+          <th style={{ padding: "6px 4px", fontWeight: 600 }}>{t("portal.brief.crew.name")}</th>
+          <th style={{ padding: "6px 4px", fontWeight: 600 }}>{t("portal.brief.crew.role")}</th>
           <th
             style={{
               padding: "6px 4px",
@@ -2502,7 +2542,7 @@ function CrewTable({
               textAlign: "right",
             }}
           >
-            Call → Off
+            {t("portal.brief.crew.callToOff")}
           </th>
         </tr>
       </thead>
@@ -2552,6 +2592,7 @@ function RiggPlanMap({
   plan: BriefRiggPlan;
 }) {
   const c = PALETTE[theme];
+  const t = useT();
   // SVG viewport sized to keep ~1m = up to 24px, capped at 720px wide.
   const padding = 0.5;
   const venueW = plan.venue.widthM;
@@ -2585,7 +2626,7 @@ function RiggPlanMap({
           height={svgH}
           viewBox={`0 0 ${svgW} ${svgH}`}
           role="img"
-          aria-label="Top-down rigg plan"
+          aria-label={t("portal.brief.riggPlanAria")}
           style={{ display: "block", maxWidth: "100%", height: "auto" }}
         >
           {/* venue rectangle */}
@@ -2657,10 +2698,11 @@ function ScheduleList({
   schedule: BriefSchedule;
 }) {
   const c = PALETTE[theme];
+  const t = useT();
   const blocks = PHASE_ORDER.flatMap((key) => {
     const segs = schedule[key];
     if (!segs || segs.length === 0) return [];
-    return [{ key, label: PHASE_LABELS[key], segments: segs }];
+    return [{ key, label: t(PHASE_LABEL_KEYS[key]), segments: segs }];
   });
   if (blocks.length === 0) return null;
   return (
@@ -2763,6 +2805,16 @@ function UpdateBanner({
 }) {
   const c = PALETTE[theme];
   const t = useT();
+  const renderDiffValue = (value: DiffEntry["before"]) =>
+    value.kind === "message" ? t(value.key, value.params) : value.text;
+  const renderDiffLabel = (diff: DiffEntry) => {
+    const params = diff.labelParams;
+    const phase =
+      params && typeof params.phaseKey === "string"
+        ? t(params.phaseKey as Parameters<typeof t>[0])
+        : "";
+    return t(diff.labelKey, { ...params, phase });
+  };
   const visible = diffs.slice(0, 6);
   const extra = diffs.length - visible.length;
   return (
@@ -2785,10 +2837,10 @@ function UpdateBanner({
         }}
       >
         <strong style={{ fontSize: 14, color: c.text }}>
-          The producer updated this brief
+          {t("portal.brief.diff.updatedTitle")}
         </strong>
         <span style={{ fontSize: 12, color: c.muted }}>
-          since you last reviewed it
+          {t("portal.brief.diff.updatedSubtitle")}
         </span>
       </div>
       <ul
@@ -2809,16 +2861,23 @@ function UpdateBanner({
               color: c.text,
             }}
           >
-            <strong style={{ color: c.text }}>{d.label}:</strong>{" "}
+            <strong style={{ color: c.text }}>{renderDiffLabel(d)}:</strong>{" "}
             <span style={{ color: c.muted, textDecoration: "line-through" }}>
-              {d.before}
+              {renderDiffValue(d.before)}
             </span>{" "}
-            <span style={{ color: c.text, fontWeight: 700 }}>→ {d.after}</span>
+            <span style={{ color: c.text, fontWeight: 700 }}>
+              → {renderDiffValue(d.after)}
+            </span>
           </li>
         ))}
         {extra > 0 ? (
           <li style={{ fontSize: 12, color: c.muted, marginTop: 2 }}>
-            …and {extra} more change{extra === 1 ? "" : "s"}.
+            {t(
+              extra === 1
+                ? "portal.brief.diff.moreChangeOne"
+                : "portal.brief.diff.moreChangeMany",
+              { count: extra },
+            )}
           </li>
         ) : null}
       </ul>

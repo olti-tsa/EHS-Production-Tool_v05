@@ -47,13 +47,13 @@ export function DeleteProjectDialog({
   const nameToMatch = projectName || t("shell.breadcrumb.untitled");
 
   const confirmationMatches =
-    !requiresTypedConfirmation || confirmText.trim() === nameToMatch.trim();
+    !requiresTypedConfirmation || confirmText === nameToMatch;
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (loading) return;
     if (!confirmationMatches) {
-      setError("Please type the exact project name to confirm deletion.");
+      setError(t("project.delete.error.exactName"));
       return;
     }
     

@@ -7,6 +7,7 @@ import {
   type FixtureRef,
   type PowerPlan,
 } from "./power";
+import type { Locale } from "./i18n/types";
 
 type SystemLite = { id: string; name: string };
 
@@ -20,7 +21,20 @@ type ProjectMeta = {
   preparedBy: string;
 };
 
-type ExportInput = {
+export type PowerPlanExportCopy = {
+  documentTitle: string; productionTool: string; manifest: string; generated: string;
+  print: string; downloadJson: string; close: string; venueProject: string; date: string;
+  projectManager: string; distros: string; totalLoad: string; worstLeg: string;
+  unpowered: string; racks: string; fixtures: string; breakdown: string; connectedLoad: string;
+  feeds: string; phases: string; channels: string; phase: string; watts: string; amps: string;
+  truss: string; fixture: string; quantity: string; cable: string; channelSubtotal: string;
+  breaker: string; noDrops: string; distroFallback: string; powerPlanFallback: string;
+  noDistros: string; unpoweredWarning: (count: number) => string; footer: string;
+  feederUtilization: string; imbalance: string;
+  grandTotal: (watts: string, amps: string) => string;
+};
+
+export type ExportInput = {
   plan: PowerPlan;
   fixtures: FixtureRef[];
   systems: SystemLite[];
@@ -33,13 +47,16 @@ type ExportInput = {
   /** Pre-opened popup window from the click handler (sync open keeps
    *  the browser from classifying it as a programmatic pop-up). */
   targetWin: Window | null;
+  locale: Locale;
+  copy: PowerPlanExportCopy;
 };
 
-const fmt = (n: number, d = 1) =>
-  n.toLocaleString("en-US", { maximumFractionDigits: d });
+const localeId = (locale: Locale) => locale === "no" ? "nb-NO" : "en-US";
+const fmt = (n: number, locale: Locale, d = 1) =>
+  n.toLocaleString(localeId(locale), { maximumFractionDigits: d });
 
-const fmtInt = (n: number) =>
-  Math.round(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
+const fmtInt = (n: number, locale: Locale) =>
+  Math.round(n).toLocaleString(localeId(locale), { maximumFractionDigits: 0 });
 
 const escapeHtml = (s: string): string =>
   s
@@ -48,6 +65,14 @@ const escapeHtml = (s: string): string =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+
+function fmtProjectDate(iso: string, locale: Locale): string {
+  if (!iso) return "—";
+  const date = new Date(`${iso}T00:00:00Z`);
+  return Number.isNaN(date.getTime())
+    ? iso
+    : date.toLocaleDateString(localeId(locale), { timeZone: "UTC" });
+}
 
 /** Versioned JSON contract bundled into the export window for download.
  *  Mirrors the visible HTML — distros, channels, drops, per-truss
@@ -165,14 +190,14 @@ function buildManifest(input: ExportInput): PowerPlanManifest {
 
 /** Render a single distro card in the Stage-style sectioned layout —
  *  H2 heading, meta line, phase table, and per-channel drop tables. */
-function renderDistroSection(d: PowerPlanManifest["distros"][number]): string {
+function renderDistroSection(d: PowerPlanManifest["distros"][number], locale: Locale, copy: PowerPlanExportCopy): string {
   const phaseRows = d.phases
     .map(
       (p) => `
         <tr>
           <td><strong>${p.phase}</strong></td>
-          <td>${fmtInt(p.watts)} W</td>
-          <td>${fmt(p.amps, 1)} A</td>
+          <td>${fmtInt(p.watts, locale)} W</td>
+          <td>${fmt(p.amps, locale, 1)} A</td>
           <td class="muted">${
             p.channels.length === 0
               ? "—"
@@ -188,31 +213,31 @@ function renderDistroSection(d: PowerPlanManifest["distros"][number]): string {
     .map((cl) => {
       const dropRows =
         cl.drops.length === 0
-          ? `<tr><td colspan="5" class="muted">— no drops on this channel —</td></tr>`
+          ? `<tr><td colspan="5" class="muted">— ${escapeHtml(copy.noDrops)} —</td></tr>`
           : cl.drops
               .map(
                 (dr) => `
                 <tr>
                   <td>${escapeHtml(dr.trussName)}</td>
                   <td>${escapeHtml(dr.fixtureRef || "—")}</td>
-                  <td>${dr.qty}</td>
-                  <td>${fmtInt(dr.watts)} W</td>
+                  <td>${fmtInt(dr.qty, locale)}</td>
+                  <td>${fmtInt(dr.watts, locale)} W</td>
                   <td class="muted">${escapeHtml(dr.cable ?? "—")}</td>
                 </tr>`,
               )
               .join("") +
-            `<tr class="row-total"><td colspan="3">Channel subtotal</td><td>${fmtInt(cl.watts)} W</td><td>${fmt(cl.amps, 1)} A</td></tr>`;
+             `<tr class="row-total"><td colspan="3">${escapeHtml(copy.channelSubtotal)}</td><td>${fmtInt(cl.watts, locale)} W</td><td>${fmt(cl.amps, locale, 1)} A</td></tr>`;
       return `
         <div class="channel-block">
-          <h3>Ch${cl.index} <span class="ch-tag">${cl.phase ?? "—"}</span> <span class="ch-tag">${cl.breakerAmps} A breaker</span></h3>
+          <h3>Ch${cl.index} <span class="ch-tag">${cl.phase ?? "—"}</span> <span class="ch-tag">${cl.breakerAmps} A ${escapeHtml(copy.breaker)}</span></h3>
           <table>
             <thead>
               <tr>
-                <th>Truss</th>
-                <th>Fixture</th>
-                <th>Qty</th>
-                <th>Watts</th>
-                <th>Cable</th>
+                <th>${escapeHtml(copy.truss)}</th>
+                <th>${escapeHtml(copy.fixture)}</th>
+                <th>${escapeHtml(copy.quantity)}</th>
+                <th>${escapeHtml(copy.watts)}</th>
+                <th>${escapeHtml(copy.cable)}</th>
               </tr>
             </thead>
             <tbody>${dropRows}</tbody>
@@ -223,11 +248,11 @@ function renderDistroSection(d: PowerPlanManifest["distros"][number]): string {
 
   return `
     <section class="distro-section">
-      <h2>${escapeHtml(d.name || "Distro")}</h2>
+      <h2>${escapeHtml(d.name || copy.distroFallback)}</h2>
       <div class="distro-meta">
-        <span class="ch-tag">${d.feedVoltage} V · ${d.feedAmps} A · ${d.feedPhases}ph</span>
+        <span class="ch-tag">${fmtInt(d.feedVoltage, locale)} V · ${fmtInt(d.feedAmps, locale)} A · ${fmtInt(d.feedPhases, locale)}ph</span>
         ${d.source ? `<span class="muted">${escapeHtml(d.source)}</span>` : ""}
-        <span class="muted">Feeds: ${
+        <span class="muted">${escapeHtml(copy.feeds)}: ${
           d.feedsTrusses.length === 0
             ? "—"
             : d.feedsTrusses.map(escapeHtml).join(", ")
@@ -236,32 +261,32 @@ function renderDistroSection(d: PowerPlanManifest["distros"][number]): string {
 
       <div class="specs-grid">
         <div class="spec-card">
-          <div class="label">Total load</div>
-          <div class="value">${fmtInt(d.totalWatts)}<span class="unit">W</span></div>
+          <div class="label">${escapeHtml(copy.totalLoad)}</div>
+          <div class="value">${fmtInt(d.totalWatts, locale)}<span class="unit">W</span></div>
         </div>
         <div class="spec-card">
-          <div class="label">Worst leg</div>
-          <div class="value">${fmt(d.feederWorstAmps, 1)}<span class="unit">A</span></div>
+          <div class="label">${escapeHtml(copy.worstLeg)}</div>
+          <div class="value">${fmt(d.feederWorstAmps, locale, 1)}<span class="unit">A</span></div>
         </div>
         <div class="spec-card">
-          <div class="label">Feeder util</div>
-          <div class="value">${fmt(d.feederUtilization * 100, 0)}<span class="unit">%</span></div>
+          <div class="label">${escapeHtml(copy.feederUtilization)}</div>
+          <div class="value">${fmt(d.feederUtilization * 100, locale, 0)}<span class="unit">%</span></div>
         </div>
         <div class="spec-card">
-          <div class="label">Imbalance</div>
-          <div class="value">${d.feedPhases === 3 ? `${fmt(d.imbalance * 100, 0)}` : "—"}<span class="unit">${d.feedPhases === 3 ? "%" : ""}</span></div>
+          <div class="label">${escapeHtml(copy.imbalance)}</div>
+          <div class="value">${d.feedPhases === 3 ? `${fmt(d.imbalance * 100, locale, 0)}` : "—"}<span class="unit">${d.feedPhases === 3 ? "%" : ""}</span></div>
         </div>
       </div>
 
-      <h3>Phases</h3>
+       <h3>${escapeHtml(copy.phases)}</h3>
       <table>
         <thead>
-          <tr><th>Phase</th><th>Watts</th><th>Amps</th><th>Channels</th></tr>
+           <tr><th>${escapeHtml(copy.phase)}</th><th>${escapeHtml(copy.watts)}</th><th>${escapeHtml(copy.amps)}</th><th>${escapeHtml(copy.channels)}</th></tr>
         </thead>
         <tbody>${phaseRows}</tbody>
       </table>
 
-      <h3>Channels</h3>
+       <h3>${escapeHtml(copy.channels)}</h3>
       <div class="channel-grid">${channelTables}</div>
     </section>`;
 }
@@ -276,23 +301,25 @@ function renderHtml(
   manifest: PowerPlanManifest,
   jsonText: string,
   logoDataUrl: string | null,
+  locale: Locale,
+  copy: PowerPlanExportCopy,
 ): string {
   const distros =
     manifest.distros.length === 0
-      ? `<div class="warn">No distros in this power plan yet — add a distro on the Power Plan tab before exporting.</div>`
-      : manifest.distros.map(renderDistroSection).join("\n");
+      ? `<div class="warn">${escapeHtml(copy.noDistros)}</div>`
+      : manifest.distros.map((distro) => renderDistroSection(distro, locale, copy)).join("\n");
 
-  const projTitle = manifest.project.venue || "Power Plan";
-  const generatedAt = new Date(manifest.generatedAt).toLocaleString();
+  const projTitle = manifest.project.venue || copy.powerPlanFallback;
+  const generatedAt = new Date(manifest.generatedAt).toLocaleString(localeId(locale));
 
   // Embed the JSON in a script tag (escape closing tags) for Download.
   const safeJson = jsonText.replace(/<\/script/gi, "<\\/script");
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${locale === "no" ? "nb-NO" : "en"}">
 <head>
 <meta charset="utf-8" />
-<title>Power Plan — ${escapeHtml(projTitle)}</title>
+<title>${escapeHtml(copy.documentTitle)} — ${escapeHtml(projTitle)}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -402,21 +429,21 @@ function renderHtml(
 </head>
 <body>
 <div class="print-bar no-print">
-  <button onclick="window.print()" class="primary">Print / Save as PDF</button>
-  <button onclick="downloadJson()">Download JSON</button>
-  <button onclick="window.close()">Close</button>
+  <button onclick="window.print()" class="primary">${escapeHtml(copy.print)}</button>
+  <button onclick="downloadJson()">${escapeHtml(copy.downloadJson)}</button>
+  <button onclick="window.close()">${escapeHtml(copy.close)}</button>
 </div>
 
 <div class="header">
   <div class="header-left">
     ${logoDataUrl ? `<img src="${logoDataUrl}" alt="EHS" class="logo" />` : ""}
     <div class="brand">
-      <strong>Production Tool</strong>
-      Power Plan — Crew Manifest
+      <strong>${escapeHtml(copy.productionTool)}</strong>
+      ${escapeHtml(copy.documentTitle)} — ${escapeHtml(copy.manifest)}
     </div>
   </div>
   <div class="header-right">
-    Generated ${escapeHtml(generatedAt)}
+    ${escapeHtml(copy.generated)} ${escapeHtml(generatedAt)}
   </div>
 </div>
 
@@ -424,61 +451,59 @@ function renderHtml(
 
 <div class="meta-grid">
   <div class="meta-item">
-    <div class="label">Venue / Project</div>
+    <div class="label">${escapeHtml(copy.venueProject)}</div>
     <div class="value">${escapeHtml(manifest.project.venue || "—")}</div>
   </div>
   <div class="meta-item">
-    <div class="label">Date</div>
+    <div class="label">${escapeHtml(copy.date)}</div>
     <div class="value">${
       manifest.project.endDate &&
       manifest.project.endDate !== manifest.project.date
-        ? `${escapeHtml(manifest.project.date || "—")} → ${escapeHtml(manifest.project.endDate)}`
-        : escapeHtml(manifest.project.date || "—")
+        ? `${escapeHtml(fmtProjectDate(manifest.project.date, locale))} → ${escapeHtml(fmtProjectDate(manifest.project.endDate, locale))}`
+        : escapeHtml(fmtProjectDate(manifest.project.date, locale))
     }</div>
   </div>
   <div class="meta-item">
-    <div class="label">Project manager</div>
+    <div class="label">${escapeHtml(copy.projectManager)}</div>
     <div class="value">${escapeHtml(manifest.project.preparedBy || "—")}</div>
   </div>
   <div class="meta-item">
-    <div class="label">Distros</div>
-    <div class="value">${manifest.totals.distroCount}</div>
+    <div class="label">${escapeHtml(copy.distros)}</div>
+    <div class="value">${fmtInt(manifest.totals.distroCount, locale)}</div>
   </div>
 </div>
 
 <div class="specs-grid">
   <div class="spec-card">
-    <div class="label">Total load</div>
-    <div class="value">${fmtInt(manifest.totals.totalWatts)}<span class="unit">W</span></div>
+    <div class="label">${escapeHtml(copy.totalLoad)}</div>
+    <div class="value">${fmtInt(manifest.totals.totalWatts, locale)}<span class="unit">W</span></div>
   </div>
   <div class="spec-card">
-    <div class="label">Worst leg</div>
-    <div class="value">${fmt(manifest.totals.totalAmpsWorstLeg, 1)}<span class="unit">A</span></div>
+    <div class="label">${escapeHtml(copy.worstLeg)}</div>
+    <div class="value">${fmt(manifest.totals.totalAmpsWorstLeg, locale, 1)}<span class="unit">A</span></div>
   </div>
   <div class="spec-card">
-    <div class="label">Distros</div>
-    <div class="value">${manifest.totals.distroCount}<span class="unit">racks</span></div>
+    <div class="label">${escapeHtml(copy.distros)}</div>
+    <div class="value">${fmtInt(manifest.totals.distroCount, locale)}<span class="unit">${escapeHtml(copy.racks)}</span></div>
   </div>
   <div class="spec-card">
-    <div class="label">Unpowered</div>
-    <div class="value">${manifest.totals.unpoweredFixtureCount}<span class="unit">fixtures</span></div>
+    <div class="label">${escapeHtml(copy.unpowered)}</div>
+    <div class="value">${fmtInt(manifest.totals.unpoweredFixtureCount, locale)}<span class="unit">${escapeHtml(copy.fixtures)}</span></div>
   </div>
 </div>
 
-${manifest.totals.unpoweredFixtureCount > 0 ? `<div class="warn">⚠ ${manifest.totals.unpoweredFixtureCount} fixture${manifest.totals.unpoweredFixtureCount === 1 ? "" : "s"} are not yet assigned to any distro channel. Please review on the Power Plan tab before sending to crew.</div>` : ""}
+${manifest.totals.unpoweredFixtureCount > 0 ? `<div class="warn">⚠ ${escapeHtml(copy.unpoweredWarning(manifest.totals.unpoweredFixtureCount))}</div>` : ""}
 
-<h2>Distros &amp; channel breakdown</h2>
+<h2>${escapeHtml(copy.breakdown)}</h2>
 ${distros}
 
 <div class="grand-total">
-  <span>Total connected load</span>
-  <strong>${fmtInt(manifest.totals.totalWatts)} W · worst leg ${fmt(manifest.totals.totalAmpsWorstLeg, 1)} A</strong>
+  <span>${escapeHtml(copy.connectedLoad)}</span>
+  <strong>${escapeHtml(copy.grandTotal(`${fmtInt(manifest.totals.totalWatts, locale)} W`, `${fmt(manifest.totals.totalAmpsWorstLeg, locale, 1)} A`))}</strong>
 </div>
 
 <div class="footer">
-  Generated by Production Tool — Power Plan v2.2. Math uses A = W / (V × PF)
-  with PF 0.95 and an 80 % derate for continuous loads. Always cross-check
-  feeder sizing and breaker coordination on site.
+  ${escapeHtml(copy.footer)}
 </div>
 
 <script id="manifest-json" type="application/json">${safeJson}</script>
@@ -517,7 +542,7 @@ export function exportPowerPlanToCrew(input: ExportInput): {
 } {
   const manifest = buildManifest(input);
   const jsonText = JSON.stringify(manifest, null, 2);
-  const html = renderHtml(manifest, jsonText, input.logoDataUrl);
+  const html = renderHtml(manifest, jsonText, input.logoDataUrl, input.locale, input.copy);
   const win = input.targetWin;
   if (!win) {
     // Caller's synchronous window.open() was blocked — try a last

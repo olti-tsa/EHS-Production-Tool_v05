@@ -17,6 +17,8 @@ import type {
   ExtractedItems,
 } from "../lib/drawingAnalysis";
 import type { FloorPlan } from "../lib/floorPlan";
+import { useI18n, useT } from "../lib/i18n/I18nContext";
+import type { TranslationKey } from "../lib/i18n/types";
 
 /** Round numeric truss fields to one decimal so JSON storage stays
  *  small and the editor table never displays floating-point fuzz. */
@@ -97,8 +99,15 @@ const DRAWING_IMPORTER_FALLBACK_VENUE = {
   ceilingM: 8,
 };
 
-const fmt = (n: number, d = 1) =>
-  n.toLocaleString("en-US", { maximumFractionDigits: d });
+const fmt = (n: number, locale: "en" | "no", d = 1) =>
+  n.toLocaleString(locale === "no" ? "nb-NO" : "en-US", {
+    maximumFractionDigits: d,
+  });
+
+const trussRotationKey: Record<TrussRotation, TranslationKey> = {
+  0: "riggPlan.truss.rotation.width",
+  90: "riggPlan.truss.rotation.depth",
+};
 
 /** Pixels per metre at the default zoom. The SVG scales to fit the
  *  available width but we keep this constant to compute reasonable
@@ -123,6 +132,8 @@ export function RiggPlanView({
   onRemoveFloorPlan,
   onSelectFloorPlan,
 }: Props) {
+  const t = useT();
+  const { locale } = useI18n();
   const { venue, trussById } = plan;
   // The active plan is whatever the producer last selected; if the
   // active id no longer matches anything in the library (e.g. after a
@@ -171,28 +182,27 @@ export function RiggPlanView({
     <div className="led-report">
       <header className="led-report-header">
         <div>
-          <h2>Smash It</h2>
+          <h2>{t("view.riggPlan")}</h2>
           <p className="led-report-sub">
-            Top-down floor plan of the venue. Each rigging system from the
-            Rigging Report appears as a truss — drag to position, edit
-            trim height &amp; length below. Snaps to a 0.5 m grid.
+            {t("riggPlan.subtitle")}
           </p>
         </div>
         <div className="led-report-meta">
           {venue ? (
             <>
               <span className="badge">
-                <strong>{venue.widthM} × {venue.depthM} m</strong> venue
+                <strong>{venue.widthM} × {venue.depthM} m</strong>{" "}
+                {t("riggPlan.meta.venue")}
               </span>
               <span className="badge">
-                <strong>{venue.ceilingM} m</strong> ceiling
+                <strong>{venue.ceilingM} m</strong> {t("riggPlan.meta.ceiling")}
               </span>
               <span className="badge">
-                <strong>{placedSystems.length}</strong> trusses
+                <strong>{placedSystems.length}</strong> {t("riggPlan.meta.trusses")}
               </span>
             </>
           ) : (
-            <span className="badge">No venue</span>
+            <span className="badge">{t("riggPlan.meta.noVenue")}</span>
           )}
         </div>
       </header>
@@ -216,10 +226,9 @@ export function RiggPlanView({
       {floorPlans.length > 0 && (
         <section className="led-card">
           <div className="led-card-head">
-            <h3>Floor plans ({floorPlans.length})</h3>
+            <h3>{t("riggPlan.floorPlans.title", { count: floorPlans.length })}</h3>
             <span className="led-hint">
-              Multiple uploads from the same project? Pick which one shows
-              on the canvas. Delete the ones you no longer need.
+              {t("riggPlan.floorPlans.hint")}
             </span>
           </div>
           <ul
@@ -277,7 +286,7 @@ export function RiggPlanView({
                     </span>
                     {isActive && (
                       <span className="led-sub" style={{ marginLeft: 4 }}>
-                        (showing)
+                        {t("riggPlan.floorPlans.showing")}
                       </span>
                     )}
                   </label>
@@ -287,15 +296,17 @@ export function RiggPlanView({
                     onClick={() => {
                       if (
                         window.confirm(
-                          `Delete floor plan "${p.fileName}"? This cannot be undone.`,
+                          t("riggPlan.floorPlans.deleteConfirm", {
+                            name: p.fileName,
+                          }),
                         )
                       ) {
                         onRemoveFloorPlan(p.id);
                       }
                     }}
-                    title="Remove this floor plan from the library"
+                    title={t("riggPlan.floorPlans.removeTitle")}
                   >
-                    Delete
+                    {t("common.delete")}
                   </button>
                 </li>
               );
@@ -309,23 +320,23 @@ export function RiggPlanView({
            venue or hit Reset. Show a single CTA to add one back. */
         <section className="led-card">
           <div className="led-card-head">
-            <h3>Venue</h3>
+            <h3>{t("riggPlan.venue.title")}</h3>
             <span className="led-hint">
-              Add a venue to start placing trusses on the floor plan.
+              {t("riggPlan.venue.emptyHint")}
             </span>
           </div>
           <div className="led-empty">
-            No venue yet — start with the standard{" "}
-            {DRAWING_IMPORTER_FALLBACK_VENUE.widthM}&nbsp;×&nbsp;
-            {DRAWING_IMPORTER_FALLBACK_VENUE.depthM} m default and adjust
-            from there.
+            {t("riggPlan.venue.empty", {
+              width: DRAWING_IMPORTER_FALLBACK_VENUE.widthM,
+              depth: DRAWING_IMPORTER_FALLBACK_VENUE.depthM,
+            })}
             <div style={{ marginTop: 12 }}>
               <button
                 type="button"
                 className="btn btn-primary"
                 onClick={onAddVenue}
               >
-                + Add venue
+                {t("riggPlan.venue.add")}
               </button>
             </div>
           </div>
@@ -335,25 +346,24 @@ export function RiggPlanView({
           {/* Venue editor */}
           <section className="led-card">
             <div className="led-card-head">
-              <h3>Venue</h3>
+              <h3>{t("riggPlan.venue.title")}</h3>
               <div className="led-controls">
                 <span className="led-hint">
-                  Width is stage-left to stage-right; depth is downstage
-                  to upstage.
+                  {t("riggPlan.venue.dimensionsHint")}
                 </span>
                 <button
                   type="button"
                   className="btn btn-danger btn-sm"
                   onClick={onDeleteVenue}
-                  title="Delete the venue and every placed truss"
+                  title={t("riggPlan.venue.deleteTitle")}
                 >
-                  Delete venue
+                  {t("riggPlan.venue.delete")}
                 </button>
               </div>
             </div>
             <div className="rigg-venue-grid">
               <label className="led-field">
-                <span className="led-field-label">Width (m)</span>
+                <span className="led-field-label">{t("riggPlan.venue.width")}</span>
                 <NumberField
                   className="led-input led-input-num"
                   min={1}
@@ -365,7 +375,7 @@ export function RiggPlanView({
                 />
               </label>
               <label className="led-field">
-                <span className="led-field-label">Depth (m)</span>
+                <span className="led-field-label">{t("riggPlan.venue.depth")}</span>
                 <NumberField
                   className="led-input led-input-num"
                   min={1}
@@ -377,7 +387,7 @@ export function RiggPlanView({
                 />
               </label>
               <label className="led-field">
-                <span className="led-field-label">Ceiling (m)</span>
+                <span className="led-field-label">{t("riggPlan.venue.ceiling")}</span>
                 <NumberField
                   className="led-input led-input-num"
                   min={1}
@@ -394,20 +404,20 @@ export function RiggPlanView({
           {/* Plan canvas */}
           <section className="led-card">
             <div className="led-card-head">
-              <h3>Floor plan</h3>
+              <h3>{t("riggPlan.canvas.title")}</h3>
             </div>
 
             {systems.length === 0 ? (
               <div className="led-empty">
-                No rigging systems yet — add one on the{" "}
+                {t("riggPlan.canvas.emptyPrefix")}{" "}
                 <button
                   type="button"
                   className="btn btn-soft btn-sm"
                   onClick={onJumpToRigging}
                 >
-                  Rigging Report
+                  {t("view.rigging")}
                 </button>{" "}
-                and it will appear here automatically.
+                {t("riggPlan.canvas.emptySuffix")}
               </div>
             ) : (
               <PlanCanvas
@@ -428,30 +438,30 @@ export function RiggPlanView({
       {venue && placedSystems.length > 0 && (
         <section className="led-card">
           <div className="led-card-head">
-            <h3>Trusses</h3>
+            <h3>{t("riggPlan.truss.title")}</h3>
             <span className="led-hint">
-              Numeric editor — finer than dragging.
+              {t("riggPlan.truss.hint")}
             </span>
           </div>
           <div className="led-table-wrap">
             <table className="led-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th className="led-num">X (m)</th>
-                  <th className="led-num">Y (m)</th>
-                  <th className="led-num">Z trim (m)</th>
-                  <th className="led-num">Length (m)</th>
-                  <th>Orient</th>
-                  <th className="led-num">Static load (kg)</th>
-                  <th className="led-num">Peak / SWL</th>
-                  <th aria-label="Delete truss" />
+                  <th>{t("riggPlan.truss.table.name")}</th>
+                  <th className="led-num">{t("riggPlan.truss.table.x")}</th>
+                  <th className="led-num">{t("riggPlan.truss.table.y")}</th>
+                  <th className="led-num">{t("riggPlan.truss.table.zTrim")}</th>
+                  <th className="led-num">{t("riggPlan.truss.table.length")}</th>
+                  <th>{t("riggPlan.truss.table.orientation")}</th>
+                  <th className="led-num">{t("riggPlan.truss.table.staticLoad")}</th>
+                  <th className="led-num">{t("riggPlan.truss.table.peakSwl")}</th>
+                  <th aria-label={t("riggPlan.truss.table.deleteAria")} />
                 </tr>
               </thead>
               <tbody>
                 {placedSystems.map((sys) => {
-                  const t = trussById[sys.id];
-                  if (!t) return null;
+                  const truss = trussById[sys.id];
+                  if (!truss) return null;
                   const status =
                     sys.peakKg > sys.swlKg
                       ? "is-fail"
@@ -466,20 +476,22 @@ export function RiggPlanView({
                     >
                       <td>
                         <strong>{sys.name}</strong>
-                        <div className="led-sub">{sys.pointCount} pts</div>
+                        <div className="led-sub">
+                          {t("riggPlan.truss.points", { count: sys.pointCount })}
+                        </div>
                       </td>
                       <td>
                         <NumberField
                           className="led-input led-input-num"
                           step={0.5}
-                          value={t.x}
+                          value={truss.x}
                           transform={(n) => snapHalfMetre(n || 0)}
                           emptyValue={0}
                           onCommit={(x) =>
                             onUpdateTruss(sys.id, {
                               ...clampTrussToVenue(
                                 {
-                                  ...t,
+                                  ...truss,
                                   x,
                                 },
                                 venue,
@@ -492,14 +504,14 @@ export function RiggPlanView({
                         <NumberField
                           className="led-input led-input-num"
                           step={0.5}
-                          value={t.y}
+                          value={truss.y}
                           transform={(n) => snapHalfMetre(n || 0)}
                           emptyValue={0}
                           onCommit={(y) =>
                             onUpdateTruss(sys.id, {
                               ...clampTrussToVenue(
                                 {
-                                  ...t,
+                                  ...truss,
                                   y,
                                 },
                                 venue,
@@ -514,7 +526,7 @@ export function RiggPlanView({
                           step={0.5}
                           min={0}
                           max={venue.ceilingM}
-                          value={t.z}
+                          value={truss.z}
                           transform={(n) =>
                             Math.min(
                               venue.ceilingM,
@@ -530,7 +542,7 @@ export function RiggPlanView({
                           className="led-input led-input-num"
                           step={0.5}
                           min={0.5}
-                          value={t.lengthM}
+                          value={truss.lengthM}
                           transform={(n) =>
                             Math.max(0.5, snapHalfMetre(n || 0))
                           }
@@ -538,7 +550,7 @@ export function RiggPlanView({
                           onCommit={(lengthM) =>
                             onUpdateTruss(sys.id, {
                               ...clampTrussToVenue(
-                                { ...t, lengthM },
+                                { ...truss, lengthM },
                                 venue,
                               ),
                             })
@@ -548,12 +560,12 @@ export function RiggPlanView({
                       <td>
                         <select
                           className="led-input"
-                          value={t.rotation}
+                          value={truss.rotation}
                           onChange={(e) =>
                             onUpdateTruss(sys.id, {
                               ...clampTrussToVenue(
                                 {
-                                  ...t,
+                                  ...truss,
                                   rotation: Number(e.target.value) as TrussRotation,
                                 },
                                 venue,
@@ -561,13 +573,13 @@ export function RiggPlanView({
                             })
                           }
                         >
-                          <option value={0}>Along width</option>
-                          <option value={90}>Along depth</option>
+                          <option value={0}>{t(trussRotationKey[0])}</option>
+                          <option value={90}>{t(trussRotationKey[90])}</option>
                         </select>
                       </td>
-                      <td className="led-num">{fmt(sys.staticKg, 0)}</td>
+                      <td className="led-num">{fmt(sys.staticKg, locale, 0)}</td>
                       <td className={`led-num rigg-status ${status}`}>
-                        {fmt(sys.peakKg, 0)} / {fmt(sys.swlKg, 0)}
+                        {fmt(sys.peakKg, locale, 0)} / {fmt(sys.swlKg, locale, 0)}
                       </td>
                       <td>
                         <button
@@ -584,9 +596,9 @@ export function RiggPlanView({
                             e.stopPropagation();
                             onDeleteSystem(sys.id);
                           }}
-                          title="Delete this rigging system"
+                          title={t("riggPlan.truss.deleteTitle")}
                         >
-                          Delete
+                          {t("common.delete")}
                         </button>
                       </td>
                     </tr>
@@ -618,6 +630,7 @@ function PlanCanvas({
   onUpdateTruss: (id: string, patch: Partial<RiggPlanTruss>) => void;
   floorPlan: FloorPlan | null;
 }) {
+  const t = useT();
   // SVG uses world-units (metres). We let CSS scale it to fit the card.
   const padM = 1; // padding in metres around the venue rect
   const viewW = venue.widthM + padM * 2;
@@ -713,7 +726,8 @@ function PlanCanvas({
           }}
           title={floorPlan.fileName}
         >
-          Floor plan: <strong>{floorPlan.fileName}</strong>
+          {t("riggPlan.canvas.activeFloorPlan")}:{" "}
+          <strong>{floorPlan.fileName}</strong>
         </div>
       )}
       <svg

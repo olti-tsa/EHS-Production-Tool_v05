@@ -26,8 +26,22 @@ import type {
   ClientPackSchedulePhase,
   ClientPackProject,
 } from "./clientPackExport";
+import type { Locale, TranslationKey } from "./i18n/types";
+
+type SimulationCopyKey = Extract<TranslationKey, `export.simulation.${string}`>;
+export type ShowSimulationCopy = (
+  key: SimulationCopyKey,
+  params?: Record<string, string | number>,
+) => string;
+
+type SimulationI18n = {
+  locale: Locale;
+  copy: ShowSimulationCopy;
+};
 
 export type ShowSimulationInput = {
+  locale: Locale;
+  copy: ShowSimulationCopy;
   project: ClientPackProject;
   schedule: ClientPackSchedulePhase[];
   systems: ClientPackSystem[];
@@ -53,17 +67,19 @@ export type ShowSimulationInput = {
 
 // ─── Formatting helpers ───────────────────────────────────────────────
 
-const NS = "Not specified";
-
-const fmt = (n: number, d = 1): string =>
+const fmt = (n: number, i18n: SimulationI18n, d = 1): string =>
   Number.isFinite(n)
-    ? n.toLocaleString("en-US", { maximumFractionDigits: d })
-    : NS;
+    ? n.toLocaleString(i18n.locale === "no" ? "nb-NO" : "en-US", {
+        maximumFractionDigits: d,
+      })
+    : i18n.copy("export.simulation.notSpecified");
 
-const fmtInt = (n: number): string =>
+const fmtInt = (n: number, i18n: SimulationI18n): string =>
   Number.isFinite(n)
-    ? Math.round(n).toLocaleString("en-US", { maximumFractionDigits: 0 })
-    : NS;
+    ? Math.round(n).toLocaleString(i18n.locale === "no" ? "nb-NO" : "en-US", {
+        maximumFractionDigits: 0,
+      })
+    : i18n.copy("export.simulation.notSpecified");
 
 const escapeHtml = (s: string): string =>
   s
@@ -73,10 +89,14 @@ const escapeHtml = (s: string): string =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-const orNS = (v: string | number | null | undefined): string => {
-  if (v === null || v === undefined) return NS;
-  if (typeof v === "string" && v.trim() === "") return NS;
-  if (typeof v === "number" && !Number.isFinite(v)) return NS;
+const orNS = (
+  v: string | number | null | undefined,
+  i18n: SimulationI18n,
+): string => {
+  const ns = i18n.copy("export.simulation.notSpecified");
+  if (v === null || v === undefined) return escapeHtml(ns);
+  if (typeof v === "string" && v.trim() === "") return escapeHtml(ns);
+  if (typeof v === "number" && !Number.isFinite(v)) return escapeHtml(ns);
   return escapeHtml(String(v));
 };
 
@@ -90,11 +110,19 @@ type RiskItem = {
   message: string;
 };
 
-const riskPill = (level: RiskLevel, label?: string): string => {
+const riskPill = (
+  level: RiskLevel,
+  i18n: SimulationI18n,
+  label?: string,
+): string => {
   const dot = level === "danger" ? "🔴" : level === "warn" ? "🟠" : "🟢";
   const text =
     label ??
-    (level === "danger" ? "AT RISK" : level === "warn" ? "WARNING" : "READY");
+    (level === "danger"
+      ? i18n.copy("export.simulation.status.atRisk")
+      : level === "warn"
+        ? i18n.copy("export.simulation.status.warning")
+        : i18n.copy("export.simulation.status.ready"));
   return `<span class="risk-pill risk-${level}">${dot} ${escapeHtml(text)}</span>`;
 };
 
@@ -106,29 +134,29 @@ const worstLevel = (risks: RiskItem[]): RiskLevel => {
 
 // Per-discipline risk collectors
 
-function riggingRisks(systems: ClientPackSystem[]): RiskItem[] {
+function riggingRisks(systems: ClientPackSystem[], i18n: SimulationI18n): RiskItem[] {
   const out: RiskItem[] = [];
   for (const sys of systems) {
     const m = sys.metrics;
     if (m.swl > 0 && m.peak > m.swl) {
       out.push({
         level: "danger",
-        area: `Rigging · ${sys.name}`,
-        message: `Peak point ${fmtInt(m.peak)} kg over SWL ${fmtInt(m.swl)} kg (${fmt((m.peak / m.swl) * 100, 0)} %).`,
+        area: i18n.copy("export.simulation.area.named", { area: i18n.copy("export.simulation.area.rigging"), name: sys.name }),
+        message: i18n.copy("export.simulation.risk.riggingOver", { peak: fmtInt(m.peak, i18n), swl: fmtInt(m.swl, i18n), percent: fmt((m.peak / m.swl) * 100, i18n, 0) }),
       });
     } else if (m.swl > 0 && m.peak / m.swl > 0.85) {
       out.push({
         level: "warn",
-        area: `Rigging · ${sys.name}`,
-        message: `Peak at ${fmt((m.peak / m.swl) * 100, 0)} % of SWL — review.`,
+        area: i18n.copy("export.simulation.area.named", { area: i18n.copy("export.simulation.area.rigging"), name: sys.name }),
+        message: i18n.copy("export.simulation.risk.riggingNear", { percent: fmt((m.peak / m.swl) * 100, i18n, 0) }),
       });
     }
   }
   if (systems.length === 0) {
     out.push({
       level: "warn",
-      area: "Rigging",
-      message: "No rigging systems defined.",
+      area: i18n.copy("export.simulation.area.rigging"),
+      message: i18n.copy("export.simulation.risk.noRigging"),
     });
   }
   return out;
@@ -137,36 +165,37 @@ function riggingRisks(systems: ClientPackSystem[]): RiskItem[] {
 function lightingRisks(
   loads: DistroLoad[],
   unpoweredFixtureCount: number,
+  i18n: SimulationI18n,
 ): RiskItem[] {
   const out: RiskItem[] = [];
   loads.forEach((d) => {
-    const name = d.distro.name || "Distro";
+    const name = d.distro.name || i18n.copy("export.simulation.distro");
     if (d.feederUtilization > 1) {
       out.push({
         level: "danger",
-        area: `Power · ${name}`,
-        message: `Feeder ${fmt(d.feederUtilization * 100, 0)} % — over breaker.`,
+        area: i18n.copy("export.simulation.area.named", { area: i18n.copy("export.simulation.area.power"), name }),
+        message: i18n.copy("export.simulation.risk.feederOver", { percent: fmt(d.feederUtilization * 100, i18n, 0) }),
       });
     } else if (d.feederUtilization > 0.85) {
       out.push({
         level: "warn",
-        area: `Power · ${name}`,
-        message: `Feeder ${fmt(d.feederUtilization * 100, 0)} % — close to limit.`,
+        area: i18n.copy("export.simulation.area.named", { area: i18n.copy("export.simulation.area.power"), name }),
+        message: i18n.copy("export.simulation.risk.feederNear", { percent: fmt(d.feederUtilization * 100, i18n, 0) }),
       });
     }
     if (d.distro.feedPhases === 3 && d.imbalance > 0.2) {
       out.push({
         level: "warn",
-        area: `Power · ${name}`,
-        message: `Phase imbalance ${fmt(d.imbalance * 100, 0)} % — re-balance L1/L2/L3.`,
+        area: i18n.copy("export.simulation.area.named", { area: i18n.copy("export.simulation.area.power"), name }),
+        message: i18n.copy("export.simulation.risk.phaseImbalance", { percent: fmt(d.imbalance * 100, i18n, 0) }),
       });
     }
   });
   if (unpoweredFixtureCount > 0) {
     out.push({
       level: "warn",
-      area: "Power",
-      message: `${unpoweredFixtureCount} fixture${unpoweredFixtureCount === 1 ? "" : "s"} not assigned to a distro channel.`,
+      area: i18n.copy("export.simulation.area.power"),
+      message: i18n.copy(unpoweredFixtureCount === 1 ? "export.simulation.risk.unpowered.one" : "export.simulation.risk.unpowered.many", { count: unpoweredFixtureCount }),
     });
   }
   return out;
@@ -183,6 +212,7 @@ function ledRisks(
   ledScreens: LedScreen[],
   ledSettings: LedSettings,
   ledPanels: LedPanel[],
+  i18n: SimulationI18n,
 ): RiskItem[] {
   const out: RiskItem[] = [];
   if (ledScreens.length === 0) return out;
@@ -190,24 +220,24 @@ function ledRisks(
   if (ledSettings.portLimit > 0 && totals.largestScreenPixels > ledSettings.portLimit) {
     out.push({
       level: "danger",
-      area: "LED",
-      message: `Largest screen is ${fmtInt(totals.largestScreenPixels)} px — exceeds the ${fmtInt(ledSettings.portLimit)} px / output cap.`,
+      area: i18n.copy("export.simulation.area.led"),
+      message: i18n.copy("export.simulation.risk.ledOver", { pixels: fmtInt(totals.largestScreenPixels, i18n), limit: fmtInt(ledSettings.portLimit, i18n) }),
     });
   }
   if (!ledSettings.processorId && totals.portsNeeded > 0) {
     out.push({
       level: "warn",
-      area: "LED",
-      message: `${totals.portsNeeded} processor output${totals.portsNeeded === 1 ? "" : "s"} needed but no processor selected — capacity not validated.`,
+      area: i18n.copy("export.simulation.area.led"),
+      message: i18n.copy(totals.portsNeeded === 1 ? "export.simulation.risk.processorMissing.one" : "export.simulation.risk.processorMissing.many", { count: totals.portsNeeded }),
     });
   }
   return out;
 }
 
-function stageRisks(stages: Stage[], stageCalcs: StageCalc[]): RiskItem[] {
+function stageRisks(stages: Stage[], stageCalcs: StageCalc[], i18n: SimulationI18n): RiskItem[] {
   const out: RiskItem[] = [];
   stageCalcs.forEach((s, i) => {
-    const name = stages[i]?.name || "Stage";
+    const name = stages[i]?.name || i18n.copy("export.simulation.area.stage");
     if (
       s.loadCapacityKg > 0 &&
       s.totalWeight > 0 &&
@@ -215,8 +245,8 @@ function stageRisks(stages: Stage[], stageCalcs: StageCalc[]): RiskItem[] {
     ) {
       out.push({
         level: "danger",
-        area: `Stage · ${name}`,
-        message: `Build weight ${fmtInt(s.totalWeight)} kg over capacity ${fmtInt(s.loadCapacityKg)} kg.`,
+        area: i18n.copy("export.simulation.area.named", { area: i18n.copy("export.simulation.area.stage"), name }),
+        message: i18n.copy("export.simulation.risk.stageOver", { weight: fmtInt(s.totalWeight, i18n), capacity: fmtInt(s.loadCapacityKg, i18n) }),
       });
     } else if (
       s.loadCapacityKg > 0 &&
@@ -224,21 +254,21 @@ function stageRisks(stages: Stage[], stageCalcs: StageCalc[]): RiskItem[] {
     ) {
       out.push({
         level: "warn",
-        area: `Stage · ${name}`,
-        message: `Build weight at ${fmt((s.totalWeight / s.loadCapacityKg) * 100, 0)} % of capacity.`,
+        area: i18n.copy("export.simulation.area.named", { area: i18n.copy("export.simulation.area.stage"), name }),
+        message: i18n.copy("export.simulation.risk.stageNear", { percent: fmt((s.totalWeight / s.loadCapacityKg) * 100, i18n, 0) }),
       });
     }
   });
   return out;
 }
 
-function crewRisks(crew: CrewMember[]): RiskItem[] {
+function crewRisks(crew: CrewMember[], i18n: SimulationI18n): RiskItem[] {
   const out: RiskItem[] = [];
   if (crew.length === 0) {
     out.push({
       level: "warn",
-      area: "Crew",
-      message: "No crew assigned.",
+      area: i18n.copy("export.simulation.area.crew"),
+      message: i18n.copy("export.simulation.risk.noCrew"),
     });
     return out;
   }
@@ -247,27 +277,27 @@ function crewRisks(crew: CrewMember[]): RiskItem[] {
   if (missingCall.length > 0) {
     out.push({
       level: "warn",
-      area: "Crew",
-      message: `${missingCall.length} crew member${missingCall.length === 1 ? "" : "s"} missing call time.`,
+      area: i18n.copy("export.simulation.area.crew"),
+      message: i18n.copy(missingCall.length === 1 ? "export.simulation.risk.missingCall.one" : "export.simulation.risk.missingCall.many", { count: missingCall.length }),
     });
   }
   if (missingName.length > 0) {
     out.push({
       level: "warn",
-      area: "Crew",
-      message: `${missingName.length} crew slot${missingName.length === 1 ? "" : "s"} missing name.`,
+      area: i18n.copy("export.simulation.area.crew"),
+      message: i18n.copy(missingName.length === 1 ? "export.simulation.risk.missingName.one" : "export.simulation.risk.missingName.many", { count: missingName.length }),
     });
   }
   return out;
 }
 
-function scheduleRisks(schedule: ClientPackSchedulePhase[]): RiskItem[] {
+function scheduleRisks(schedule: ClientPackSchedulePhase[], i18n: SimulationI18n): RiskItem[] {
   const out: RiskItem[] = [];
   if (schedule.length === 0) {
     out.push({
       level: "warn",
-      area: "Schedule",
-      message: "No schedule phases defined — load-in/show/load-out times missing.",
+      area: i18n.copy("export.simulation.area.schedule"),
+      message: i18n.copy("export.simulation.risk.noSchedule"),
     });
     return out;
   }
@@ -276,8 +306,8 @@ function scheduleRisks(schedule: ClientPackSchedulePhase[]): RiskItem[] {
     if (blank.length > 0) {
       out.push({
         level: "warn",
-        area: `Schedule · ${phase.label}`,
-        message: `${blank.length} segment${blank.length === 1 ? "" : "s"} without dates — possible delay.`,
+        area: i18n.copy("export.simulation.area.named", { area: i18n.copy("export.simulation.area.schedule"), name: phase.label }),
+        message: i18n.copy(blank.length === 1 ? "export.simulation.risk.undated.one" : "export.simulation.risk.undated.many", { count: blank.length }),
       });
     }
   }
@@ -286,11 +316,12 @@ function scheduleRisks(schedule: ClientPackSchedulePhase[]): RiskItem[] {
 
 // ─── Discipline status blocks ─────────────────────────────────────────
 
-function riggingBlock(systems: ClientPackSystem[]): string {
+function riggingBlock(systems: ClientPackSystem[], i18n: SimulationI18n): string {
+  const ns = escapeHtml(i18n.copy("export.simulation.notSpecified"));
   if (systems.length === 0) {
     return `<div class="disc-block">
-      <div class="disc-head">RIGGING ${riskPill("warn", "NO SYSTEMS")}</div>
-      <p class="muted">${NS}</p>
+      <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.rigging"))} ${riskPill("warn", i18n, i18n.copy("export.simulation.status.noSystems"))}</div>
+      <p class="muted">${ns}</p>
     </div>`;
   }
   const rows = systems
@@ -305,19 +336,19 @@ function riggingBlock(systems: ClientPackSystem[]): string {
             : "safe";
       return `<tr>
         <td><strong>${escapeHtml(sys.name)}</strong></td>
-        <td>${escapeHtml(sys.hoistName || NS)}</td>
-        <td class="num">${fmtInt(m.peak)} kg</td>
-        <td class="num">${m.swl > 0 ? fmtInt(m.swl) + " kg" : NS}</td>
-        <td class="num">${m.swl > 0 ? fmt(util, 0) + " %" : NS}</td>
-        <td>${riskPill(lvl, lvl === "danger" ? "OVER SWL" : lvl === "warn" ? "WATCH" : "SAFE")}</td>
+        <td>${escapeHtml(sys.hoistName || i18n.copy("export.simulation.notSpecified"))}</td>
+        <td class="num">${fmtInt(m.peak, i18n)} kg</td>
+        <td class="num">${m.swl > 0 ? fmtInt(m.swl, i18n) + " kg" : ns}</td>
+        <td class="num">${m.swl > 0 ? fmt(util, i18n, 0) + " %" : ns}</td>
+        <td>${riskPill(lvl, i18n, i18n.copy(lvl === "danger" ? "export.simulation.status.overSwl" : lvl === "warn" ? "export.simulation.status.watch" : "export.simulation.status.safe"))}</td>
       </tr>`;
     })
     .join("");
-  const overall = worstLevel(riggingRisks(systems));
+  const overall = worstLevel(riggingRisks(systems, i18n));
   return `<div class="disc-block">
-    <div class="disc-head">RIGGING — Load &amp; SWL ${riskPill(overall)}</div>
+    <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.riggingLoad"))} ${riskPill(overall, i18n)}</div>
     <table>
-      <thead><tr><th>System</th><th>Motor</th><th class="num">Peak</th><th class="num">SWL</th><th class="num">Util</th><th>Status</th></tr></thead>
+      <thead><tr>${["system","motor","peak","swl","util","status"].map((k, i) => `<th${i >= 2 && i <= 4 ? ' class="num"' : ""}>${escapeHtml(i18n.copy(`export.simulation.table.${k}` as SimulationCopyKey))}</th>`).join("")}</tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
@@ -327,16 +358,18 @@ function lightingBlock(
   loads: DistroLoad[],
   unpowered: number,
   totals: { totalWatts: number; worstLegA: number; loaded: number },
+  i18n: SimulationI18n,
 ): string {
+  const ns = escapeHtml(i18n.copy("export.simulation.notSpecified"));
   if (loads.length === 0) {
     return `<div class="disc-block">
-      <div class="disc-head">LIGHTING (v2.2) — Power &amp; Phase ${riskPill("warn", "NO DISTROS")}</div>
-      <p class="muted">${NS}</p>
+      <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.lighting"))} ${riskPill("warn", i18n, i18n.copy("export.simulation.status.noDistros"))}</div>
+      <p class="muted">${ns}</p>
     </div>`;
   }
   const rows = loads
     .map((d) => {
-      const name = d.distro.name || "Distro";
+      const name = d.distro.name || i18n.copy("export.simulation.distro");
       const lvl: RiskLevel =
         d.feederUtilization > 1
           ? "danger"
@@ -347,28 +380,28 @@ function lightingBlock(
               : "safe";
       const phaseCells =
         d.distro.feedPhases === 3
-          ? `L1 ${fmtInt(d.phases[0]?.amps ?? 0)} A · L2 ${fmtInt(d.phases[1]?.amps ?? 0)} A · L3 ${fmtInt(d.phases[2]?.amps ?? 0)} A · Δ ${fmt(d.imbalance * 100, 0)} %`
-          : `${fmtInt(d.phases[0]?.amps ?? 0)} A`;
+          ? `L1 ${fmtInt(d.phases[0]?.amps ?? 0, i18n)} A · L2 ${fmtInt(d.phases[1]?.amps ?? 0, i18n)} A · L3 ${fmtInt(d.phases[2]?.amps ?? 0, i18n)} A · Δ ${fmt(d.imbalance * 100, i18n, 0)} %`
+          : `${fmtInt(d.phases[0]?.amps ?? 0, i18n)} A`;
       return `<tr>
         <td><strong>${escapeHtml(name)}</strong></td>
-        <td class="num">${fmtInt(d.totalWatts)} W</td>
-        <td class="num">${fmtInt(d.feederWorstAmps)} A</td>
-        <td class="num">${fmt(d.feederUtilization * 100, 0)} %</td>
+        <td class="num">${fmtInt(d.totalWatts, i18n)} W</td>
+        <td class="num">${fmtInt(d.feederWorstAmps, i18n)} A</td>
+        <td class="num">${fmt(d.feederUtilization * 100, i18n, 0)} %</td>
         <td class="phases">${phaseCells}</td>
-        <td>${riskPill(lvl, lvl === "danger" ? "OVERLOAD" : lvl === "warn" ? "WATCH" : "OK")}</td>
+        <td>${riskPill(lvl, i18n, i18n.copy(lvl === "danger" ? "export.simulation.status.overload" : lvl === "warn" ? "export.simulation.status.watch" : "export.simulation.status.ok"))}</td>
       </tr>`;
     })
     .join("");
-  const overall = worstLevel(lightingRisks(loads, unpowered));
+  const overall = worstLevel(lightingRisks(loads, unpowered, i18n));
   const unpoweredNote =
     unpowered > 0
-      ? `<p class="warn-note">${unpowered} fixture${unpowered === 1 ? "" : "s"} not yet on a distro channel.</p>`
+      ? `<p class="warn-note">${escapeHtml(i18n.copy(unpowered === 1 ? "export.simulation.unpoweredNote.one" : "export.simulation.unpoweredNote.many", { count: unpowered }))}</p>`
       : "";
   return `<div class="disc-block">
-    <div class="disc-head">LIGHTING (v2.2) — Power &amp; Phase ${riskPill(overall)}</div>
-    <p class="muted">Plan total ${fmtInt(totals.totalWatts)} W · worst leg ${fmtInt(totals.worstLegA)} A · ${loads.length} distro${loads.length === 1 ? "" : "s"}.</p>
+    <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.lighting"))} ${riskPill(overall, i18n)}</div>
+    <p class="muted">${escapeHtml(i18n.copy(loads.length === 1 ? "export.simulation.lightingSummary.one" : "export.simulation.lightingSummary.many", { watts: fmtInt(totals.totalWatts, i18n), amps: fmtInt(totals.worstLegA, i18n), count: loads.length }))}</p>
     <table>
-      <thead><tr><th>Distro</th><th class="num">Total W</th><th class="num">Worst leg</th><th class="num">Util</th><th>Phase balance</th><th>Status</th></tr></thead>
+      <thead><tr><th>${escapeHtml(i18n.copy("export.simulation.table.distro"))}</th><th class="num">${escapeHtml(i18n.copy("export.simulation.table.totalW"))}</th><th class="num">${escapeHtml(i18n.copy("export.simulation.table.worstLeg"))}</th><th class="num">${escapeHtml(i18n.copy("export.simulation.table.util"))}</th><th>${escapeHtml(i18n.copy("export.simulation.table.phaseBalance"))}</th><th>${escapeHtml(i18n.copy("export.simulation.table.status"))}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     ${unpoweredNote}
@@ -379,71 +412,73 @@ function ledBlock(
   ledScreens: LedScreen[],
   ledSettings: LedSettings,
   ledPanels: LedPanel[],
+  i18n: SimulationI18n,
 ): string {
+  const ns = escapeHtml(i18n.copy("export.simulation.notSpecified"));
   if (ledScreens.length === 0) {
     return `<div class="disc-block">
-      <div class="disc-head">LED — Processor &amp; Panel Status ${riskPill("safe", "NONE PLANNED")}</div>
-      <p class="muted">${NS}</p>
+      <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.led"))} ${riskPill("safe", i18n, i18n.copy("export.simulation.status.nonePlanned"))}</div>
+      <p class="muted">${ns}</p>
     </div>`;
   }
   const totals = computeLedTotals(ledScreens, ledSettings, ledPanels);
   // Status pill must agree with the per-phase risk panel + final
   // verdict — derive it from `ledRisks(...)` rather than a separate
   // hardcoded threshold.
-  const ledRiskList = ledRisks(ledScreens, ledSettings, ledPanels);
+  const ledRiskList = ledRisks(ledScreens, ledSettings, ledPanels, i18n);
   const lvl: RiskLevel = worstLevel(ledRiskList);
   const pillLabel =
     lvl === "danger"
-      ? "OVER CAP"
+      ? i18n.copy("export.simulation.status.overCap")
       : lvl === "warn"
-        ? "VERIFY PROCESSOR"
-        : "OK";
+        ? i18n.copy("export.simulation.status.verifyProcessor")
+        : i18n.copy("export.simulation.status.ok");
   const rows = ledScreens
     .map((s) => {
       const panel = ledPanels.find((p) => p.key === s.panelKey);
-      const panelLabel = panel?.name ?? s.panelKey ?? NS;
+      const panelLabel = panel?.name ?? s.panelKey ?? i18n.copy("export.simulation.notSpecified");
       const cabinets = s.panelsWide * s.panelsTall;
       return `<tr>
-        <td><strong>${orNS(s.name)}</strong></td>
+        <td><strong>${orNS(s.name, i18n)}</strong></td>
         <td>${escapeHtml(panelLabel)}</td>
-        <td class="num">${s.panelsWide} × ${s.panelsTall}</td>
-        <td class="num">${cabinets}</td>
+        <td class="num">${fmtInt(s.panelsWide, i18n)} × ${fmtInt(s.panelsTall, i18n)}</td>
+        <td class="num">${fmtInt(cabinets, i18n)}</td>
       </tr>`;
     })
     .join("");
   return `<div class="disc-block">
-    <div class="disc-head">LED — Processor &amp; Panel Status ${riskPill(lvl, pillLabel)}</div>
-    <p class="muted">${totals.screens} screen${totals.screens === 1 ? "" : "s"} · ${totals.panels} cabinet${totals.panels === 1 ? "" : "s"} · ${fmtInt(totals.pixels)} px · processor needs ${totals.portsNeeded} port${totals.portsNeeded === 1 ? "" : "s"}.</p>
+    <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.led"))} ${riskPill(lvl, i18n, pillLabel)}</div>
+    <p class="muted">${escapeHtml(i18n.copy("export.simulation.ledSummary", { screens: i18n.copy(totals.screens === 1 ? "export.simulation.screens.one" : "export.simulation.screens.many", { count: fmtInt(totals.screens, i18n) }), panels: i18n.copy(totals.panels === 1 ? "export.simulation.cabinets.one" : "export.simulation.cabinets.many", { count: fmtInt(totals.panels, i18n) }), pixels: fmtInt(totals.pixels, i18n), ports: i18n.copy(totals.portsNeeded === 1 ? "export.simulation.ports.one" : "export.simulation.ports.many", { count: fmtInt(totals.portsNeeded, i18n) }) }))}</p>
     <table>
-      <thead><tr><th>Screen</th><th>Panel</th><th class="num">Grid</th><th class="num">Cabinets</th></tr></thead>
+      <thead><tr><th>${escapeHtml(i18n.copy("export.simulation.table.screen"))}</th><th>${escapeHtml(i18n.copy("export.simulation.table.panel"))}</th><th class="num">${escapeHtml(i18n.copy("export.simulation.table.grid"))}</th><th class="num">${escapeHtml(i18n.copy("export.simulation.table.cabinets"))}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
 }
 
-function soundBlock(soundItems: SoundItem[]): string {
+function soundBlock(soundItems: SoundItem[], i18n: SimulationI18n): string {
   if (soundItems.length === 0) {
     return `<div class="disc-block">
-      <div class="disc-head">SOUND — Setup Status ${riskPill("safe", "NONE PLANNED")}</div>
-      <p class="muted">${NS}</p>
+      <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.sound"))} ${riskPill("safe", i18n, i18n.copy("export.simulation.status.nonePlanned"))}</div>
+      <p class="muted">${escapeHtml(i18n.copy("export.simulation.notSpecified"))}</p>
     </div>`;
   }
   const totals = computeSoundTotals(soundItems);
   return `<div class="disc-block">
-    <div class="disc-head">SOUND — Setup Status ${riskPill("safe", "READY")}</div>
-    <p class="muted">${soundItems.length} line item${soundItems.length === 1 ? "" : "s"} · ${totals.totalQty} unit${totals.totalQty === 1 ? "" : "s"} · ${fmtInt(totals.totalWeight)} kg · ${fmtInt(totals.totalPower)} W.</p>
+    <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.sound"))} ${riskPill("safe", i18n, i18n.copy("export.simulation.status.ready"))}</div>
+    <p class="muted">${escapeHtml(i18n.copy("export.simulation.soundSummary", { items: i18n.copy(soundItems.length === 1 ? "export.simulation.lineItems.one" : "export.simulation.lineItems.many", { count: soundItems.length }), units: i18n.copy(totals.totalQty === 1 ? "export.simulation.units.one" : "export.simulation.units.many", { count: totals.totalQty }), weight: fmtInt(totals.totalWeight, i18n), power: fmtInt(totals.totalPower, i18n) }))}</p>
   </div>`;
 }
 
-function stageBlock(stages: Stage[], stageCalcs: StageCalc[]): string {
+function stageBlock(stages: Stage[], stageCalcs: StageCalc[], i18n: SimulationI18n): string {
   if (stages.length === 0) {
     return `<div class="disc-block">
-      <div class="disc-head">STAGE — Build Status ${riskPill("safe", "NONE PLANNED")}</div>
-      <p class="muted">${NS}</p>
+      <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.stage"))} ${riskPill("safe", i18n, i18n.copy("export.simulation.status.nonePlanned"))}</div>
+      <p class="muted">${escapeHtml(i18n.copy("export.simulation.notSpecified"))}</p>
     </div>`;
   }
   const totals = computeStageTotals(stages, stageCalcs);
-  const overall = worstLevel(stageRisks(stages, stageCalcs));
+  const overall = worstLevel(stageRisks(stages, stageCalcs, i18n));
   const rows = stageCalcs
     .map((s, i) => {
       const name = stages[i]?.name || "";
@@ -456,30 +491,30 @@ function stageBlock(stages: Stage[], stageCalcs: StageCalc[]): string {
             ? "warn"
             : "safe";
       return `<tr>
-        <td><strong>${orNS(name)}</strong></td>
-        <td class="num">${fmt(s.areaM2, 1)} m²</td>
-        <td class="num">${fmtInt(s.totalWeight)} kg</td>
-        <td class="num">${s.loadCapacityKg > 0 ? fmtInt(s.loadCapacityKg) + " kg" : NS}</td>
-        <td class="num">${s.loadCapacityKg > 0 ? fmt(util, 0) + " %" : NS}</td>
-        <td>${riskPill(lvl, lvl === "danger" ? "OVER" : lvl === "warn" ? "WATCH" : "OK")}</td>
+        <td><strong>${orNS(name, i18n)}</strong></td>
+        <td class="num">${fmt(s.areaM2, i18n, 1)} m²</td>
+        <td class="num">${fmtInt(s.totalWeight, i18n)} kg</td>
+        <td class="num">${s.loadCapacityKg > 0 ? fmtInt(s.loadCapacityKg, i18n) + " kg" : escapeHtml(i18n.copy("export.simulation.notSpecified"))}</td>
+        <td class="num">${s.loadCapacityKg > 0 ? fmt(util, i18n, 0) + " %" : escapeHtml(i18n.copy("export.simulation.notSpecified"))}</td>
+        <td>${riskPill(lvl, i18n, i18n.copy(lvl === "danger" ? "export.simulation.status.over" : lvl === "warn" ? "export.simulation.status.watch" : "export.simulation.status.ok"))}</td>
       </tr>`;
     })
     .join("");
   return `<div class="disc-block">
-    <div class="disc-head">STAGE — Build Status ${riskPill(overall)}</div>
-    <p class="muted">${totals.stageCount} stage${totals.stageCount === 1 ? "" : "s"} · ${fmt(totals.totalArea, 1)} m² · ${fmtInt(totals.totalWeight)} kg.</p>
+    <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.stage"))} ${riskPill(overall, i18n)}</div>
+    <p class="muted">${escapeHtml(i18n.copy(totals.stageCount === 1 ? "export.simulation.stageSummary.one" : "export.simulation.stageSummary.many", { count: totals.stageCount, area: fmt(totals.totalArea, i18n, 1), weight: fmtInt(totals.totalWeight, i18n) }))}</p>
     <table>
-      <thead><tr><th>Stage</th><th class="num">Area</th><th class="num">Weight</th><th class="num">Capacity</th><th class="num">Util</th><th>Status</th></tr></thead>
+      <thead><tr><th>${escapeHtml(i18n.copy("export.simulation.table.stage"))}</th><th class="num">${escapeHtml(i18n.copy("export.simulation.table.area"))}</th><th class="num">${escapeHtml(i18n.copy("export.simulation.table.weight"))}</th><th class="num">${escapeHtml(i18n.copy("export.simulation.table.capacity"))}</th><th class="num">${escapeHtml(i18n.copy("export.simulation.table.util"))}</th><th>${escapeHtml(i18n.copy("export.simulation.table.status"))}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
 }
 
-function crewBlock(crew: CrewMember[]): string {
+function crewBlock(crew: CrewMember[], i18n: SimulationI18n): string {
   if (crew.length === 0) {
     return `<div class="disc-block">
-      <div class="disc-head">CREW — Present / Missing ${riskPill("warn", "UNASSIGNED")}</div>
-      <p class="muted">${NS}</p>
+      <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.crew"))} ${riskPill("warn", i18n, i18n.copy("export.simulation.status.unassigned"))}</div>
+      <p class="muted">${escapeHtml(i18n.copy("export.simulation.notSpecified"))}</p>
     </div>`;
   }
   const present = crew.filter((c) => c.callTime && c.name?.trim());
@@ -494,41 +529,41 @@ function crewBlock(crew: CrewMember[]): string {
       hotelRooms += 1;
       hotelNights += n;
       hotelLines.push(
-        `<li>${escapeHtml(c.name?.trim() || "(unnamed)")} · ${escapeHtml(c.role || NS)} · 🏨 ${n} night${n === 1 ? "" : "s"}</li>`,
+        `<li>${escapeHtml(c.name?.trim() || i18n.copy("export.simulation.unnamed"))} · ${escapeHtml(c.role || i18n.copy("export.simulation.notSpecified"))} · 🏨 ${escapeHtml(i18n.copy(n === 1 ? "export.simulation.nights.one" : "export.simulation.nights.many", { count: n }))}</li>`,
       );
     }
   }
   const hotelBlock =
     hotelRooms > 0
       ? `<div style="margin-top:10px;padding:8px 10px;background:#e7f5ec;border-left:3px solid #2f9b5b;border-radius:4px;font-size:13px;">
-           <strong>🏨 Hotel:</strong> ${hotelRooms} room${hotelRooms === 1 ? "" : "s"} · ${hotelNights} night${hotelNights === 1 ? "" : "s"}
+           <strong>🏨 ${escapeHtml(i18n.copy("export.simulation.hotel"))}:</strong> ${escapeHtml(i18n.copy(hotelRooms === 1 ? "export.simulation.rooms.one" : "export.simulation.rooms.many", { count: hotelRooms }))} · ${escapeHtml(i18n.copy(hotelNights === 1 ? "export.simulation.nights.one" : "export.simulation.nights.many", { count: hotelNights }))}
            <ul class="crew-list" style="margin-top:6px;">${hotelLines.join("")}</ul>
          </div>`
       : "";
   const presentList = present
     .map(
       (c) =>
-        `<li><strong>${escapeHtml(c.name)}</strong> · ${escapeHtml(c.role || NS)} · call ${escapeHtml(c.callTime || NS)}</li>`,
+        `<li><strong>${escapeHtml(c.name)}</strong> · ${escapeHtml(c.role || i18n.copy("export.simulation.notSpecified"))} · ${escapeHtml(i18n.copy("export.simulation.call"))} ${escapeHtml(c.callTime || i18n.copy("export.simulation.notSpecified"))}</li>`,
     )
     .join("");
   const missingList = missing
     .map(
       (c) =>
-        `<li>${escapeHtml(c.name?.trim() || "(unnamed)")} · ${escapeHtml(c.role || NS)} — ${
-          !c.name?.trim() ? "missing name" : "no call time"
+        `<li>${escapeHtml(c.name?.trim() || i18n.copy("export.simulation.unnamed"))} · ${escapeHtml(c.role || i18n.copy("export.simulation.notSpecified"))} — ${
+          escapeHtml(i18n.copy(!c.name?.trim() ? "export.simulation.missingName" : "export.simulation.noCallTime"))
         }</li>`,
     )
     .join("");
   return `<div class="disc-block">
-    <div class="disc-head">CREW — Present / Missing ${riskPill(lvl, missing.length > 0 ? `${missing.length} MISSING` : "ALL PRESENT")}</div>
+    <div class="disc-head">${escapeHtml(i18n.copy("export.simulation.block.crew"))} ${riskPill(lvl, i18n, missing.length > 0 ? i18n.copy("export.simulation.status.missing", { count: missing.length }) : i18n.copy("export.simulation.status.allPresent"))}</div>
     <div class="crew-grid">
       <div>
-        <div class="crew-sub">Present (${present.length})</div>
-        ${present.length > 0 ? `<ul class="crew-list">${presentList}</ul>` : `<p class="muted">${NS}</p>`}
+        <div class="crew-sub">${escapeHtml(i18n.copy("export.simulation.present", { count: present.length }))}</div>
+        ${present.length > 0 ? `<ul class="crew-list">${presentList}</ul>` : `<p class="muted">${escapeHtml(i18n.copy("export.simulation.notSpecified"))}</p>`}
       </div>
       <div>
-        <div class="crew-sub">Missing / incomplete (${missing.length})</div>
-        ${missing.length > 0 ? `<ul class="crew-list missing">${missingList}</ul>` : `<p class="muted">None</p>`}
+        <div class="crew-sub">${escapeHtml(i18n.copy("export.simulation.missingIncomplete", { count: missing.length }))}</div>
+        ${missing.length > 0 ? `<ul class="crew-list missing">${missingList}</ul>` : `<p class="muted">${escapeHtml(i18n.copy("export.simulation.none"))}</p>`}
       </div>
     </div>
     ${hotelBlock}
@@ -540,8 +575,6 @@ function crewBlock(crew: CrewMember[]): string {
 type PhaseDef = {
   key: string;
   num: number;
-  label: string;
-  blurb: string;
   /** The discipline most under load during this phase. Used to call out
    *  the "primary focus" in the phase header — but every phase still
    *  renders all 6 discipline blocks and all 5 risk categories per the
@@ -550,90 +583,22 @@ type PhaseDef = {
 };
 
 const PHASES: PhaseDef[] = [
-  {
-    key: "loadin",
-    num: 1,
-    label: "Load-in",
-    blurb:
-      "Crew arrival, truck unload, gear staged on deck. Verify everyone is on-site and on call.",
-    focus: "crew",
-  },
-  {
-    key: "rigging",
-    num: 2,
-    label: "Rigging",
-    blurb:
-      "Motors flown, points set, trusses lifted to trim. Verify SWL on every system.",
-    focus: "rigging",
-  },
-  {
-    key: "lighting",
-    num: 3,
-    label: "Lighting setup",
-    blurb:
-      "Distros powered, fixtures rigged and addressed. Verify power load per distro and L1/L2/L3 phase balance.",
-    focus: "lighting",
-  },
-  {
-    key: "led",
-    num: 4,
-    label: "LED setup",
-    blurb:
-      "Cabinets assembled, processor mapped. Verify port load and panel count.",
-    focus: "led",
-  },
-  {
-    key: "sound",
-    num: 5,
-    label: "Sound setup",
-    blurb: "PA flown, FOH/monitors rigged, lines run.",
-    focus: "sound",
-  },
-  {
-    key: "stage",
-    num: 6,
-    label: "Stage build",
-    blurb:
-      "Decks built, skirting + stairs in place. Verify stage build weight vs capacity.",
-    focus: "stage",
-  },
-  {
-    key: "testing",
-    num: 7,
-    label: "Testing",
-    blurb:
-      "All systems energized — first full-power check across rigging, lighting, LED, sound and stage.",
-    focus: "all",
-  },
-  {
-    key: "rehearsal",
-    num: 8,
-    label: "Rehearsal",
-    blurb:
-      "Production rehearsal at near-show levels. Phase balance and feeder utilization watched closely.",
-    focus: "all",
-  },
-  {
-    key: "show",
-    num: 9,
-    label: "Show",
-    blurb:
-      "Doors open, full draw on distros. Final risk check before audience walks in.",
-    focus: "all",
-  },
-  {
-    key: "loadout",
-    num: 10,
-    label: "Load-out",
-    blurb:
-      "Reverse the build — strike, pack and load trucks. Verify crew is rested and present.",
-    focus: "crew",
-  },
+  { key: "loadin", num: 1, focus: "crew" },
+  { key: "rigging", num: 2, focus: "rigging" },
+  { key: "lighting", num: 3, focus: "lighting" },
+  { key: "led", num: 4, focus: "led" },
+  { key: "sound", num: 5, focus: "sound" },
+  { key: "stage", num: 6, focus: "stage" },
+  { key: "testing", num: 7, focus: "all" },
+  { key: "rehearsal", num: 8, focus: "all" },
+  { key: "show", num: 9, focus: "all" },
+  { key: "loadout", num: 10, focus: "crew" },
 ];
 
 // ─── Phase rendering ──────────────────────────────────────────────────
 
 type PhaseContext = {
+  i18n: SimulationI18n;
   systems: ClientPackSystem[];
   loads: DistroLoad[];
   unpowered: number;
@@ -654,50 +619,41 @@ type PhaseContext = {
  *  most-related to it. */
 function phaseRisks(ctx: PhaseContext): RiskItem[] {
   return [
-    ...riggingRisks(ctx.systems),
-    ...lightingRisks(ctx.loads, ctx.unpowered),
-    ...ledRisks(ctx.ledScreens, ctx.ledSettings, ctx.ledPanels),
-    ...stageRisks(ctx.stages, ctx.stageCalcs),
-    ...crewRisks(ctx.crew),
-    ...scheduleRisks(ctx.schedule),
+    ...riggingRisks(ctx.systems, ctx.i18n),
+    ...lightingRisks(ctx.loads, ctx.unpowered, ctx.i18n),
+    ...ledRisks(ctx.ledScreens, ctx.ledSettings, ctx.ledPanels, ctx.i18n),
+    ...stageRisks(ctx.stages, ctx.stageCalcs, ctx.i18n),
+    ...crewRisks(ctx.crew, ctx.i18n),
+    ...scheduleRisks(ctx.schedule, ctx.i18n),
   ];
 }
 
-const FOCUS_LABEL: Record<PhaseDef["focus"], string> = {
-  rigging: "Rigging",
-  lighting: "Lighting",
-  led: "LED",
-  sound: "Sound",
-  stage: "Stage",
-  crew: "Crew",
-  all: "All systems",
-};
-
 function renderPhase(ctx: PhaseContext, phase: PhaseDef): string {
+  const { i18n } = ctx;
   const risks = phaseRisks(ctx);
   const overall = worstLevel(risks);
   const verdict =
     overall === "danger"
-      ? "BLOCKED"
+      ? i18n.copy("export.simulation.status.blocked")
       : overall === "warn"
-        ? "AT RISK"
-        : "READY";
+        ? i18n.copy("export.simulation.status.atRisk")
+        : i18n.copy("export.simulation.status.ready");
 
   // Per-spec: render every discipline at every phase (Rigging,
   // Lighting v2.2, LED, Sound, Stage, Crew). The phase blurb + focus
   // pill tell the reader what's most under load right now.
   const blocks: string[] = [
-    riggingBlock(ctx.systems),
-    lightingBlock(ctx.loads, ctx.unpowered, ctx.lightingTotals),
-    ledBlock(ctx.ledScreens, ctx.ledSettings, ctx.ledPanels),
-    soundBlock(ctx.sound),
-    stageBlock(ctx.stages, ctx.stageCalcs),
-    crewBlock(ctx.crew),
+    riggingBlock(ctx.systems, i18n),
+    lightingBlock(ctx.loads, ctx.unpowered, ctx.lightingTotals, i18n),
+    ledBlock(ctx.ledScreens, ctx.ledSettings, ctx.ledPanels, i18n),
+    soundBlock(ctx.sound, i18n),
+    stageBlock(ctx.stages, ctx.stageCalcs, i18n),
+    crewBlock(ctx.crew, i18n),
   ];
 
   const riskList =
     risks.length === 0
-      ? `<div class="risk-empty">${riskPill("safe", "No issues")} — all systems within limits for this phase.</div>`
+      ? `<div class="risk-empty">${riskPill("safe", i18n, i18n.copy("export.simulation.noIssues"))} — ${escapeHtml(i18n.copy("export.simulation.withinLimits"))}</div>`
       : `<ul class="risk-list">${[...risks]
           .sort((a, b) => {
             const score = (l: RiskLevel) =>
@@ -706,22 +662,22 @@ function renderPhase(ctx: PhaseContext, phase: PhaseDef): string {
           })
           .map(
             (r) =>
-              `<li>${riskPill(r.level)} <strong>${escapeHtml(r.area)}</strong> — ${escapeHtml(r.message)}</li>`,
+              `<li>${riskPill(r.level, i18n)} <strong>${escapeHtml(r.area)}</strong> — ${escapeHtml(r.message)}</li>`,
           )
           .join("")}</ul>`;
 
   return `<section class="phase">
     <div class="phase-head">
-      <div class="phase-num">Phase ${phase.num}</div>
-      <h2>${escapeHtml(phase.label)} ${riskPill(overall, verdict)}</h2>
+      <div class="phase-num">${escapeHtml(i18n.copy("export.simulation.phaseNumber", { number: phase.num }))}</div>
+      <h2>${escapeHtml(i18n.copy(`export.simulation.phase.${phase.key}.label` as SimulationCopyKey))} ${riskPill(overall, i18n, verdict)}</h2>
       <p class="phase-blurb">
-        <span class="phase-focus">Focus: ${escapeHtml(FOCUS_LABEL[phase.focus])}</span>
-        ${escapeHtml(phase.blurb)}
+        <span class="phase-focus">${escapeHtml(i18n.copy("export.simulation.focus", { focus: i18n.copy(`export.simulation.focus.${phase.focus}` as SimulationCopyKey) }))}</span>
+        ${escapeHtml(i18n.copy(`export.simulation.phase.${phase.key}.blurb` as SimulationCopyKey))}
       </p>
     </div>
     ${blocks.join("\n")}
     <div class="phase-risks">
-      <div class="risk-head">⚠️ Risks at this phase</div>
+      <div class="risk-head">⚠️ ${escapeHtml(i18n.copy("export.simulation.risksAtPhase"))}</div>
       ${riskList}
     </div>
   </section>`;
@@ -731,7 +687,7 @@ function renderPhase(ctx: PhaseContext, phase: PhaseDef): string {
 
 type Verdict = {
   readiness: number;
-  label: "SHOW READY" | "SHOW AT RISK" | "SHOW FAILS";
+  label: "ready" | "risk" | "fails";
   level: RiskLevel;
   biggest: RiskItem | null;
   dangerCount: number;
@@ -752,10 +708,10 @@ function computeVerdict(allRisks: RiskItem[]): Verdict {
   const readiness = Math.max(0, 100 - 25 * dangerCount - 8 * warnCount);
   const label: Verdict["label"] =
     readiness >= 85
-      ? "SHOW READY"
+      ? "ready"
       : readiness >= 50
-        ? "SHOW AT RISK"
-        : "SHOW FAILS";
+        ? "risk"
+        : "fails";
   const level: RiskLevel =
     readiness >= 85 ? "safe" : readiness >= 50 ? "warn" : "danger";
   const sorted = [...allRisks].sort((a, b) => {
@@ -773,7 +729,7 @@ function computeVerdict(allRisks: RiskItem[]): Verdict {
   };
 }
 
-function renderVerdict(verdict: Verdict): string {
+function renderVerdict(verdict: Verdict, i18n: SimulationI18n): string {
   const verdictClass =
     verdict.level === "danger"
       ? "verdict-fail"
@@ -782,27 +738,27 @@ function renderVerdict(verdict: Verdict): string {
         : "verdict-ready";
   const biggest = verdict.biggest
     ? `<div class="verdict-biggest">
-         <span class="verdict-biggest-label">Biggest risk:</span>
-         ${riskPill(verdict.biggest.level)}
+         <span class="verdict-biggest-label">${escapeHtml(i18n.copy("export.simulation.biggestRisk"))}:</span>
+         ${riskPill(verdict.biggest.level, i18n)}
          <strong>${escapeHtml(verdict.biggest.area)}</strong> — ${escapeHtml(verdict.biggest.message)}
        </div>`
     : `<div class="verdict-biggest">
-         <span class="verdict-biggest-label">Biggest risk:</span>
-         ${riskPill("safe", "NONE")} — no issues detected.
+         <span class="verdict-biggest-label">${escapeHtml(i18n.copy("export.simulation.biggestRisk"))}:</span>
+         ${riskPill("safe", i18n, i18n.copy("export.simulation.none").toUpperCase())} — ${escapeHtml(i18n.copy("export.simulation.noIssuesDetected"))}
        </div>`;
   return `<section class="verdict ${verdictClass}">
     <div class="verdict-row">
       <div class="verdict-score">
-        <div class="verdict-score-label">Show readiness</div>
+        <div class="verdict-score-label">${escapeHtml(i18n.copy("export.simulation.showReadiness"))}</div>
         <div class="verdict-score-value">${verdict.readiness}<span class="verdict-score-pct">%</span></div>
       </div>
       <div class="verdict-tally">
-        <div><span class="tally-num">${verdict.dangerCount}</span><span class="tally-label">🔴 Critical</span></div>
-        <div><span class="tally-num">${verdict.warnCount}</span><span class="tally-label">🟠 Warnings</span></div>
+        <div><span class="tally-num">${verdict.dangerCount}</span><span class="tally-label">🔴 ${escapeHtml(i18n.copy(verdict.dangerCount === 1 ? "export.simulation.critical.one" : "export.simulation.critical.many"))}</span></div>
+        <div><span class="tally-num">${verdict.warnCount}</span><span class="tally-label">🟠 ${escapeHtml(i18n.copy(verdict.warnCount === 1 ? "export.simulation.warnings.one" : "export.simulation.warnings.many"))}</span></div>
       </div>
       <div class="verdict-final">
-        <div class="verdict-final-label">Final verdict</div>
-        <div class="verdict-final-value">${escapeHtml(verdict.label)}</div>
+        <div class="verdict-final-label">${escapeHtml(i18n.copy("export.simulation.finalVerdict"))}</div>
+        <div class="verdict-final-value">${escapeHtml(i18n.copy(`export.simulation.verdict.${verdict.label}` as SimulationCopyKey))}</div>
       </div>
     </div>
     ${biggest}
@@ -815,37 +771,46 @@ function renderCover(
   project: ClientPackProject,
   logoDataUrl: string | null,
   verdict: Verdict,
+  i18n: SimulationI18n,
 ): string {
   const title =
-    project.eventName.trim() || project.venue.trim() || "Show Simulation";
+    project.eventName.trim() || project.venue.trim() || i18n.copy("export.simulation.title");
+  const formatDate = (value: string): string => {
+    if (!value) return i18n.copy("export.simulation.notSpecified");
+    const date = new Date(`${value}T00:00:00`);
+    return Number.isNaN(date.getTime())
+      ? value
+      : new Intl.DateTimeFormat(i18n.locale === "no" ? "nb-NO" : "en-US").format(date);
+  };
   const dateRange =
     project.endDate && project.endDate !== project.date
-      ? `${project.date} → ${project.endDate}`
-      : project.date;
+      ? `${formatDate(project.date)} → ${formatDate(project.endDate)}`
+      : formatDate(project.date);
   const logoImg = logoDataUrl
-    ? `<img src="${logoDataUrl}" class="cover-logo" alt="EHS" />`
+    ? `<img src="${logoDataUrl}" class="cover-logo" alt="${escapeHtml(i18n.copy("export.simulation.logoAlt"))}" />`
     : "";
   return `<section class="cover">
     ${logoImg}
-    <div class="cover-brand">EHS Production · Show Simulation Engine</div>
+    <div class="cover-brand">${escapeHtml(i18n.copy("export.simulation.brand"))}</div>
     <h1 class="cover-title">${escapeHtml(title)}</h1>
     <div class="cover-verdict ${verdict.level === "danger" ? "verdict-fail" : verdict.level === "warn" ? "verdict-risk" : "verdict-ready"}">
-      <div class="cover-verdict-score">${verdict.readiness}<span class="cover-verdict-pct">%</span></div>
-      <div class="cover-verdict-label">${escapeHtml(verdict.label)}</div>
+      <div class="cover-verdict-score">${fmtInt(verdict.readiness, i18n)}<span class="cover-verdict-pct">%</span></div>
+      <div class="cover-verdict-label">${escapeHtml(i18n.copy(`export.simulation.verdict.${verdict.label}` as SimulationCopyKey))}</div>
     </div>
     <div class="cover-meta">
-      <div><span class="cover-meta-label">Client</span><span class="cover-meta-value">${orNS(project.client)}</span></div>
-      <div><span class="cover-meta-label">Venue</span><span class="cover-meta-value">${orNS(project.venue)}</span></div>
-      <div><span class="cover-meta-label">Date</span><span class="cover-meta-value">${orNS(dateRange)}</span></div>
-      <div><span class="cover-meta-label">Prepared by</span><span class="cover-meta-value">${orNS(project.preparedBy)}</span></div>
+      <div><span class="cover-meta-label">${escapeHtml(i18n.copy("export.simulation.meta.client"))}</span><span class="cover-meta-value">${orNS(project.client, i18n)}</span></div>
+      <div><span class="cover-meta-label">${escapeHtml(i18n.copy("export.simulation.meta.venue"))}</span><span class="cover-meta-value">${orNS(project.venue, i18n)}</span></div>
+      <div><span class="cover-meta-label">${escapeHtml(i18n.copy("export.simulation.meta.date"))}</span><span class="cover-meta-value">${orNS(dateRange, i18n)}</span></div>
+      <div><span class="cover-meta-label">${escapeHtml(i18n.copy("export.simulation.meta.preparedBy"))}</span><span class="cover-meta-value">${orNS(project.preparedBy, i18n)}</span></div>
     </div>
-    <div class="cover-footer">Generated ${escapeHtml(new Date().toLocaleString())}</div>
+    <div class="cover-footer">${escapeHtml(i18n.copy("export.simulation.generated", { date: new Intl.DateTimeFormat(i18n.locale === "no" ? "nb-NO" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date()) }))}</div>
   </section>`;
 }
 
 // ─── Document assembly ────────────────────────────────────────────────
 
 function renderHtml(input: ShowSimulationInput): string {
+  const i18n: SimulationI18n = { locale: input.locale, copy: input.copy };
   const wattsLookup = makeFixtureWattsLookup(input.fixtures);
   const loads: DistroLoad[] = input.power.distros.map((d) =>
     computeDistroLoad(d, wattsLookup),
@@ -862,6 +827,7 @@ function renderHtml(input: ShowSimulationInput): string {
   const stageCalcs = input.stages.map((s) => computeStage(s));
 
   const ctx: PhaseContext = {
+    i18n,
     systems: input.systems,
     loads,
     unpowered,
@@ -883,21 +849,21 @@ function renderHtml(input: ShowSimulationInput): string {
   const allRisks = buildAllRisks(ctx);
   const verdict = computeVerdict(allRisks);
 
-  const cover = renderCover(input.project, input.logoDataUrl, verdict);
+  const cover = renderCover(input.project, input.logoDataUrl, verdict, i18n);
   const phasesHtml = PHASES.map((p) => renderPhase(ctx, p)).join("\n");
-  const verdictHtml = renderVerdict(verdict);
+  const verdictHtml = renderVerdict(verdict, i18n);
 
   const projTitle =
     input.project.eventName.trim() ||
     input.project.venue.trim() ||
-    "Show Simulation";
+    i18n.copy("export.simulation.title");
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${input.locale === "no" ? "nb-NO" : "en"}">
 <head>
 <meta charset="utf-8" />
-<title>Show Simulation — ${escapeHtml(projTitle)}</title>
-<meta name="ehs-pdf-name" content="${escapeHtml(projTitle)} — Show Simulation.pdf" />
+<title>${escapeHtml(i18n.copy("export.simulation.documentTitle", { project: projTitle }))}</title>
+<meta name="ehs-pdf-name" content="${escapeHtml(projTitle)} — ${escapeHtml(i18n.copy("export.simulation.filenameLabel"))}.pdf" />
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -1182,9 +1148,9 @@ function renderHtml(input: ShowSimulationInput): string {
 </head>
 <body>
 <div class="print-bar no-print">
-  <button id="ehs-download-pdf" class="primary">Download PDF</button>
-  <button onclick="window.print()">Print</button>
-  <button onclick="window.close()">Close</button>
+  <button id="ehs-download-pdf" class="primary">${escapeHtml(i18n.copy("export.simulation.downloadPdf"))}</button>
+  <button onclick="window.print()">${escapeHtml(i18n.copy("export.simulation.print"))}</button>
+  <button onclick="window.close()">${escapeHtml(i18n.copy("export.simulation.close"))}</button>
 </div>
 <script>
 (function () {
@@ -1201,10 +1167,10 @@ function renderHtml(input: ShowSimulationInput): string {
     var filename = (meta && meta.getAttribute('content')) || (document.title + '.pdf');
     var orig = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Generating PDF…';
+    btn.textContent = ${JSON.stringify(i18n.copy("export.simulation.generatingPdf"))};
     Promise.resolve(fn(window, filename)).catch(function (err) {
       console.error(err);
-      alert('Could not generate the PDF. Falling back to the browser print dialog.');
+      alert(${JSON.stringify(i18n.copy("export.simulation.pdfFallbackAlert"))});
       window.print();
     }).then(function () {
       btn.disabled = false;
@@ -1221,21 +1187,20 @@ ${
   input.floorPlanDataUrl
     ? `<section class="floor-plan">
   <div class="floor-plan-head">
-    <h2>Floor plan</h2>
+    <h2>${escapeHtml(i18n.copy("export.simulation.floorPlan"))}</h2>
     ${
       input.floorPlanFileName
         ? `<div class="floor-plan-file">${escapeHtml(input.floorPlanFileName)}</div>`
         : ""
     }
   </div>
-  <img class="floor-plan-img" src="${input.floorPlanDataUrl}" alt="Venue floor plan" />
+  <img class="floor-plan-img" src="${input.floorPlanDataUrl}" alt="${escapeHtml(i18n.copy("export.simulation.floorPlanAlt"))}" />
 </section>`
     : ""
 }
 
 <div class="muted" style="margin-top:24px;text-align:center;font-size:11px;border-top:1px solid #e2e8f0;padding-top:12px">
-  Generated by EHS Production Tool · Show Simulation Engine ·
-  Risk indicators are advisory and based on data entered by the producer.
+  ${escapeHtml(i18n.copy("export.simulation.footer"))}
 </div>
 
 </body>

@@ -51,12 +51,14 @@ export type TaskUpdate = Partial<
   >
 >;
 
+export type ProjectTaskErrorCode = "loadFailed" | "saveProjectFirst";
+
 export function useProjectTasks(projectId: string | null) {
   const { getToken } = useAuth();
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [crew, setCrew] = useState<TaskCrewMember[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ProjectTaskErrorCode | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const updateQueues = useRef(new Map<string, Promise<ProjectTask>>());
 
@@ -92,7 +94,7 @@ export function useProjectTasks(projectId: string | null) {
       const json = await request(`/api/projects/${projectId}/tasks`);
       setTasks(json.tasks ?? []);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Failed to load tasks.");
+      setError("loadFailed");
     } finally {
       setIsLoading(false);
     }
@@ -127,7 +129,7 @@ export function useProjectTasks(projectId: string | null) {
 
   const createTask = useCallback(
     async (title: string) => {
-      if (!projectId) throw new Error("Save the project before adding tasks.");
+      if (!projectId) throw new Error("saveProjectFirst");
       const json = await request(`/api/projects/${projectId}/tasks`, {
         method: "POST",
         body: JSON.stringify({ title }),

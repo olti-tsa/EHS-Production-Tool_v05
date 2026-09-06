@@ -6,8 +6,20 @@ export type BriefDeliveryCounts = {
 
 export type BriefDeliveryToast = {
   kind: "success" | "error";
-  message: string;
-};
+} & (
+  | {
+      messageKey:
+        | "crew.dispatch.deliverySuccessOne"
+        | "crew.dispatch.deliverySuccessMany";
+      params: { count: number };
+    }
+  | {
+      messageKey:
+        | "crew.dispatch.deliverySkipped"
+        | "crew.dispatch.deliveryInProgress";
+      params?: never;
+    }
+);
 
 export function briefDeliveryToast(
   delivery: BriefDeliveryCounts | null | undefined,
@@ -17,14 +29,18 @@ export function briefDeliveryToast(
   if (sent > 0) {
     return {
       kind: "success",
-      message: `Briefs emailed successfully to ${sent} crew member${sent === 1 ? "" : "s"}`,
+      messageKey:
+        sent === 1
+          ? "crew.dispatch.deliverySuccessOne"
+          : "crew.dispatch.deliverySuccessMany",
+      params: { count: sent },
     };
   }
   return {
     kind: "error",
-    message:
+    messageKey:
       skipped > 0
-        ? "No briefs were emailed. Check freelancer email profiles."
-        : "Brief emails are already being sent.",
+        ? "crew.dispatch.deliverySkipped"
+        : "crew.dispatch.deliveryInProgress",
   };
 }

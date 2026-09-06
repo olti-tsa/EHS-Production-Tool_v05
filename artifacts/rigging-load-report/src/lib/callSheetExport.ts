@@ -4,12 +4,15 @@ import type {
   BriefSchedulePhaseKey,
   ProjectBrief,
 } from "./projectBrief";
+import type { Locale } from "./i18n/types";
 
-const PHASE_LABELS: Record<BriefSchedulePhaseKey, string> = {
-  setup: "Setup",
-  rehearsal: "Rehearsal",
-  show: "Show",
-  downrig: "Load Out",
+export type CallSheetCopy = {
+  phases: Record<BriefSchedulePhaseKey, string>; productionSchedule: string; yourCall: string;
+  noAssignment: string; role: string; callTime: string; offTime: string; hours: string;
+  dayRate: string; notes: string; tbd: string; day: (day: number) => string;
+  untitledShow: string; generated: (date: string) => string; documentTitle: (venue: string) => string;
+  personalCallSheet: string; showDate: string; projectManager: string; for: string; crew: string;
+  footer: (briefId: string) => string; print: string;
 };
 
 const PHASE_KEYS: BriefSchedulePhaseKey[] = [
@@ -28,14 +31,14 @@ function escHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, locale: Locale): string {
   if (!iso) return "—";
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   const d = m
     ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
     : new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", {
+  return d.toLocaleDateString(locale === "no" ? "nb-NO" : "en-US", {
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -43,11 +46,11 @@ function fmtDate(iso: string): string {
   });
 }
 
-function fmtRange(from: string, to: string): string {
+function fmtRange(from: string, to: string, locale: Locale): string {
   if (from && to && from !== to) {
-    return `${fmtDate(from)} → ${fmtDate(to)}`;
+    return `${fmtDate(from, locale)} → ${fmtDate(to, locale)}`;
   }
-  return fmtDate(from || to);
+  return fmtDate(from || to, locale);
 }
 
 function fmtTimeRange(fromTime?: string, toTime?: string): string {
@@ -56,17 +59,17 @@ function fmtTimeRange(fromTime?: string, toTime?: string): string {
   return fromTime || toTime || "";
 }
 
-function scheduleHtml(schedule: BriefSchedule | undefined): string {
+function scheduleHtml(schedule: BriefSchedule | undefined, locale: Locale, copy: CallSheetCopy): string {
   if (!schedule) return "";
   const blocks = PHASE_KEYS.flatMap((key) => {
     const segs = schedule[key];
     if (!segs || segs.length === 0) return [];
-    return [{ key, label: PHASE_LABELS[key], segs }];
+    return [{ key, label: copy.phases[key], segs }];
   });
   if (blocks.length === 0) return "";
   return `
     <section class="cs-section">
-      <h2>Production schedule</h2>
+      <h2>${escHtml(copy.productionSchedule)}</h2>
       <div class="cs-schedule">
         ${blocks
           .map(
@@ -77,13 +80,13 @@ function scheduleHtml(schedule: BriefSchedule | undefined): string {
               ${block.segs
                 .map((seg, i) => {
                   const dateRange =
-                    seg.from || seg.to ? fmtRange(seg.from, seg.to) : "—";
+                    seg.from || seg.to ? fmtRange(seg.from, seg.to, locale) : "—";
                   const timeRange = seg.timeTbd
-                    ? "TBD"
+                    ? copy.tbd
                     : fmtTimeRange(seg.fromTime, seg.toTime);
                   const dayPrefix =
                     block.segs.length > 1
-                      ? `<span class="cs-day-tag">Day ${i + 1}</span>`
+                      ? `<span class="cs-day-tag">${escHtml(copy.day(i + 1))}</span>`
                       : "";
                   return `
                     <div class="cs-phase-row">
@@ -104,28 +107,28 @@ function scheduleHtml(schedule: BriefSchedule | undefined): string {
   `;
 }
 
-function assignmentHtml(assignment: BriefAssignment | undefined): string {
+function assignmentHtml(assignment: BriefAssignment | undefined, copy: CallSheetCopy, locale: Locale): string {
   if (!assignment) {
     return `
       <section class="cs-section cs-mine">
-        <h2>Your call</h2>
-        <div class="cs-empty">No personal assignment on this brief — refer to the production schedule below.</div>
+        <h2>${escHtml(copy.yourCall)}</h2>
+        <div class="cs-empty">${escHtml(copy.noAssignment)}</div>
       </section>
     `;
   }
   const rows: Array<[string, string]> = [
-    ["Role", assignment.role || "—"],
-    ["Call time", assignment.callTime || "—"],
-    ["Off time", assignment.offTime || "—"],
+    [copy.role, assignment.role || "—"],
+    [copy.callTime, assignment.callTime || "—"],
+    [copy.offTime, assignment.offTime || "—"],
     [
-      "Hours",
+      copy.hours,
       assignment.hours > 0 ? `${assignment.hours} h` : "—",
     ],
   ];
   if (assignment.dayRate > 0) {
     rows.push([
-      "Day rate",
-      new Intl.NumberFormat("nb-NO", {
+      copy.dayRate,
+      new Intl.NumberFormat(locale === "no" ? "nb-NO" : "en-US", {
         style: "currency",
         currency: "NOK",
         maximumFractionDigits: 0,
@@ -134,7 +137,7 @@ function assignmentHtml(assignment: BriefAssignment | undefined): string {
   }
   return `
     <section class="cs-section cs-mine">
-      <h2>Your call</h2>
+      <h2>${escHtml(copy.yourCall)}</h2>
       <div class="cs-mine-grid">
         ${rows
           .map(
@@ -149,7 +152,7 @@ function assignmentHtml(assignment: BriefAssignment | undefined): string {
       </div>
       ${
         assignment.notes
-          ? `<div class="cs-notes"><strong>Notes:</strong> ${escHtml(assignment.notes)}</div>`
+          ? `<div class="cs-notes"><strong>${escHtml(copy.notes)}:</strong> ${escHtml(assignment.notes)}</div>`
           : ""
       }
     </section>
@@ -169,25 +172,26 @@ export type CallSheetResult = { ok: boolean };
  *  often blocked. */
 export function openCallSheet(
   brief: ProjectBrief,
-  options: { logoDataUrl?: string } = {},
+  options: { logoDataUrl?: string; locale: Locale; copy: CallSheetCopy },
 ): CallSheetResult {
   const myAssignment = brief.assignments.find(
     (a) => a.crewId === brief.recipientCrewId,
   );
-  const venue = brief.project.venue || "Untitled show";
-  const generated = new Date().toLocaleString("en-GB", {
+  const { copy, locale } = options;
+  const venue = brief.project.venue || copy.untitledShow;
+  const generatedDate = new Date().toLocaleString(locale === "no" ? "nb-NO" : "en-US", {
     dateStyle: "long",
     timeStyle: "short",
   });
   const showDate =
     brief.project.endDate && brief.project.endDate !== brief.project.date
-      ? `${fmtDate(brief.project.date)} → ${fmtDate(brief.project.endDate)}`
-      : fmtDate(brief.project.date);
+      ? `${fmtDate(brief.project.date, locale)} → ${fmtDate(brief.project.endDate, locale)}`
+      : fmtDate(brief.project.date, locale);
   const html = `<!doctype html>
-<html lang="en">
+<html lang="${locale === "no" ? "nb" : "en"}">
 <head>
   <meta charset="utf-8" />
-  <title>Call Sheet — ${escHtml(venue)}</title>
+  <title>${escHtml(copy.documentTitle(venue))}</title>
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; background: #f3f3f3; }
@@ -293,32 +297,32 @@ export function openCallSheet(
             : ""
         }
         <div>
-          <div class="cs-band-sub">Personal call sheet</div>
+          <div class="cs-band-sub">${escHtml(copy.personalCallSheet)}</div>
           <h1>${escHtml(venue)}</h1>
         </div>
       </div>
-      <div class="cs-band-right">Generated ${escHtml(generated)}</div>
+      <div class="cs-band-right">${escHtml(copy.generated(generatedDate))}</div>
     </div>
     <div class="cs-meta">
       <div class="cs-meta-cell">
-        <div class="cs-meta-key">Show date</div>
+        <div class="cs-meta-key">${escHtml(copy.showDate)}</div>
         <div class="cs-meta-val">${escHtml(showDate)}</div>
       </div>
       <div class="cs-meta-cell">
-        <div class="cs-meta-key">Project manager</div>
+        <div class="cs-meta-key">${escHtml(copy.projectManager)}</div>
         <div class="cs-meta-val">${escHtml(brief.project.preparedBy || "—")}</div>
       </div>
       <div class="cs-meta-cell">
-        <div class="cs-meta-key">For</div>
-        <div class="cs-meta-val">${escHtml(myAssignment?.name || "Crew")}</div>
+        <div class="cs-meta-key">${escHtml(copy.for)}</div>
+        <div class="cs-meta-val">${escHtml(myAssignment?.name || copy.crew)}</div>
       </div>
     </div>
-    ${assignmentHtml(myAssignment)}
-    ${scheduleHtml(brief.project.schedule)}
-    <div class="cs-foot">EHS Production Tool · brief ${escHtml(brief.briefId)}</div>
+    ${assignmentHtml(myAssignment, copy, locale)}
+    ${scheduleHtml(brief.project.schedule, locale, copy)}
+    <div class="cs-foot">${escHtml(copy.footer(brief.briefId))}</div>
   </div>
   <div class="cs-noprint">
-    <button onclick="window.print()">Print / Save as PDF</button>
+    <button onclick="window.print()">${escHtml(copy.print)}</button>
   </div>
 </body>
 </html>`;

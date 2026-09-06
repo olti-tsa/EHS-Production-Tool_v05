@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NumberField } from "./NumberField";
+import { useT } from "../lib/i18n/I18nContext";
 import {
   CONNECTOR_SIDES,
   STAGE_DECKS,
@@ -23,18 +24,12 @@ import {
   type StageLegMode,
 } from "../lib/stage";
 
-const CONNECTOR_SIDE_LABEL: Record<ConnectorSide, string> = {
-  N: "Upstage (back)",
-  E: "Stage right",
-  S: "Downstage (front)",
-  W: "Stage left",
+const CONNECTOR_SIDE_LABEL_KEYS: Record<ConnectorSide, "stage.side.upstage" | "stage.side.right" | "stage.side.downstage" | "stage.side.left"> = {
+  N: "stage.side.upstage", E: "stage.side.right", S: "stage.side.downstage", W: "stage.side.left",
 };
 
-const CONNECTOR_SIDE_SHORT: Record<ConnectorSide, string> = {
-  N: "↑ Up",
-  E: "→ SR",
-  S: "↓ Down",
-  W: "← SL",
+const CONNECTOR_SIDE_SHORT_KEYS: Record<ConnectorSide, "stage.short.N" | "stage.short.E" | "stage.short.S" | "stage.short.W"> = {
+  N: "stage.short.N", E: "stage.short.E", S: "stage.short.S", W: "stage.short.W",
 };
 
 /** EHS orange — used for the male-connector edge stripe. */
@@ -89,6 +84,7 @@ const DECK_FILL: Record<StageDeckKey, string> = {
 
 export function StageReportView(props: Props) {
   const { stages, onAdd, onUpdate, onRemove, onDuplicate, onExport } = props;
+  const t = useT();
 
   const calcs = useMemo(() => stages.map((s) => computeStage(s)), [stages]);
   const totals = useMemo(
@@ -100,22 +96,18 @@ export function StageReportView(props: Props) {
     <div className="led-report">
       <header className="led-report-header">
         <div>
-          <h2>Stage Report</h2>
-          <p className="led-report-sub">
-            Nivtec deck calculator — pick stage size and the app figures out
-            decks, legs and (optional) handrails. Switch each stage to
-            <em> Manual</em> to place decks one by one on the grid.
-          </p>
+          <h2>{t("stage.title")}</h2>
+          <p className="led-report-sub">{t("stage.subtitle")}</p>
         </div>
         <div className="led-report-meta">
           <span>
-            <strong>{totals.stageCount}</strong> stages
+            <strong>{totals.stageCount}</strong> {t("stage.stages")}
           </span>
           <span>
-            <strong>{fmt(totals.totalArea, 1)}</strong> m² total
+            <strong>{fmt(totals.totalArea, 1)}</strong> {t("stage.unit.areaTotal")}
           </span>
           <span>
-            <strong>{fmt(totals.totalWeight, 0)}</strong> kg total
+            <strong>{fmt(totals.totalWeight, 0)}</strong> {t("stage.unit.weightTotal")}
           </span>
         </div>
       </header>
@@ -123,60 +115,60 @@ export function StageReportView(props: Props) {
       {/* Project totals dashboard */}
       <div className="dashboard">
         <div className="dash-item">
-          <span>Decks 2 × 1</span>
+          <span>{t("stage.dashboard.deck2x1")}</span>
           <strong>{totals.deckCountsByKey["2x1"]}</strong>
-          <small>pcs</small>
+          <small>{t("stage.unit.pieces")}</small>
         </div>
         <div className="dash-item">
-          <span>Decks 1 × 1</span>
+          <span>{t("stage.dashboard.deck1x1")}</span>
           <strong>{totals.deckCountsByKey["1x1"]}</strong>
-          <small>pcs</small>
+          <small>{t("stage.unit.pieces")}</small>
         </div>
         <div className="dash-item">
-          <span>Decks 0.5 × 2</span>
+          <span>{t("stage.dashboard.deck05x2")}</span>
           <strong>{totals.deckCountsByKey["0.5x2"]}</strong>
-          <small>pcs</small>
+          <small>{t("stage.unit.pieces")}</small>
         </div>
         <div className="dash-item">
-          <span>Decks 0.5 × 1</span>
+          <span>{t("stage.dashboard.deck05x1")}</span>
           <strong>{totals.deckCountsByKey["0.5x1"]}</strong>
-          <small>pcs</small>
+          <small>{t("stage.unit.pieces")}</small>
         </div>
         <div className="dash-item">
-          <span>Legs (total)</span>
+          <span>{t("stage.dashboard.legs")}</span>
           <strong>{totals.totalLegCount}</strong>
-          <small>pcs</small>
+          <small>{t("stage.unit.pieces")}</small>
         </div>
         <div className="dash-item">
-          <span>Rails 2 m</span>
+          <span>{t("stage.dashboard.rail2")}</span>
           <strong>{totals.rails2mTotal}</strong>
-          <small>pcs</small>
+          <small>{t("stage.unit.pieces")}</small>
         </div>
         <div className="dash-item">
-          <span>Rails 1 m</span>
+          <span>{t("stage.dashboard.rail1")}</span>
           <strong>{totals.rails1mTotal}</strong>
-          <small>pcs</small>
+          <small>{t("stage.unit.pieces")}</small>
         </div>
         <div className="dash-item">
-          <span>Total area</span>
+          <span>{t("stage.dashboard.area")}</span>
           <strong>{fmt(totals.totalArea, 1)}</strong>
           <small>m²</small>
         </div>
         <div className="dash-item">
-          <span>Total weight</span>
+          <span>{t("stage.dashboard.weight")}</span>
           <strong>{fmt(totals.totalWeight, 0)}</strong>
           <small>kg</small>
         </div>
         <div className="dash-item">
-          <span>Max load</span>
+          <span>{t("stage.dashboard.load")}</span>
           <strong>{fmt(totals.totalLoadCapacityKg, 0)}</strong>
-          <small>kg total</small>
+          <small>{t("stage.unit.weightTotal")}</small>
         </div>
       </div>
 
       <div className="led-actions" style={{ marginTop: "1rem" }}>
         <button className="btn btn-add" onClick={onAdd}>
-          + Add Stage
+          {t("stage.action.add")}
         </button>
       </div>
 
@@ -189,7 +181,7 @@ export function StageReportView(props: Props) {
             color: "var(--muted, #64748b)",
           }}
         >
-          No stages yet — click <strong>+ Add Stage</strong> to start.
+          {t("stage.empty")}
         </div>
       ) : (
         <div className="stage-list">
@@ -202,7 +194,7 @@ export function StageReportView(props: Props) {
               onRemove={() => {
                 if (
                   window.confirm(
-                    `Delete stage "${stage.name || "Untitled"}"? This cannot be undone.`,
+                    t("stage.confirm.delete", { name: stage.name || t("stage.untitled") }),
                   )
                 ) {
                   onRemove(stage.id);
@@ -235,6 +227,7 @@ function StageCard({
   onDuplicate,
   onExport,
 }: StageCardProps) {
+  const t = useT();
   const isManual = stage.editMode === "manual";
   // Local UI state for the manual deck editor.
   const [selectedDeckKey, setSelectedDeckKey] = useState<StageDeckKey>("1x1");
@@ -347,7 +340,7 @@ function StageCard({
           type="text"
           className="stage-name-input"
           value={stage.name}
-          placeholder="e.g. Main Stage, Stage Left, DJ Riser…"
+          placeholder={t("stage.namePlaceholder")}
           onChange={(e) => onUpdate({ name: e.target.value })}
         />
         <div className="stage-card-actions">
@@ -356,15 +349,15 @@ function StageCard({
             onClick={() => {
               void onExport();
             }}
-            title="Download this stage's build sheet as a PDF"
+            title={t("stage.action.downloadTitle")}
           >
-            Download PDF
+            {t("stage.action.download")}
           </button>
           <button className="btn btn-tab-action" onClick={onDuplicate}>
-            Copy
+            {t("stage.action.copy")}
           </button>
           <button className="btn btn-del" onClick={onRemove}>
-            Delete
+            {t("common.delete")}
           </button>
         </div>
       </div>
@@ -372,21 +365,21 @@ function StageCard({
       <div className="stage-card-body">
         <div className="stage-controls">
           <label className="stage-field">
-            <span>Layout</span>
+            <span>{t("stage.field.layout")}</span>
             <select
               value={stage.editMode}
               onChange={(e) =>
                 onUpdate({ editMode: e.target.value as StageEditMode })
               }
             >
-              <option value="auto">Auto (enter size)</option>
-              <option value="manual">Manual (place decks)</option>
+              <option value="auto">{t("stage.layout.auto")}</option>
+              <option value="manual">{t("stage.layout.manual")}</option>
             </select>
           </label>
 
           {!isManual && (
             <label className="stage-field stage-field--narrow">
-              <span>Width (m)</span>
+              <span>{t("stage.field.width")}</span>
               <NumberField
                 min={0.5}
                 step={0.5}
@@ -399,7 +392,7 @@ function StageCard({
 
           {!isManual && (
             <label className="stage-field stage-field--narrow">
-              <span>Depth (m)</span>
+              <span>{t("stage.field.depth")}</span>
               <NumberField
                 min={0.5}
                 step={0.5}
@@ -411,7 +404,7 @@ function StageCard({
           )}
 
           <label className="stage-field">
-            <span>Leg height</span>
+            <span>{t("stage.field.legHeight")}</span>
             <select
               value={stage.legHeightCm}
               onChange={(e) =>
@@ -435,13 +428,13 @@ function StageCard({
                   display: "block",
                 }}
               >
-                Note: {n}
+                {t("stage.note")}: {n}
               </small>
             ))}
           </label>
 
           <label className="stage-field">
-            <span>Leg config</span>
+            <span>{t("stage.field.legConfig")}</span>
             <select
               value={stage.legMode}
               onChange={(e) =>
@@ -449,38 +442,38 @@ function StageCard({
               }
             >
               <option value="shared">
-                Nivtec 4-2-2-1 (shared corner legs)
+                {t("stage.legs.shared")}
               </option>
-              <option value="perDeck">4 legs per deck</option>
+              <option value="perDeck">{t("stage.legs.perDeck")}</option>
             </select>
           </label>
 
           <label className="stage-field stage-field--auto">
-            <span>Build from</span>
+            <span>{t("stage.field.buildFrom")}</span>
             <select
               value={stage.buildOrder}
               onChange={(e) =>
                 onUpdate({ buildOrder: e.target.value as StageBuildOrder })
               }
-              title="Which side the crew starts building from. Affects the deck numbering and (in 4-2-2-1 mode) the per-deck legs-needed count."
+              title={t("stage.buildFromHint")}
             >
-              <option value="leftToRight">Left → right</option>
-              <option value="rightToLeft">Right → left</option>
+              <option value="leftToRight">{t("stage.direction.leftToRight")}</option>
+              <option value="rightToLeft">{t("stage.direction.rightToLeft")}</option>
             </select>
           </label>
 
           <label className="stage-field">
-            <span>Male side faces</span>
+            <span>{t("stage.field.maleSide")}</span>
             <select
               value={stage.connectorSide}
               onChange={(e) =>
                 onUpdate({ connectorSide: e.target.value as ConnectorSide })
               }
-              title="Stage-wide default for which side of every Nivtec deck the male connectors face. Click an orange edge stripe on the layout to override an individual deck."
+              title={t("stage.maleSideHint")}
             >
               {CONNECTOR_SIDES.map((s) => (
                 <option key={s} value={s}>
-                  {CONNECTOR_SIDE_LABEL[s]}
+                  {t(CONNECTOR_SIDE_LABEL_KEYS[s])}
                 </option>
               ))}
             </select>
@@ -493,13 +486,7 @@ function StageCard({
                 display: "block",
               }}
             >
-              Tongue (male) hooks into groove (female). The opposite (female)
-              side is where the stage can be expanded later.
-              <br />
-              <em>
-                Tunge (hann) hektes i spor (hunn). Motsatt (hunn) side er der
-                scenen kan utvides senere.
-              </em>
+              {t("stage.connectorGuidance")}
             </small>
             {Object.keys(stage.connectorOverrides).length > 0 && (
               <small
@@ -511,8 +498,7 @@ function StageCard({
                   display: "block",
                 }}
               >
-                {Object.keys(stage.connectorOverrides).length} per-deck
-                override{Object.keys(stage.connectorOverrides).length === 1 ? "" : "s"}.{" "}
+                {t("stage.overrides", { count: Object.keys(stage.connectorOverrides).length })}{" "}
                 <button
                   type="button"
                   className="btn-link"
@@ -527,14 +513,14 @@ function StageCard({
                   }}
                   onClick={() => onUpdate({ connectorOverrides: {} })}
                 >
-                  Reset all
+                  {t("stage.action.resetAll")}
                 </button>
               </small>
             )}
           </label>
 
           <fieldset className="stage-rails">
-            <legend>Handrails</legend>
+            <legend>{t("stage.handrails")}</legend>
             <label>
               <input
                 type="checkbox"
@@ -545,7 +531,7 @@ function StageCard({
                   })
                 }
               />
-              Front
+              {t("stage.rail.front")}
             </label>
             <label>
               <input
@@ -557,7 +543,7 @@ function StageCard({
                   })
                 }
               />
-              Back
+              {t("stage.rail.back")}
             </label>
             <label>
               <input
@@ -569,7 +555,7 @@ function StageCard({
                   })
                 }
               />
-              Left
+              {t("stage.rail.left")}
             </label>
             <label>
               <input
@@ -581,16 +567,16 @@ function StageCard({
                   })
                 }
               />
-              Right
+              {t("stage.rail.right")}
             </label>
           </fieldset>
 
           <label className="stage-field stage-notes-field">
-            <span>Notes</span>
+            <span>{t("stage.notes")}</span>
             <input
               type="text"
               value={stage.notes}
-              placeholder="optional…"
+              placeholder={t("stage.notesPlaceholder")}
               onChange={(e) => onUpdate({ notes: e.target.value })}
             />
           </label>
@@ -607,7 +593,7 @@ function StageCard({
               if (stage.manualPlacements.length === 0) return;
               if (
                 window.confirm(
-                  "Remove all placed decks from this stage?",
+                    t("stage.confirm.clearDecks"),
                 )
               ) {
                 onUpdate({ manualPlacements: [] });
@@ -626,7 +612,7 @@ function StageCard({
                 if (stage.customRails.length === 0) return;
                 if (
                   window.confirm(
-                    "Remove all custom (drawn) rails from this stage?",
+                    t("stage.confirm.clearRails"),
                   )
                 ) {
                   onUpdate({ customRails: [] });
@@ -673,6 +659,7 @@ function DeckPalette({
   onRotate: () => void;
   onClear: () => void;
 }) {
+  const t = useT();
   const items: { key: StageDeckKey; label: string }[] = [
     { key: "2x1", label: "2 × 1" },
     { key: "1x1", label: "1 × 1" },
@@ -682,7 +669,7 @@ function DeckPalette({
   return (
     <div className="deck-palette">
       <div className="deck-palette-row">
-        <span className="deck-palette-label">Place a deck</span>
+        <span className="deck-palette-label">{t("stage.palette.place")}</span>
         {items.map((it) => {
           const isActive = selectedKey === it.key;
           const dims = placedDims(it.key, rotated);
@@ -697,7 +684,7 @@ function DeckPalette({
               type="button"
               className={`deck-palette-btn${isActive ? " is-active" : ""}`}
               onClick={() => onSelect(it.key)}
-              title={`Place ${it.label} m decks`}
+              title={t("stage.palette.placeTitle", { size: it.label })}
             >
               <span
                 className="deck-palette-swatch"
@@ -716,25 +703,22 @@ function DeckPalette({
           className="deck-palette-btn deck-palette-rotate"
           onClick={onRotate}
           disabled={selectedKey === "1x1"}
-          title="Rotate selected deck 90°"
+          title={t("stage.palette.rotateTitle")}
         >
-          {rotated ? "Rotated 90°" : "Rotate 90°"}
+          {rotated ? t("stage.palette.rotated") : t("stage.palette.rotate")}
         </button>
         <button
           type="button"
           className="deck-palette-btn deck-palette-clear"
           onClick={onClear}
           disabled={placedCount === 0}
-          title="Remove all placed decks"
+          title={t("stage.palette.clearTitle")}
         >
-          Clear all
+          {t("stage.action.clearAll")}
         </button>
       </div>
       <div className="deck-palette-help">
-        Click an empty cell on the visual to place the selected deck. Click a
-        placed deck to remove it. <strong>Right-click</strong> (or
-        <strong> Shift + click</strong>) a placed deck to rotate it 90° in
-        place — handy for fixing one deck without re-placing the whole row.
+        {t("stage.palette.help")}
       </div>
     </div>
   );
@@ -754,25 +738,25 @@ function RailToolbar({
   customRailCount: number;
   onClearAll: () => void;
 }) {
+  const t = useT();
   const items: { mode: RailMode; label: string; isDelete?: boolean }[] = [
-    { mode: "off", label: "Off" },
-    { mode: "add2", label: "Draw 2 m rail" },
-    { mode: "add1", label: "Draw 1 m rail" },
-    { mode: "delete", label: "Delete rail", isDelete: true },
+    { mode: "off", label: t("stage.railTool.off") },
+    { mode: "add2", label: t("stage.railTool.add2") },
+    { mode: "add1", label: t("stage.railTool.add1") },
+    { mode: "delete", label: t("stage.railTool.delete"), isDelete: true },
   ];
   const helpText = (() => {
     if (mode === "add2" || mode === "add1") {
-      const len = mode === "add2" ? "2 m" : "1 m";
-      return `Click two points on the stage to drop a ${len} rail. The first click sets the start; the second click sets the direction (snapped to the nearest axis). Esc to cancel.`;
+      return t("stage.railTool.drawHelp", { length: mode === "add2" ? "2 m" : "1 m" });
     }
     if (mode === "delete") {
-      return "Click a custom rail on the stage to remove it. The four side handrails are toggled with the checkboxes above.";
+      return t("stage.railTool.deleteHelp");
     }
-    return "Pick a tool to draw or delete custom rail segments anywhere on the stage.";
+    return t("stage.railTool.offHelp");
   })();
   return (
     <div className="stage-rail-tools">
-      <span className="stage-rail-tools-label">Custom rails</span>
+      <span className="stage-rail-tools-label">{t("stage.customRails")}</span>
       {items.map((it) => (
         <button
           key={it.mode}
@@ -791,9 +775,9 @@ function RailToolbar({
         className="stage-rail-tool-btn"
         onClick={onClearAll}
         disabled={customRailCount === 0}
-        title="Remove every drawn rail from this stage"
+        title={t("stage.railTool.clearTitle")}
       >
-        Clear all ({customRailCount})
+        {t("stage.action.clearAll")} ({customRailCount})
       </button>
       <div className="stage-rail-tool-help">{helpText}</div>
     </div>
@@ -840,6 +824,7 @@ function StageSvg({
   /** Remove a custom rail by id (delete-mode click). */
   onRemoveCustomRail?: (id: string) => void;
 }) {
+  const t = useT();
   const PAD = 12;
   // Internal maximum render size (in SVG pixels) for the stage
   // drawing. The actual on-screen width is capped by the column
@@ -1242,7 +1227,7 @@ function StageSvg({
                       fill="#fff"
                       fontWeight={600}
                     >
-                      +{asm.legsAdded} {asm.legsAdded === 1 ? "leg" : "legs"}
+                      {t("stage.svg.legsAdded", { count: asm.legsAdded })}
                     </text>
                   )}
                 </g>
@@ -1592,10 +1577,11 @@ function StageSvg({
               >
                 {interactiveStripe && (
                   <title>
-                    Male sides: {CONNECTOR_SIDE_LABEL[primary]} +{" "}
-                    {CONNECTOR_SIDE_LABEL[adjacent]}
-                    {isOverride ? " (override)" : " (stage default)"} — click to
-                    cycle
+                    {t("stage.svg.maleSides", {
+                      primary: t(CONNECTOR_SIDE_LABEL_KEYS[primary]),
+                      adjacent: t(CONNECTOR_SIDE_LABEL_KEYS[adjacent]),
+                      state: t(isOverride ? "stage.svg.override" : "stage.svg.default"),
+                    })}
                   </title>
                 )}
               </rect>
@@ -1635,14 +1621,14 @@ function StageSvg({
           <i style={{ background: DECK_FILL["0.5x1"] }} /> 0.5×1
         </span>
         <span>
-          <i style={{ background: "#dc2626" }} /> Rail
+          <i style={{ background: "#dc2626" }} /> {t("stage.legend.rail")}
         </span>
         <span>
-          <i style={{ background: "#0f172a", borderRadius: "50%" }} /> Leg
+          <i style={{ background: "#0f172a", borderRadius: "50%" }} /> {t("stage.legend.leg")}
         </span>
-        <span title="Click an orange edge in the layout to override an individual deck.">
-          <i style={{ background: MALE_EDGE_COLOR }} /> Male edges (
-          {CONNECTOR_SIDE_SHORT[stage.connectorSide]} + adjacent short side)
+        <span title={t("stage.legend.maleTitle")}>
+          <i style={{ background: MALE_EDGE_COLOR }} /> {t("stage.legend.maleEdges")} (
+          {t(CONNECTOR_SIDE_SHORT_KEYS[stage.connectorSide])} + {t("stage.legend.adjacentShortSide")})
         </span>
       </div>
     </div>
@@ -1656,6 +1642,7 @@ function StageBreakdown({
   stage: Stage;
   calc: ReturnType<typeof computeStage>;
 }) {
+  const t = useT();
   const usedDecks = STAGE_DECKS.filter((d) => calc.deckCounts[d.key] > 0);
   const legSpec = STAGE_LEGS.find((l) => l.heightCm === stage.legHeightCm);
 
@@ -1663,27 +1650,22 @@ function StageBreakdown({
     <div className="stage-breakdown">
       {!calc.fits && (
         <div className="stage-warning" data-testid="stage-warning">
-          ⚠ Some cells of this stage cannot be tiled with the available Nivtec
-          deck sizes (only multiples of 0.5 m are supported, and 0.5 m × 0.5 m
-          gaps cannot be filled).
+          ⚠ {t("stage.warning.unfillable")}
         </div>
       )}
 
-      <h4>Decks</h4>
+      <h4>{t("stage.decks")}</h4>
       <table className="stage-table">
         <thead>
           <tr>
-            <th>Size</th>
-            <th>Qty</th>
-            <th>Unit weight</th>
-            <th>Total</th>
+            <th>{t("stage.table.size")}</th><th>{t("stage.table.quantity")}</th><th>{t("stage.table.unitWeight")}</th><th>{t("stage.table.total")}</th>
           </tr>
         </thead>
         <tbody>
           {usedDecks.length === 0 ? (
             <tr>
               <td colSpan={4} style={{ color: "var(--muted, #64748b)" }}>
-                — none —
+                {t("stage.none")}
               </td>
             </tr>
           ) : (
@@ -1697,7 +1679,7 @@ function StageBreakdown({
             ))
           )}
           <tr className="stage-row-total">
-            <td>Subtotal</td>
+            <td>{t("stage.table.subtotal")}</td>
             <td />
             <td />
             <td>{fmt(calc.deckWeight, 1)} kg</td>
@@ -1708,39 +1690,39 @@ function StageBreakdown({
       <h4>
         Legs ({stage.legHeightCm} cm
         {stage.legMode === "perDeck"
-          ? " · 4 per deck"
-          : " · shared corners"}
+          ? ` · ${t("stage.legs.perDeck")}`
+          : ` · ${t("stage.legs.sharedCorners")}`}
         )
       </h4>
       <table className="stage-table">
         <tbody>
           <tr>
-            <td>Quantity</td>
-            <td>{calc.legCount} pcs</td>
+            <td>{t("stage.table.quantity")}</td>
+            <td>{calc.legCount} {t("stage.unit.pieces")}</td>
           </tr>
           <tr>
-            <td>Unit weight</td>
+            <td>{t("stage.table.unitWeight")}</td>
             <td>{fmt(legSpec?.weight ?? 0, 2)} kg</td>
           </tr>
           <tr className="stage-row-total">
-            <td>Subtotal</td>
+            <td>{t("stage.table.subtotal")}</td>
             <td>{fmt(calc.legWeight, 1)} kg</td>
           </tr>
         </tbody>
       </table>
 
-      <h4>Load capacity</h4>
+      <h4>{t("stage.loadCapacity")}</h4>
       <table className="stage-table">
         <tbody>
           <tr>
-            <td>Distributed load</td>
+            <td>{t("stage.table.distributedLoad")}</td>
             <td>
               <strong>{fmt(calc.loadCapacityKg, 0)} kg</strong>
-              {!calc.fits && " (placed area only)"}
+              {!calc.fits && ` (${t("stage.placedAreaOnly")})`}
             </td>
           </tr>
           <tr>
-            <td>Rated SWL</td>
+            <td>{t("stage.table.ratedSwl")}</td>
             <td>
               {fmt(calc.effectiveSwlPerM2, 0)} kg/m² @ {stage.legHeightCm} cm
             </td>
@@ -1748,20 +1730,17 @@ function StageBreakdown({
         </tbody>
       </table>
       <div className="stage-capacity-note">
-        Capacity is derated for leg height (Nivtec aluminium typical:
-        ≤60 cm full rating; 80 cm ~85%; 100 cm ~70%; 120 cm ~55%; 140 cm
-        ~45%). Always confirm against the manufacturer datasheet for your
-        exact configuration.
+        {t("stage.capacityNote")}
       </div>
 
       {(calc.railBreakdown.length > 0 || calc.customRailsCount > 0) && (
         <>
-          <h4>Handrails</h4>
+          <h4>{t("stage.handrails")}</h4>
           <table className="stage-table">
             <thead>
               <tr>
-                <th>Side</th>
-                <th>Length</th>
+                <th>{t("stage.table.side")}</th>
+                <th>{t("stage.table.length")}</th>
                 <th>2 m</th>
                 <th>1 m</th>
               </tr>
@@ -1769,7 +1748,7 @@ function StageBreakdown({
             <tbody>
               {calc.railBreakdown.map((r) => (
                 <tr key={r.side}>
-                  <td style={{ textTransform: "capitalize" }}>{r.side}</td>
+                  <td style={{ textTransform: "capitalize" }}>{t(`stage.rail.${r.side}` as "stage.rail.front")}</td>
                   <td>{fmt(r.lengthM, 1)} m</td>
                   <td>{r.count2m}</td>
                   <td>{r.count1m}</td>
@@ -1777,7 +1756,7 @@ function StageBreakdown({
               ))}
               {calc.customRailsCount > 0 && (
                 <tr>
-                  <td>Custom (drawn)</td>
+                  <td>{t("stage.customDrawn")}</td>
                   <td>{fmt(calc.customRailsLength, 1)} m</td>
                   <td>
                     {stage.customRails.filter((c) => c.type === 2).length}
@@ -1788,13 +1767,13 @@ function StageBreakdown({
                 </tr>
               )}
               <tr className="stage-row-total">
-                <td>Subtotal</td>
+                <td>{t("stage.table.subtotal")}</td>
                 <td>{fmt(calc.railLengthTotal, 1)} m</td>
                 <td>{calc.rails2mTotal}</td>
                 <td>{calc.rails1mTotal}</td>
               </tr>
               <tr>
-                <td colSpan={3}>Weight</td>
+                <td colSpan={3}>{t("stage.weight")}</td>
                 <td>{fmt(calc.railWeight, 1)} kg</td>
               </tr>
             </tbody>
@@ -1813,7 +1792,7 @@ function StageBreakdown({
         return (
           <div className="stage-grand-total">
             <div className="stage-grand-stat">
-              <span className="stage-grand-label">Stage area</span>
+              <span className="stage-grand-label">{t("stage.area")}</span>
               <strong className="stage-grand-value">
                 {fmt(calc.areaM2, 2)}{" "}
                 <span className="stage-grand-unit">m²</span>
@@ -1821,11 +1800,11 @@ function StageBreakdown({
               <span className="stage-grand-sub">
                 {hasDims
                   ? `${fmt(subWidth, 1)} × ${fmt(subDepth, 1)} m`
-                  : "No decks placed"}
+                  : t("stage.noDecksPlaced")}
               </span>
             </div>
             <div className="stage-grand-stat">
-              <span className="stage-grand-label">Total weight</span>
+              <span className="stage-grand-label">{t("stage.totalWeight")}</span>
               <strong className="stage-grand-value">
                 {fmt(calc.totalWeight, 1)}{" "}
                 <span className="stage-grand-unit">kg</span>

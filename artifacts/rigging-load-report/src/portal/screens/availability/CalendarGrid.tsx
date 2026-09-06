@@ -277,7 +277,7 @@ export function CalendarGrid({
             <div
               role="button"
               tabIndex={0}
-              aria-label={`${cell.iso}: ${isAvailable ? t("portal.availability.legend.available") : isUnavailable ? t("portal.availability.legend.unavailable") : "Neutral"}`}
+              aria-label={`${cell.iso}: ${isAvailable ? t("portal.availability.legend.available") : isUnavailable ? t("portal.availability.legend.unavailable") : t("portal.availability.legend.neutral")}`}
               aria-pressed={selected}
               aria-selected={selected}
               onPointerDown={(e) => {

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExtractedItems } from "../../lib/drawingAnalysis";
+import { useT, type Translator } from "../../lib/i18n/I18nContext";
+import type { TranslationKey } from "../../lib/i18n/types";
 import { OverlayBox } from "./OverlayBox";
 import {
   fromOverlayItems,
@@ -25,13 +27,21 @@ type Props = {
   onSave: (corrected: ExtractedItems) => void;
 };
 
-const KIND_LABELS: Record<OverlayItemKind, string> = {
-  truss: "Truss",
-  lighting: "Lighting",
-  led: "LED Screen",
-  stage: "Stage",
-  sound: "Sound",
-};
+const KIND_LABEL_KEYS = {
+  truss: "overlayEditor.kind.truss",
+  lighting: "overlayEditor.kind.lighting",
+  led: "overlayEditor.kind.led",
+  stage: "overlayEditor.kind.stage",
+  sound: "overlayEditor.kind.sound",
+} satisfies Record<OverlayItemKind, TranslationKey>;
+
+const NEW_LABEL_KEYS = {
+  truss: "overlayEditor.new.truss",
+  lighting: "overlayEditor.new.lighting",
+  led: "overlayEditor.new.led",
+  stage: "overlayEditor.new.stage",
+  sound: "overlayEditor.new.sound",
+} satisfies Record<OverlayItemKind, TranslationKey>;
 
 const KINDS: OverlayItemKind[] = ["truss", "lighting", "led", "stage", "sound"];
 
@@ -58,6 +68,7 @@ export function OverlayEditor({
   onClose,
   onSave,
 }: Props) {
+  const t = useT();
   const initialItems = useMemo(() => toOverlayItems(extracted), [extracted]);
   const [items, setItems] = useState<OverlayItem[]>(initialItems);
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -91,7 +102,7 @@ export function OverlayEditor({
   }
 
   function addItem(kind: OverlayItemKind) {
-    const fresh = newOverlayItem(kind);
+    const fresh = newOverlayItem(kind, t(NEW_LABEL_KEYS[kind]));
     setItems((curr) => [...curr, fresh]);
     setSelectedId(fresh.id);
   }
@@ -110,7 +121,7 @@ export function OverlayEditor({
       className="overlay-editor-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="Edit detected items on the drawing"
+      aria-label={t("overlayEditor.dialogAria")}
       onClick={(e) => {
         // Only close when the click started on the backdrop itself,
         // never when it bubbled up from the dialog body or a box —
@@ -121,24 +132,23 @@ export function OverlayEditor({
       <div className="overlay-editor-shell">
         <header className="overlay-editor-head">
           <div>
-            <strong>Edit detections</strong>
+            <strong>{t("overlayEditor.title")}</strong>
             <span className="led-sub" style={{ marginLeft: 8 }}>
-              {items.length} item{items.length === 1 ? "" : "s"}. Drag to move,
-              corners to resize. Click a box to edit it.
+              {t(items.length === 1 ? "overlayEditor.summary.one" : "overlayEditor.summary.many", { count: items.length })}
             </span>
           </div>
           <div className="overlay-editor-head-actions">
             <button type="button" className="btn btn-soft" onClick={onClose}>
-              Cancel
+              {t("overlayEditor.cancel")}
             </button>
             <button type="button" className="btn btn-primary" onClick={commit}>
-              Save corrections
+              {t("overlayEditor.save")}
             </button>
           </div>
         </header>
 
         <div className="overlay-editor-toolbar">
-          <span className="led-sub">Add new:</span>
+          <span className="led-sub">{t("overlayEditor.addNew")}</span>
           {KINDS.map((kind) => (
             <button
               key={kind}
@@ -146,7 +156,7 @@ export function OverlayEditor({
               className={`btn btn-soft btn-xs overlay-add-${kind}`}
               onClick={() => addItem(kind)}
             >
-              + {KIND_LABELS[kind]}
+              + {t(KIND_LABEL_KEYS[kind])}
             </button>
           ))}
         </div>
@@ -166,7 +176,7 @@ export function OverlayEditor({
               <img
                 ref={setImageEl}
                 src={imageUrl}
-                alt="Uploaded drawing"
+                alt={t("overlayEditor.imageAlt")}
                 draggable={false}
                 onClick={() => setSelectedId(null)}
               />
@@ -191,10 +201,9 @@ export function OverlayEditor({
           <aside className="overlay-editor-side">
             {!selected && (
               <div className="overlay-editor-empty">
-                <strong>No item selected</strong>
+                <strong>{t("overlayEditor.empty.title")}</strong>
                 <p className="led-sub">
-                  Click a box on the drawing to edit it, or use the
-                  <em> + Add</em> buttons above to add a new item.
+                  {t("overlayEditor.empty.body")}
                 </p>
               </div>
             )}
@@ -205,6 +214,7 @@ export function OverlayEditor({
                   updateItem(selected.id, () => relabelOverlayItem(next))
                 }
                 onDelete={() => deleteItem(selected.id)}
+                t={t}
               />
             )}
           </aside>
@@ -218,10 +228,12 @@ function SidePanel({
   item,
   onChange,
   onDelete,
+  t,
 }: {
   item: OverlayItem;
   onChange: (next: OverlayItem) => void;
   onDelete: () => void;
+  t: Translator;
 }) {
   // Helper so each field can mutate the payload without rewriting the
   // discriminated union plumbing five times.
@@ -235,17 +247,17 @@ function SidePanel({
     <div className="overlay-side-panel">
       <header className="overlay-side-head">
         <span className={`overlay-pill overlay-pill-${item.kind}`}>
-          {KIND_LABELS[item.kind]}
+          {t(KIND_LABEL_KEYS[item.kind])}
         </span>
         {conf != null && (
           <span className={`overlay-conf-pill ${confClass(conf)}`}>
-            {(conf * 100).toFixed(0)}% confidence
+            {t("overlayEditor.confidence", { percent: (conf * 100).toFixed(0) })}
           </span>
         )}
       </header>
 
       <label className="overlay-field">
-        <span>Name / label</span>
+        <span>{t("overlayEditor.field.name")}</span>
         <input
           type="text"
           value={item.payload.name}
@@ -261,7 +273,7 @@ function SidePanel({
       {item.kind === "truss" && (
         <>
           <label className="overlay-field">
-            <span>Length (m)</span>
+            <span>{t("overlayEditor.field.lengthM")}</span>
             <input
               type="number"
               step="0.1"
@@ -273,7 +285,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Hoist points</span>
+            <span>{t("overlayEditor.field.hoistPoints")}</span>
             <input
               type="number"
               step="1"
@@ -289,7 +301,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Hoist capacity (kg)</span>
+            <span>{t("overlayEditor.field.hoistKg")}</span>
             <input
               type="number"
               step="100"
@@ -301,7 +313,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Trim height (m)</span>
+            <span>{t("overlayEditor.field.trimM")}</span>
             <input
               type="number"
               step="0.1"
@@ -318,7 +330,7 @@ function SidePanel({
       {item.kind === "lighting" && (
         <>
           <label className="overlay-field">
-            <span>Quantity</span>
+            <span>{t("overlayEditor.field.quantity")}</span>
             <input
               type="number"
               step="1"
@@ -331,16 +343,16 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>On truss</span>
+            <span>{t("overlayEditor.field.onTruss")}</span>
             <input
               type="text"
               value={item.payload.trussName}
-              placeholder="e.g. LX1"
+              placeholder={t("overlayEditor.placeholder.truss")}
               onChange={(e) => patchPayload({ trussName: e.target.value })}
             />
           </label>
           <label className="overlay-field">
-            <span>Weight (kg, each)</span>
+            <span>{t("overlayEditor.field.weightKgEach")}</span>
             <input
               type="number"
               step="0.1"
@@ -352,7 +364,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Watts (each)</span>
+            <span>{t("overlayEditor.field.wattsEach")}</span>
             <input
               type="number"
               step="1"
@@ -369,7 +381,7 @@ function SidePanel({
       {item.kind === "led" && (
         <>
           <label className="overlay-field">
-            <span>Width (m)</span>
+            <span>{t("overlayEditor.field.widthM")}</span>
             <input
               type="number"
               step="0.1"
@@ -381,7 +393,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Height (m)</span>
+            <span>{t("overlayEditor.field.heightM")}</span>
             <input
               type="number"
               step="0.1"
@@ -393,7 +405,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Panels wide</span>
+            <span>{t("overlayEditor.field.panelsWide")}</span>
             <input
               type="number"
               step="1"
@@ -405,7 +417,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Panels tall</span>
+            <span>{t("overlayEditor.field.panelsTall")}</span>
             <input
               type="number"
               step="1"
@@ -422,7 +434,7 @@ function SidePanel({
       {item.kind === "stage" && (
         <>
           <label className="overlay-field">
-            <span>Width (m)</span>
+            <span>{t("overlayEditor.field.widthM")}</span>
             <input
               type="number"
               step="0.1"
@@ -434,7 +446,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Depth (m)</span>
+            <span>{t("overlayEditor.field.depthM")}</span>
             <input
               type="number"
               step="0.1"
@@ -451,7 +463,7 @@ function SidePanel({
       {item.kind === "sound" && (
         <>
           <label className="overlay-field">
-            <span>Quantity</span>
+            <span>{t("overlayEditor.field.quantity")}</span>
             <input
               type="number"
               step="1"
@@ -464,7 +476,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Weight (kg, each)</span>
+            <span>{t("overlayEditor.field.weightKgEach")}</span>
             <input
               type="number"
               step="0.1"
@@ -476,7 +488,7 @@ function SidePanel({
             />
           </label>
           <label className="overlay-field">
-            <span>Watts (each)</span>
+            <span>{t("overlayEditor.field.wattsEach")}</span>
             <input
               type="number"
               step="1"
@@ -491,7 +503,7 @@ function SidePanel({
       )}
 
       <label className="overlay-field">
-        <span>Notes</span>
+        <span>{t("overlayEditor.field.notes")}</span>
         <textarea
           rows={2}
           value={item.payload.notes}
@@ -504,7 +516,7 @@ function SidePanel({
         className="btn btn-soft overlay-delete-btn"
         onClick={onDelete}
       >
-        Delete this item
+        {t("overlayEditor.delete")}
       </button>
     </div>
   );

@@ -1,6 +1,7 @@
 import React from "react";
 import { PALETTE, type ThemeMode } from "../../lib/portalTheme";
 import type { CalendarConnection, CalendarFeed } from "./types";
+import { useT, type Translator } from "../../../lib/i18n/I18nContext";
 
 function btnPill(theme: ThemeMode): React.CSSProperties {
   const c = PALETTE[theme];
@@ -33,7 +34,7 @@ function ConnectionRow({
   onSync: (id: string) => void;
   onDelete: (id: string) => void;
   theme: ThemeMode;
-  t: (k: string) => string;
+  t: Translator;
 }) {
   const c = PALETTE[theme];
   return (
@@ -44,7 +45,9 @@ function ConnectionRow({
           {!connection ? t("portal.availability.notConnected") : connection.connected ? (
             <>
               <span style={{ width: 8, height: 8, borderRadius: 4, background: c.success }}></span>
-              {connection.accountLabel ? `${t("portal.availability.connectedAs")} ${connection.accountLabel}` : t("portal.availability.synced")}
+              {connection.accountLabel
+                ? t("portal.availability.connectedAccount", { account: connection.accountLabel })
+                : t("portal.availability.synced")}
             </>
           ) : (
             <>
@@ -83,7 +86,6 @@ export function IntegrationsTab({
   handleDownload,
   getWebcalUrl,
   copied,
-  t
 }: {
   theme: ThemeMode;
   connections: CalendarConnection[];
@@ -99,9 +101,9 @@ export function IntegrationsTab({
   handleDownload: () => void;
   getWebcalUrl: () => string;
   copied: boolean;
-  t: (k: string) => string;
 }) {
   const c = PALETTE[theme];
+  const t = useT();
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -110,7 +112,7 @@ export function IntegrationsTab({
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <ConnectionRow
             provider="google"
-            name="Google Calendar"
+            name={t("portal.availability.provider.google")}
             connection={connections.find(c => c.provider === "google")}
             onStart={() => handleStartConnection("google")}
             onSync={handleSync}
@@ -120,7 +122,7 @@ export function IntegrationsTab({
           />
           <ConnectionRow
             provider="microsoft"
-            name="Microsoft Outlook"
+            name={t("portal.availability.provider.microsoft")}
             connection={connections.find(c => c.provider === "microsoft")}
             onStart={() => handleStartConnection("microsoft")}
             onSync={handleSync}
@@ -132,7 +134,7 @@ export function IntegrationsTab({
             <ConnectionRow
               key={conn.id}
               provider="ics"
-              name="ICS Subscription"
+              name={t("portal.availability.provider.ics")}
               connection={conn}
               onStart={() => {}}
               onSync={handleSync}

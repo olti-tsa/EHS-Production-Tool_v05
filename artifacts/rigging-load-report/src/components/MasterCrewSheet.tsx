@@ -35,7 +35,7 @@ import {
   type CrewShiftTimeMap,
   type CrewShiftWindowMap,
 } from "../lib/crewShiftAssignments";
-import { useT } from "../lib/i18n/I18nContext";
+import { useI18n, useT } from "../lib/i18n/I18nContext";
 import { AssignShiftsModal } from "./AssignShiftsModal";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
@@ -51,10 +51,10 @@ type FreelancerCandidate = {
 };
 
 const SHIFT_PHASES = [
-  { key: "setup", label: "Setup" },
-  { key: "rehearsal", label: "Rehearsal" },
-  { key: "show", label: "Show" },
-  { key: "downrig", label: "Load Out" },
+  { key: "setup" },
+  { key: "rehearsal" },
+  { key: "show" },
+  { key: "downrig" },
 ] as const;
 
 function shiftMinutes(value: string): number | null {
@@ -238,7 +238,7 @@ export function MasterCrewSheet({
    * request dispatch are intentionally unavailable. */
   readOnly?: boolean;
 }) {
-  const t = useT();
+  const { t, locale } = useI18n();
   const [data, setData] = useState<RosterResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -263,25 +263,27 @@ export function MasterCrewSheet({
     if (!res.ok) {
       const msg =
         res.status === 403
-          ? "You don't own this brief."
+          ? t("crew.roster.error.notOwner")
           : res.status === 404
-            ? "Brief not found."
-            : "Could not load crew roster.";
+            ? t("crew.roster.error.notFound")
+            : t("crew.roster.error.load");
       throw new Error(msg);
     }
     const json = (await res.json()) as
       | RosterResponse
       | { ok: false; error?: string };
-    if (!json.ok) throw new Error(json.error ?? "Could not load crew roster.");
+    if (!json.ok) throw new Error(json.error ?? t("crew.roster.error.load"));
     return json;
-  }, [briefId, getToken, baseUrl]);
+  }, [briefId, getToken, baseUrl, t]);
 
   const cancelPendingRequest = useCallback(
     async (member: CrewMember) => {
       if (!briefId || !member.freelancerUserId) return;
       if (
         !window.confirm(
-          `Avbryt forespørselen til ${member.name || "denne frilanseren"}?`,
+          t("crew.cancel.confirm", {
+            name: member.name || t("crew.cancel.unnamed"),
+          }),
         )
       ) {
         return;
@@ -309,16 +311,16 @@ export function MasterCrewSheet({
         } | null;
         if (!response.ok || !result?.ok) {
           throw new Error(
-            result?.error ?? `Kunne ikke avbryte forespørselen (${response.status}).`,
+            result?.error ?? t("crew.cancel.errorStatus", { status: response.status }),
           );
         }
         onRemove(member.id);
-        toast.success("Forespørselen er avbrutt.");
+        toast.success(t("crew.cancel.success"));
       } catch (error) {
         toast.error(
           error instanceof Error
             ? error.message
-            : "Kunne ikke avbryte forespørselen.",
+            : t("crew.cancel.error"),
         );
       } finally {
         setSavingByKey((current) => {
@@ -328,7 +330,7 @@ export function MasterCrewSheet({
         });
       }
     },
-    [baseUrl, briefId, getToken, onRemove],
+    [baseUrl, briefId, getToken, onRemove, t],
   );
 
   // Fetch the structured directory once so selecting a suggestion can
@@ -391,17 +393,17 @@ export function MasterCrewSheet({
         setLoading(false);
       } catch (e) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Could not load crew roster.");
+        setError(e instanceof Error ? e.message : t("crew.roster.error.load"));
         setLoading(false);
       }
     };
     void fetchOnce();
-    const t = window.setInterval(fetchOnce, 60_000);
+    const timer = window.setInterval(fetchOnce, 60_000);
     return () => {
       cancelled = true;
-      window.clearInterval(t);
+      window.clearInterval(timer);
     };
-  }, [briefId, fetchRoster]);
+  }, [briefId, fetchRoster, t]);
 
   const rows = useMemo(
     () => mergeRoster(localCrew, data),
@@ -627,7 +629,7 @@ export function MasterCrewSheet({
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        let detail = "Could not save change.";
+        let detail = t("crew.sheet.saveError");
         try {
           const j = (await res.json()) as { error?: string };
           if (j.error) detail = j.error;
@@ -641,7 +643,7 @@ export function MasterCrewSheet({
       const fresh = await fetchRoster().catch(() => null);
       if (fresh) setData(fresh);
     } catch {
-      setError("Could not save change — connection lost.");
+      setError(t("crew.sheet.saveConnectionError"));
       const fresh = await fetchRoster().catch(() => null);
       if (fresh) setData(fresh);
     } finally {
@@ -651,7 +653,7 @@ export function MasterCrewSheet({
         return next;
       });
     }
-  }, [getToken, baseUrl, fetchRoster]);
+  }, [getToken, baseUrl, fetchRoster, t]);
 
   const handleHotelToggle = useCallback(
     (gigId: string, hotelRequired: boolean) => {
@@ -728,6 +730,47 @@ export function MasterCrewSheet({
       rows: printRows,
       projectDays: data?.projectDays ?? [],
       showProductionDetails,
+      locale,
+      copy: {
+        title: t("export.masterSheet.title"),
+        documentTitle: t("export.masterSheet.documentTitle"),
+        untitledBrief: t("export.masterSheet.untitledBrief"),
+        generated: t("export.masterSheet.generated"),
+        rosterCount: (count) => t("export.masterSheet.rosterCount", { count: count.toLocaleString(locale === "no" ? "nb-NO" : "en-US") }),
+        hotelSummary: (rooms, nights) => `${rooms.toLocaleString(locale === "no" ? "nb-NO" : "en-US")} ${t(rooms === 1 ? "export.masterSheet.room" : "export.masterSheet.rooms")} · ${nights.toLocaleString(locale === "no" ? "nb-NO" : "en-US")} ${t(nights === 1 ? "export.masterSheet.night" : "export.masterSheet.nights")}`,
+        empty: t("export.masterSheet.empty"),
+        table: {
+          name: t("export.masterSheet.table.name"), role: t("export.masterSheet.table.role"),
+          status: t("export.masterSheet.table.status"), days: t("export.masterSheet.table.days"),
+          hotel: t("export.masterSheet.table.hotel"), food: t("export.masterSheet.table.food"),
+          phone: t("export.masterSheet.table.phone"), notes: t("export.masterSheet.table.notes"),
+          call: t("export.masterSheet.table.call"), off: t("export.masterSheet.table.off"),
+          dayRate: t("export.masterSheet.table.dayRate"),
+        },
+        footer: t("export.masterSheet.footer"),
+        print: t("export.masterSheet.print"),
+        dayKey: t("export.masterSheet.dayKey"),
+        numberedByDate: t("export.masterSheet.numberedByDate"),
+        status: {
+          invited: t("export.masterSheet.status.invited"), confirmed: t("export.masterSheet.status.confirmed"),
+          done: t("export.masterSheet.status.done"), invoiced: t("export.masterSheet.status.invoiced"),
+          paid: t("export.masterSheet.status.paid"), requested: t("export.masterSheet.status.requested"),
+          accepted: t("export.masterSheet.status.accepted"), partially_accepted: t("export.masterSheet.status.partiallyAccepted"), declined: t("export.masterSheet.status.declined"),
+          "no-reply": t("export.masterSheet.status.noReply"), too_late: t("export.masterSheet.status.tooLate"),
+          manual: t("export.masterSheet.status.manual"),
+        },
+        food: {
+          profileMissing: t("export.masterSheet.food.profileMissing"), none: t("export.masterSheet.food.none"),
+          vegetarian: t("export.masterSheet.food.vegetarian"), vegan: t("export.masterSheet.food.vegan"),
+          halal: t("export.masterSheet.food.halal"), glutenFree: t("export.masterSheet.food.glutenFree"),
+          lactoseFree: t("export.masterSheet.food.lactoseFree"),
+          allergens: (count) => t(count === 1 ? "export.masterSheet.food.allergen" : "export.masterSheet.food.allergens", { count: count.toLocaleString(locale === "no" ? "nb-NO" : "en-US") }),
+        },
+        hotel: {
+          nights: (count) => t(count === 1 ? "export.masterSheet.hotel.night" : "export.masterSheet.hotel.nights", { count: count.toLocaleString(locale === "no" ? "nb-NO" : "en-US") }),
+          required: t("export.masterSheet.hotel.required"), notRequired: t("export.masterSheet.hotel.notRequired"),
+        },
+      },
     });
   }, [
     briefName,
@@ -737,6 +780,8 @@ export function MasterCrewSheet({
     showProductionDetails,
     localCrew,
     resolveLocalIdFor,
+    locale,
+    t,
   ]);
   const handleExportDailyCallSheet = useCallback(() => {
     if (!timelineDate) return;
@@ -751,8 +796,19 @@ export function MasterCrewSheet({
       venue,
       contacts,
       rows,
+      locale,
+      copy: {
+        notProvided: t("export.dailyCallSheet.notProvided"), noKeyContacts: t("export.dailyCallSheet.noKeyContacts"), noTasks: t("export.dailyCallSheet.noTasks"),
+        hotelRequired: t("export.dailyCallSheet.hotelRequired"), hotelRequiredDates: (dates) => t("export.dailyCallSheet.hotelRequiredDates", { dates }), hotelNotRequired: t("export.dailyCallSheet.hotelNotRequired"),
+        noneProvided: t("export.dailyCallSheet.noneProvided"), empty: t("export.dailyCallSheet.empty"), logoAlt: t("export.dailyCallSheet.logoAlt"), title: t("export.dailyCallSheet.title"),
+        crewRole: t("export.dailyCallSheet.table.crewRole"), windows: t("export.dailyCallSheet.table.windows"), timeline: t("export.dailyCallSheet.table.timeline"), tasks: t("export.dailyCallSheet.table.tasks"), hotel: t("export.dailyCallSheet.table.hotel"),
+        cateringDietaryAllergens: t("export.dailyCallSheet.table.cateringDietaryAllergens"), phone: t("export.dailyCallSheet.table.phone"), keyContacts: t("export.dailyCallSheet.keyContacts"), filename: t("export.dailyCallSheet.filename"),
+      },
+    }).catch((error) => {
+      console.error("[daily call sheet] PDF export failed:", error);
+      toast.error(t("export.dailyCallSheet.error"));
     });
-  }, [brief, briefName, rows, timelineDate, venue]);
+  }, [brief, briefName, rows, timelineDate, venue, locale, t]);
 
   const totalCount = rows.length;
   const linkedOwnerByUserId = useMemo(() => {
@@ -806,11 +862,15 @@ export function MasterCrewSheet({
     url.searchParams.set("brief", briefId);
     try {
       await navigator.clipboard.writeText(url.toString());
-      toast.success(`Portal link copied for ${row.name || "freelancer"}`);
+      toast.success(
+        t("crew.sheet.portalLinkCopied", {
+          name: row.name || t("crew.sheet.freelancer"),
+        }),
+      );
     } catch {
-      toast.error("Could not copy the portal link.");
+      toast.error(t("crew.sheet.portalLinkCopyError"));
     }
-  }, [briefId]);
+  }, [briefId, t]);
 
   return (
     <section className="led-card roster-card master-sheet-card">
@@ -916,7 +976,7 @@ export function MasterCrewSheet({
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
               <rect x="6" y="14" width="12" height="8" />
             </svg>
-            <span>Print A4</span>
+            <span>{t("crew.sheet.printA4")}</span>
           </button>
           <button
             type="button"
@@ -929,12 +989,8 @@ export function MasterCrewSheet({
             className="crew-send-linked-button"
           >
             {sendingLinkedRequests
-              ? "Sending…"
-              : `Send request${linkedUnsentMembers.length === 1 ? "" : "s"}${
-                  linkedUnsentMembers.length > 0
-                    ? ` (${linkedUnsentMembers.length})`
-                    : ""
-                }`}
+              ? t("crew.sheet.sending")
+              : t("crew.sheet.sendRequests", { count: linkedUnsentMembers.length })}
           </button>
           <button
             type="button"
@@ -958,17 +1014,17 @@ export function MasterCrewSheet({
               whiteSpace: "nowrap",
             }}
           >
-            + Add crew
+            {t("crew.sheet.addCrew")}
           </button>
         </div>
       ) : (
         <div className="led-card-head">
           <div>
-            <h3>Crew &amp; Logistics</h3>
+            <h3>{t("crew.sheet.title")}</h3>
             <p className="led-report-sub">
               {briefId
-                ? <>Everyone on <strong>{briefName || "this brief"}</strong> — days, hotel, food and phone in one sheet.</>
-                : <>Local call sheet only — pick a brief above to also pull in portal crew, hotel and food.</>}
+                ? <>{t("crew.sheet.everyoneOn", { name: briefName || t("crew.sheet.thisBrief") })}</>
+                : <>{t("crew.sheet.localOnly")}</>}
             </p>
           </div>
           <div className="led-controls">
@@ -982,23 +1038,23 @@ export function MasterCrewSheet({
             ) : null}
             <label
               className="roster-toggle"
-              title="Show call / off / day-rate columns"
+              title={t("crew.sheet.productionDetailsHint")}
             >
               <input
                 type="checkbox"
                 checked={showProductionDetails}
                 onChange={(e) => setShowProductionDetails(e.target.checked)}
               />
-              <span>Production details</span>
+              <span>{t("crew.sheet.productionDetails")}</span>
             </label>
             <button
               type="button"
               className="btn btn-soft"
               onClick={handlePrint}
               disabled={rows.length === 0}
-              title="Open a printable version of this sheet"
+              title={t("crew.sheet.printHint")}
             >
-              🖨 Print
+              🖨 {t("common.print")}
             </button>
             <button
               type="button"
@@ -1009,24 +1065,20 @@ export function MasterCrewSheet({
                 sendingLinkedRequests ||
                 !onSendLinkedRequests
               )}
-              title="Send the project brief to linked freelancers who have not been requested yet"
+              title={t("crew.sheet.sendHint")}
             >
               {sendingLinkedRequests
-                ? "Sending…"
-                : `Send request${linkedUnsentMembers.length === 1 ? "" : "s"}${
-                    linkedUnsentMembers.length > 0
-                      ? ` (${linkedUnsentMembers.length})`
-                      : ""
-                  }`}
+                ? t("crew.sheet.sending")
+                : t("crew.sheet.sendRequests", { count: linkedUnsentMembers.length })}
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={onAdd}
               disabled={readOnly}
-              title="Add a manual crew member to the local call sheet"
+              title={t("crew.sheet.addHint")}
             >
-              + Add crew
+              {t("crew.sheet.addCrew")}
             </button>
           </div>
         </div>
@@ -1038,19 +1090,19 @@ export function MasterCrewSheet({
         <section className="crew-daily-timeline">
           <div className="crew-daily-timeline-head">
             <div>
-              <strong>Daily shift timeline</strong>
-              <small>All assigned crew · overlaps and site coverage</small>
+              <strong>{t("crew.sheet.timeline")}</strong>
+              <small>{t("crew.sheet.timelineHint")}</small>
             </div>
             {timelineWarningCount > 0 ? (
               <span
                 className="crew-daily-warning-summary"
-                title="Rest: less than 11 hours from the prior shift end. Daily: more than 12 worked hours on this calendar date."
+                title={t("crew.sheet.warningHint")}
               >
-                ⚠ {timelineWarningCount} rest/daily warning{timelineWarningCount === 1 ? "" : "s"} · Rest &lt;11h · Daily &gt;12h
+                ⚠ {t("crew.sheet.warningCount", { count: timelineWarningCount })}
               </span>
             ) : (
               <span className="crew-daily-warning-summary crew-daily-warning-clear">
-                No rest/daily warnings
+                {t("crew.sheet.noWarnings")}
               </span>
             )}
             <button
@@ -1058,9 +1110,9 @@ export function MasterCrewSheet({
               className="btn btn-soft"
               onClick={handleExportDailyCallSheet}
               disabled={!timelineDate}
-              title="Download the selected date as an A4 landscape PDF"
+              title={t("crew.sheet.exportHint")}
             >
-              Export Daily Call Sheet
+              {t("crew.sheet.exportDaily")}
             </button>
             <select
               value={timelineDate}
@@ -1098,8 +1150,13 @@ export function MasterCrewSheet({
                       {alerts.map((alert, index) => {
                         const text =
                           alert.kind === "turnaround"
-                            ? `Rest ${formatWorkHours(alert.restMinutes)} after ${alert.previousEnd.endTime}; minimum is 11h`
-                            : `Daily work ${formatWorkHours(alert.workedMinutes)}; maximum is 12h`;
+                            ? t("crew.alert.restDetail", {
+                                rest: formatWorkHours(alert.restMinutes),
+                                time: alert.previousEnd.endTime,
+                              })
+                            : t("crew.alert.dailyDetail", {
+                                worked: formatWorkHours(alert.workedMinutes),
+                              });
                         return (
                           <em
                             className="crew-daily-warning-badge"
@@ -1107,7 +1164,10 @@ export function MasterCrewSheet({
                             title={text}
                             aria-label={text}
                           >
-                            ⚠ {alert.kind === "turnaround" ? "Rest" : "Daily"}
+                            ⚠{" "}
+                            {alert.kind === "turnaround"
+                              ? t("crew.alert.rest")
+                              : t("crew.alert.daily")}
                           </em>
                         );
                       })}
@@ -1147,41 +1207,41 @@ export function MasterCrewSheet({
                 );
               })
             ) : (
-              <p>No assigned shifts on this date.</p>
+              <p>{t("crew.sheet.noShifts")}</p>
             )}
           </div>
         </section>
       ) : null}
 
       {loading && !data && briefId ? (
-        <div className="led-empty">Loading roster…</div>
+        <div className="led-empty">{t("crew.sheet.loading")}</div>
       ) : rows.length === 0 ? (
         <div className="led-empty">
           {briefId
-            ? "Nobody on this brief yet — send a request from the sidebar or add a crew member to start."
-            : "No crew yet — add the first one to start your call sheet, or pick a brief above to pull in portal crew."}
+            ? t("crew.sheet.emptyBrief")
+            : t("crew.sheet.emptyLocal")}
         </div>
       ) : (
         <div className="led-table-wrap">
           <table className="led-table master-sheet-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Days</th>
-                <th>Hotel</th>
-                <th>Food</th>
-                <th>Phone</th>
-                <th>Notes</th>
+                <th>{t("crew.sheet.name")}</th>
+                <th>{t("crew.sheet.role")}</th>
+                <th>{t("crew.sheet.status")}</th>
+                <th>{t("crew.sheet.days")}</th>
+                <th>{t("crew.sheet.hotel")}</th>
+                <th>{t("crew.sheet.food")}</th>
+                <th>{t("crew.sheet.phone")}</th>
+                <th>{t("crew.sheet.notes")}</th>
                 {showProductionDetails ? (
                   <>
-                    <th>Call</th>
-                    <th>Off</th>
-                    <th className="led-num">Day rate (kr)</th>
+                    <th>{t("crew.sheet.call")}</th>
+                    <th>{t("crew.sheet.off")}</th>
+                    <th className="led-num">{t("crew.sheet.dayRate")}</th>
                   </>
                 ) : null}
-                <th aria-label="Actions" />
+                <th aria-label={t("crew.sheet.actions")} />
               </tr>
             </thead>
             <tbody>
@@ -1451,6 +1511,7 @@ function CrewNameCombobox({
   candidates: ReadonlyArray<FreelancerCandidate>;
   onUpdate: (patch: Partial<CrewMember>) => void;
 }) {
+  const t = useT();
   const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -1538,12 +1599,12 @@ function CrewNameCombobox({
             selectCandidate(matches[activeIndex] ?? matches[0]!);
           }
         }}
-        placeholder="Full name"
+        placeholder={t("crew.sheet.fullName")}
         autoComplete="off"
         readOnly={!!member.freelancerUserId && !!member.requestStatus}
         title={
           member.requestStatus
-            ? "The name is locked after a portal request is sent."
+            ? t("crew.sheet.nameLocked")
             : undefined
         }
         role="combobox"
@@ -1561,11 +1622,11 @@ function CrewNameCombobox({
           className="crew-name-linked"
           title={
             linkedCandidate
-              ? `Linked to ${linkedCandidate.fullName}'s portal account`
-              : "Linked to a freelancer portal account"
+              ? t("crew.sheet.linkedAccountName", { name: linkedCandidate.fullName })
+              : t("crew.sheet.linkedAccount")
           }
         >
-          Portal linked
+          {t("crew.sheet.portalLinked")}
         </span>
       ) : null}
       {open && matches.length > 0 ? (
@@ -1573,7 +1634,7 @@ function CrewNameCombobox({
           className="crew-name-options"
           id={listboxId}
           role="listbox"
-          aria-label="Registered freelancers"
+          aria-label={t("crew.sheet.registeredFreelancers")}
         >
           {matches.map((candidate, index) => (
             <button
@@ -1597,7 +1658,7 @@ function CrewNameCombobox({
               <span className="crew-name-option-meta">
                 {[candidate.primaryRole, candidate.city]
                   .filter(Boolean)
-                  .join(" · ") || "Registered freelancer"}
+                  .join(" · ") || t("crew.sheet.registeredFreelancer")}
               </span>
             </button>
           ))}
@@ -1684,13 +1745,14 @@ function MasterRow({
   onOpenProfile?: (userId: string) => void;
   onCopyPortalLink?: () => void;
 }) {
+  const t = useT();
   const chips = useMemo(
     () => buildDayChips(row.assignedDates, projectDays),
     [row.assignedDates, projectDays],
   );
   const assignedCount = row.assignedDates.length;
   const tone = statusTone(row.status);
-  const label = statusLabel(row.status);
+  const label = statusLabel(row.status, t);
   const editableLocal = row.source === "local" && !!onLocalUpdate;
 
   return (
@@ -1710,8 +1772,8 @@ function MasterRow({
                 type="button"
                 className="ehs-ghost-btn"
                 onClick={() => onOpenProfile(row.freelancerUserId!)}
-                title={`Open ${row.name || "freelancer"} profile and booking history`}
-                aria-label={`Open ${row.name || "freelancer"} profile and booking history`}
+                title={t("crew.sheet.openProfile", { name: row.name || t("crew.sheet.freelancer") })}
+                aria-label={t("crew.sheet.openProfile", { name: row.name || t("crew.sheet.freelancer") })}
                 style={{ flexShrink: 0, padding: "4px 7px", height: "auto" }}
               >
                 Profile
@@ -1722,8 +1784,8 @@ function MasterRow({
                 type="button"
                 className="ehs-ghost-btn"
                 onClick={onCopyPortalLink}
-                title={`Copy portal link for ${row.name || "freelancer"}`}
-                aria-label={`Copy portal link for ${row.name || "freelancer"}`}
+                title={t("crew.sheet.copyPortalLink", { name: row.name || t("crew.sheet.freelancer") })}
+                aria-label={t("crew.sheet.copyPortalLink", { name: row.name || t("crew.sheet.freelancer") })}
                 style={{ flexShrink: 0, padding: "4px 7px", height: "auto" }}
               >
                 <Copy size={14} aria-hidden />
@@ -1747,9 +1809,9 @@ function MasterRow({
             {row.profileless ? (
               <span
                 className="roster-hint"
-                title="Freelancer hasn't filled out their profile yet — dietary/allergen blanks are unknown, not 'none'."
+                title={t("crew.sheet.profilelessHint")}
               >
-                no profile
+                {t("crew.sheet.noProfile")}
               </span>
             ) : null}
             {onCopyPortalLink ? (
@@ -1757,8 +1819,8 @@ function MasterRow({
                 type="button"
                 className="ehs-ghost-btn"
                 onClick={onCopyPortalLink}
-                title={`Copy portal link for ${row.name || "freelancer"}`}
-                aria-label={`Copy portal link for ${row.name || "freelancer"}`}
+                title={t("crew.sheet.copyPortalLink", { name: row.name || t("crew.sheet.freelancer") })}
+                aria-label={t("crew.sheet.copyPortalLink", { name: row.name || t("crew.sheet.freelancer") })}
                 style={{ padding: "3px 6px", height: "auto" }}
               >
                 <Copy size={14} aria-hidden />
@@ -1800,9 +1862,9 @@ function MasterRow({
               type="button"
               className="roster-day-quickpick-btn crew-add-role-inline"
               onClick={onLocalDuplicate}
-              title="Add a separate role booking for this person"
+              title={t("crew.sheet.addRoleHint")}
             >
-              + Role
+              {t("crew.sheet.addRole")}
             </button>
           ) : null}
         </div>
@@ -1829,19 +1891,19 @@ function MasterRow({
                 });
               }
             }}
-            title="Set this person's confirmation status (e.g. mark Accepted after a phone call)"
+            title={t("crew.sheet.statusHint")}
           >
             <option
               value="manual"
               disabled={!!local?.freelancerUserId && !!local.requestStatus}
             >
-              Manual
+              {t("crew.status.inHouse")}
             </option>
-            <option value="requested">Requested</option>
-            <option value="accepted">Accepted</option>
-            <option value="declined">Declined</option>
-            <option value="no-reply">No reply</option>
-            <option value="too_late">Too late</option>
+            <option value="requested">{t("crew.status.requested")}</option>
+            <option value="accepted">{t("crew.status.accepted")}</option>
+            <option value="declined">{t("crew.status.declined")}</option>
+            <option value="no-reply">{t("crew.status.noReply")}</option>
+            <option value="too_late">{t("crew.status.tooLate")}</option>
           </select>
         ) : (
           <span className={`crew-pill crew-pill-${tone}`} title={label}>
@@ -1904,7 +1966,7 @@ function MasterRow({
                 </span>
               );
             })}
-            <span className="roster-chip-count" title="Working days assigned">
+            <span className="roster-chip-count" title={t("crew.sheet.workingDays")}>
               {assignedCount}d
             </span>
           </div>
@@ -1972,7 +2034,7 @@ function MasterRow({
           <a
             className="roster-phone"
             href={`tel:${row.phone.replace(/\s+/g, "")}`}
-            title="Call this person"
+            title={t("crew.sheet.callPerson")}
           >
             {row.phone}
           </a>
@@ -1987,7 +2049,7 @@ function MasterRow({
             type="text"
             value={local?.notes ?? row.notes ?? ""}
             onChange={(e) => onLocalUpdate?.({ notes: e.target.value })}
-            placeholder="e.g. IPAF, half-day"
+            placeholder={t("crew.sheet.notesPlaceholder")}
           />
         ) : row.notes ? (
           <span className="roster-notes">{row.notes}</span>
@@ -2055,18 +2117,18 @@ function MasterRow({
             className="btn btn-danger btn-sm"
             onClick={onCancelRequest}
             disabled={cancelSaving}
-            title="Avbryt ventende forespørsel"
+            title={t("crew.cancel.title")}
           >
-            {cancelSaving ? "Avbryter…" : "Avbryt forespørsel"}
+            {cancelSaving ? t("crew.cancel.cancelling") : t("crew.cancel.action")}
           </button>
         ) : onLocalRemove ? (
           <button
             type="button"
             className="btn btn-danger btn-sm"
             onClick={onLocalRemove}
-            title="Remove from local call sheet"
+            title={t("crew.sheet.removeHint")}
           >
-            Fjern
+            {t("common.remove")}
           </button>
         ) : null}
       </td>
@@ -2100,6 +2162,7 @@ function HotelQuickPick({
    *  meaningful. */
   onLegacyToggle?: (next: boolean) => void;
 }) {
+  const t = useT();
   const assigned = row.assignedDates;
   const hotel = row.hotelDates;
   const hotelSet = useMemo(() => new Set(hotel), [hotel]);
@@ -2116,7 +2179,7 @@ function HotelQuickPick({
     // a quiet em-dash.
     return hotel.length > 0 ? (
       <span className="roster-hotel-label" title={hotel.join(", ")}>
-        {hotel.length} night{hotel.length === 1 ? "" : "s"}
+        {t("crew.sheet.hotelNightsCount", { count: hotel.length })}
       </span>
     ) : (
       <span className="crew-pill-empty">—</span>
@@ -2129,13 +2192,13 @@ function HotelQuickPick({
     // boolean is derived from hotelDates.length > 0.
     if (!onLegacyToggle) {
       return (
-        <span className="crew-pill-empty" title="Pick working days first.">
+        <span className="crew-pill-empty" title={t("crew.sheet.pickDaysFirst")}>
           —
         </span>
       );
     }
     return (
-      <label className="roster-hotel" title="Tick when this person needs a hotel">
+      <label className="roster-hotel" title={t("crew.sheet.hotelRequiredHint")}>
         <input
           type="checkbox"
           checked={row.hotelRequired}
@@ -2143,7 +2206,7 @@ function HotelQuickPick({
           onChange={(e) => onLegacyToggle(e.target.checked)}
         />
         <span className="roster-hotel-label">
-          {row.hotelRequired ? "hotel" : "no"}
+          {row.hotelRequired ? t("crew.sheet.hotel") : t("common.no")}
         </span>
       </label>
     );
@@ -2165,14 +2228,14 @@ function HotelQuickPick({
         disabled={saving}
         title={
           hasNights
-            ? `Hotel: ${hotel.length} night${hotel.length === 1 ? "" : "s"} — click to edit`
-            : "Add hotel nights"
+            ? t("crew.sheet.editHotelNights", { count: hotel.length })
+            : t("crew.sheet.addHotelNights")
         }
         onClick={() => setExpanded(true)}
       >
         {hasNights
-          ? `🏨 ${hotel.length} night${hotel.length === 1 ? "" : "s"}`
-          : "+ Hotel"}
+          ? `🏨 ${t("crew.sheet.hotelNightsCount", { count: hotel.length })}`
+          : t("crew.sheet.addHotel")}
       </button>
     );
   }
@@ -2188,10 +2251,10 @@ function HotelQuickPick({
     }))
     .filter((p) => p.days.length > 0);
   const phaseLabel: Record<string, string> = {
-    setup: "Setup",
-    rehearsal: "Rehearsal",
-    show: "Show",
-    downrig: "Load Out",
+    setup: t("portal.brief.phase.setup"),
+    rehearsal: t("portal.brief.phase.rehearsal"),
+    show: t("portal.brief.phase.show"),
+    downrig: t("portal.brief.phase.loadOut"),
   };
   const isPhaseActive = (days: ReadonlyArray<string>) =>
     days.length > 0 && days.every((d) => hotelSet.has(d));
@@ -2199,11 +2262,11 @@ function HotelQuickPick({
     <div
       className={`roster-day-quickpick${saving ? " is-saving" : ""}`}
       role="group"
-      aria-label="Quick-fill hotel nights"
+      aria-label={t("crew.sheet.quickFillHotel")}
       aria-busy={saving || undefined}
     >
       <span className="roster-day-quickpick-label">
-        Hotel{hotel.length > 0 ? ` (${hotel.length})` : ""}:
+        {t("crew.sheet.hotel")}{hotel.length > 0 ? ` (${hotel.length})` : ""}:
       </span>
       {phaseEntries.map((p) => {
         const active = isPhaseActive(p.days);
@@ -2245,19 +2308,19 @@ function HotelQuickPick({
             : "")
         }
         disabled={saving}
-        title="Hotel for every working day"
+        title={t("crew.sheet.hotelAllHint")}
         onClick={() => onSet([...assigned])}
       >
-        All
+        {t("project.status.all")}
       </button>
       <button
         type="button"
         className="roster-day-quickpick-btn roster-day-quickpick-btn-clear"
         disabled={saving || hotel.length === 0}
-        title="Clear all hotel nights"
+        title={t("crew.sheet.clearHotelHint")}
         onClick={() => onSet([])}
       >
-        None
+        {t("common.no")}
       </button>
       {/* Tiny ✕ collapses the picker back to the summary chip. We
        *  leave this manual rather than auto-collapsing on save so the
@@ -2266,8 +2329,8 @@ function HotelQuickPick({
       <button
         type="button"
         className="roster-day-quickpick-btn roster-day-quickpick-btn-clear"
-        title="Hide hotel options"
-        aria-label="Hide hotel options"
+        title={t("crew.sheet.hideHotel")}
+        aria-label={t("crew.sheet.hideHotel")}
         onClick={() => setExpanded(false)}
       >
         ✕
@@ -2285,15 +2348,16 @@ function FoodCell({
   allergens: string[];
   profileless: boolean;
 }) {
+  const t = useT();
   if (profileless) {
     return (
-      <span className="crew-pill-empty" title="No profile yet — unknown.">
+      <span className="crew-pill-empty" title={t("crew.sheet.noProfileUnknown")}>
         ?
       </span>
     );
   }
   if (tags.length === 0 && allergens.length === 0) {
-    return <span className="crew-pill-empty">none</span>;
+    return <span className="crew-pill-empty">{t("common.no")}</span>;
   }
   return (
     <div className="roster-food">
@@ -2349,32 +2413,32 @@ function statusTone(s: RosterRow["status"]): "ok" | "warn" | "bad" | "muted" {
   }
 }
 
-function statusLabel(s: RosterRow["status"]): string {
+function statusLabel(s: RosterRow["status"], t: ReturnType<typeof useT>): string {
   switch (s) {
     case "invited":
-      return "Invited";
+      return t("crew.status.invited");
     case "confirmed":
-      return "Confirmed";
+      return t("crew.status.confirmed");
     case "done":
-      return "Done";
+      return t("crew.status.done");
     case "invoiced":
-      return "Invoiced";
+      return t("crew.status.invoiced");
     case "paid":
-      return "Paid";
+      return t("crew.status.paid");
     case "requested":
-      return "Requested";
+      return t("crew.status.requested");
     case "accepted":
-      return "Accepted";
+      return t("crew.status.accepted");
     case "partially_accepted":
-      return "Partially accepted";
+      return t("crew.status.partiallyAccepted");
     case "declined":
-      return "Declined";
+      return t("crew.status.declined");
     case "no-reply":
-      return "No reply";
+      return t("crew.status.noReply");
     case "too_late":
-      return "Too late";
+      return t("crew.status.tooLate");
     case "manual":
-      return "In-house";
+      return t("crew.status.inHouse");
     default:
       return s;
   }

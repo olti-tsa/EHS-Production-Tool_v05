@@ -16,13 +16,33 @@ import type {
   LedTransparencyMode,
   LedVoltageRegion,
 } from "../../lib/led";
-import {
-  LED_CURVE_TYPE_OPTIONS,
-  LED_SCAN_RATE_OPTIONS,
-  LED_TRANSPARENCY_OPTIONS,
-  LED_VOLTAGE_REGION_OPTIONS,
-} from "../../lib/led";
 import type { PowerEstimate } from "../../lib/led/engine/power";
+import { useT } from "../../lib/i18n/I18nContext";
+import type { TranslationKey } from "../../lib/i18n/types";
+
+const CURVE_OPTION_KEYS: Record<LedCurveType, TranslationKey> = {
+  flat: "led.advanced.option.curve.flat",
+  concave: "led.advanced.option.curve.concave",
+  convex: "led.advanced.option.curve.convex",
+  polyline: "led.advanced.option.curve.polyline",
+};
+const TRANSPARENCY_OPTION_KEYS: Record<LedTransparencyMode, TranslationKey> = {
+  opaque: "led.advanced.option.transparency.opaque",
+  mesh: "led.advanced.option.transparency.mesh",
+  transparent: "led.advanced.option.transparency.transparent",
+};
+const VOLTAGE_OPTION_KEYS: Record<LedVoltageRegion, TranslationKey> = {
+  "EU-230": "led.advanced.option.voltage.eu230",
+  "US-120": "led.advanced.option.voltage.us120",
+  "US-208": "led.advanced.option.voltage.us208",
+  "JP-100": "led.advanced.option.voltage.jp100",
+};
+const SCAN_OPTION_KEYS: Record<LedScanRateProfile, TranslationKey> = {
+  "studio-50": "led.advanced.option.scan.studio50",
+  "studio-60": "led.advanced.option.scan.studio60",
+  "live-60": "led.advanced.option.scan.live60",
+  custom: "led.advanced.option.scan.custom",
+};
 
 export function AdvancedScreenInspector({
   screen,
@@ -35,28 +55,31 @@ export function AdvancedScreenInspector({
   power: PowerEstimate | undefined;
   onUpdate: (patch: Partial<LedScreen>) => void;
 }) {
-  return <EngineeringFields screen={screen} power={power} onUpdate={onUpdate} />;
+  const t = useT();
+  return <EngineeringFields screen={screen} power={power} onUpdate={onUpdate} t={t} />;
 }
 
 function EngineeringFields({
   screen,
   power,
   onUpdate,
+  t,
 }: {
   screen: LedScreen;
   power: PowerEstimate | undefined;
   onUpdate: (patch: Partial<LedScreen>) => void;
+  t: ReturnType<typeof useT>;
 }) {
   return (
     <div className="led-adv-inspector">
       {/* ── Display ─────────────────────────────────────────────── */}
       <section className="led-adv-section">
         <header className="led-adv-section-head">
-          <span>Display</span>
+          <span>{t("led.advanced.section.display")}</span>
         </header>
         <div className="led-adv-fields">
           <NumField
-            label="Brightness (nits)"
+            label={t("led.advanced.brightness")}
             value={screen.brightnessNits}
             onCommit={(v) => onUpdate({ brightnessNits: v })}
             placeholder="5000"
@@ -64,7 +87,7 @@ function EngineeringFields({
             step={100}
           />
           <NumField
-            label="Refresh (Hz)"
+            label={t("led.advanced.refresh")}
             value={screen.refreshRateHz}
             onCommit={(v) => onUpdate({ refreshRateHz: v })}
             placeholder="3840"
@@ -72,7 +95,7 @@ function EngineeringFields({
             step={10}
           />
           <label className="led-field">
-            <span className="led-field-label">Bit depth</span>
+            <span className="led-field-label">{t("led.advanced.bitDepth")}</span>
             <select
               className="led-input"
               value={screen.bitDepth ?? ""}
@@ -83,14 +106,14 @@ function EngineeringFields({
                 });
               }}
             >
-              <option value="">Default</option>
+              <option value="">{t("led.advanced.default")}</option>
               <option value="8">8-bit</option>
               <option value="10">10-bit</option>
               <option value="12">12-bit</option>
             </select>
           </label>
           <BoolField
-            label="HDR"
+            label={t("led.advanced.hdr")}
             value={!!screen.hdrEnabled}
             onChange={(v) => onUpdate({ hdrEnabled: v || undefined })}
           />
@@ -100,17 +123,17 @@ function EngineeringFields({
       {/* ── Physical ────────────────────────────────────────────── */}
       <section className="led-adv-section">
         <header className="led-adv-section-head">
-          <span>Physical</span>
+          <span>{t("led.advanced.section.physical")}</span>
         </header>
         <div className="led-adv-fields">
           <SelectField
-            label="Curve"
+            label={t("led.advanced.curve")}
             value={screen.curveType ?? "flat"}
-            options={LED_CURVE_TYPE_OPTIONS}
+            options={Object.entries(CURVE_OPTION_KEYS).map(([value, key]) => ({ value: value as LedCurveType, label: t(key) }))}
             onChange={(v) => onUpdate({ curveType: v })}
           />
           <NumField
-            label="Curve angle (°/seam)"
+            label={t("led.advanced.curveAngle")}
             value={screen.curveAnglePerSeam}
             onCommit={(v) => onUpdate({ curveAnglePerSeam: v })}
             placeholder="0"
@@ -122,7 +145,7 @@ function EngineeringFields({
             }
           />
           <label className="led-field">
-            <span className="led-field-label">Cabinet rotation</span>
+            <span className="led-field-label">{t("led.advanced.cabinetRotation")}</span>
             <select
               className="led-input"
               value={screen.cabinetRotation ?? 0}
@@ -138,14 +161,14 @@ function EngineeringFields({
             >
               <option value={0}>0°</option>
               <option value={90}>90°</option>
-              <option value={180}>180° (upside down)</option>
+              <option value={180}>{t("led.advanced.rotation.upsideDown")}</option>
               <option value={270}>270°</option>
             </select>
           </label>
           <SelectField
-            label="Transparency"
+            label={t("led.advanced.transparency")}
             value={screen.transparencyMode ?? "opaque"}
-            options={LED_TRANSPARENCY_OPTIONS}
+            options={Object.entries(TRANSPARENCY_OPTION_KEYS).map(([value, key]) => ({ value: value as LedTransparencyMode, label: t(key) }))}
             onChange={(v) => onUpdate({ transparencyMode: v })}
           />
         </div>
@@ -154,7 +177,7 @@ function EngineeringFields({
       {/* ── Power ───────────────────────────────────────────────── */}
       <section className="led-adv-section">
         <header className="led-adv-section-head">
-          <span>Power</span>
+          <span>{t("led.advanced.section.power")}</span>
           {power && (
             <span className="led-adv-section-meter">
               {power.totalWatts.toFixed(0)} W · {power.amps.toFixed(1)} A @{" "}
@@ -164,13 +187,13 @@ function EngineeringFields({
         </header>
         <div className="led-adv-fields">
           <SelectField
-            label="Voltage region"
+            label={t("led.advanced.voltageRegion")}
             value={screen.voltageRegion ?? "EU-230"}
-            options={LED_VOLTAGE_REGION_OPTIONS}
+            options={Object.entries(VOLTAGE_OPTION_KEYS).map(([value, key]) => ({ value: value as LedVoltageRegion, label: t(key) }))}
             onChange={(v) => onUpdate({ voltageRegion: v })}
           />
           <NumField
-            label="Cabs / power chain"
+            label={t("led.advanced.cabinetsPerPowerChain")}
             value={screen.maxCabinetsPerPowerChain}
             onCommit={(v) => onUpdate({ maxCabinetsPerPowerChain: v })}
             placeholder="6"
@@ -178,7 +201,7 @@ function EngineeringFields({
             step={1}
           />
           <NumField
-            label="PSU overhead (%)"
+            label={t("led.advanced.psuOverhead")}
             value={screen.powerOverheadPct}
             onCommit={(v) => onUpdate({ powerOverheadPct: v })}
             placeholder="25"
@@ -187,7 +210,7 @@ function EngineeringFields({
             step={1}
           />
           <NumField
-            label="Power factor"
+            label={t("led.advanced.powerFactor")}
             value={screen.powerFactor}
             onCommit={(v) => onUpdate({ powerFactor: v })}
             placeholder="0.95"
@@ -198,10 +221,11 @@ function EngineeringFields({
         </div>
         {power && power.chainsRequired !== null && (
           <p className="led-adv-meter-row">
-            {power.enabledCabinets} cabinets need{" "}
-            <strong>{power.chainsRequired}</strong> power chain
-            {power.chainsRequired === 1 ? "" : "s"} at{" "}
-            {power.cabinetsPerChain}/chain.
+            {t("led.advanced.powerChains", {
+              cabinets: power.enabledCabinets,
+              chains: power.chainsRequired,
+              perChain: power.cabinetsPerChain ?? "—",
+            })}
           </p>
         )}
       </section>
@@ -209,11 +233,11 @@ function EngineeringFields({
       {/* ── Data / Signal ───────────────────────────────────────── */}
       <section className="led-adv-section">
         <header className="led-adv-section-head">
-          <span>Data &amp; signal</span>
+          <span>{t("led.advanced.section.dataSignal")}</span>
         </header>
         <div className="led-adv-fields">
           <NumField
-            label="Cabs / data chain"
+            label={t("led.advanced.cabinetsPerDataChain")}
             value={screen.maxCabinetsPerDataChain}
             onCommit={(v) => onUpdate({ maxCabinetsPerDataChain: v })}
             placeholder="16"
@@ -221,12 +245,12 @@ function EngineeringFields({
             step={1}
           />
           <BoolField
-            label="Backup signal (A/B)"
+            label={t("led.advanced.backupSignal")}
             value={!!screen.backupSignalEnabled}
             onChange={(v) => onUpdate({ backupSignalEnabled: v || undefined })}
           />
           <BoolField
-            label="Loop-out daisy chain"
+            label={t("led.advanced.loopOut")}
             value={!!screen.signalLoopEnabled}
             onChange={(v) => onUpdate({ signalLoopEnabled: v || undefined })}
           />
@@ -236,22 +260,22 @@ function EngineeringFields({
       {/* ── Broadcast ───────────────────────────────────────────── */}
       <section className="led-adv-section">
         <header className="led-adv-section-head">
-          <span>Broadcast</span>
+          <span>{t("led.advanced.section.broadcast")}</span>
         </header>
         <div className="led-adv-fields">
           <BoolField
-            label="Camera-safe mode"
+            label={t("led.advanced.cameraSafe")}
             value={!!screen.cameraSafeMode}
             onChange={(v) => onUpdate({ cameraSafeMode: v || undefined })}
           />
           <SelectField
-            label="Scan profile"
+            label={t("led.advanced.scanProfile")}
             value={screen.scanRateProfile ?? "live-60"}
-            options={LED_SCAN_RATE_OPTIONS}
+            options={Object.entries(SCAN_OPTION_KEYS).map(([value, key]) => ({ value: value as LedScanRateProfile, label: t(key) }))}
             onChange={(v) => onUpdate({ scanRateProfile: v })}
           />
           <BoolField
-            label="Genlock"
+            label={t("led.advanced.genlock")}
             value={!!screen.genlockEnabled}
             onChange={(v) => onUpdate({ genlockEnabled: v || undefined })}
           />

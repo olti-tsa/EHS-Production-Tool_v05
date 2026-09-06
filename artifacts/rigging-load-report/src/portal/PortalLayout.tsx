@@ -93,12 +93,9 @@ const NAV_GROUPS: ReadonlyArray<{ labelKey: TranslationKey; items: NavItem[] }> 
   { labelKey: "portal.nav.profile", items: NAV_ACCOUNT },
 ];
 
-/** Section headings for the nav groups. Kept inline (not via i18n) so we
- *  don't need to add new translation keys for the chrome refresh; the
- *  existing item labels carry the language-specific text. */
-const GROUP_LABELS: Record<"work" | "account", { no: string; en: string }> = {
-  work: { no: "Arbeid", en: "Work" },
-  account: { no: "Konto", en: "Account" },
+const GROUP_LABELS: Record<"work" | "account", TranslationKey> = {
+  work: "portal.layout.group.work",
+  account: "portal.layout.group.account",
 };
 
 export function PortalLayout({
@@ -131,12 +128,6 @@ export function PortalLayout({
 
   const { signOut } = useClerk();
   const t = useT();
-  const lang = (typeof document !== "undefined"
-    ? document.documentElement.lang
-    : "no") === "en"
-    ? "en"
-    : "no";
-
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
   const [isMoreOpen, setIsMoreOpen] = React.useState(false);
@@ -198,7 +189,7 @@ export function PortalLayout({
             return (
               <div key={groupKey} style={{ marginTop: 18 }}>
                 <div className="ehs-shell-nav-label">
-                  {GROUP_LABELS[groupKey][lang]}
+                   {t(GROUP_LABELS[groupKey])}
                 </div>
                 {items.map((item) => {
                   const Icon = item.icon;
@@ -237,7 +228,7 @@ export function PortalLayout({
           <div className="ehs-shell-user-avatar">{userInitial}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="ehs-shell-user-name">{userLabel}</div>
-            <div className="ehs-shell-user-role">Freelancer</div>
+            <div className="ehs-shell-user-role">{t("portal.layout.role.freelancer")}</div>
           </div>
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
@@ -256,7 +247,7 @@ export function PortalLayout({
               sideOffset={6}
             >
                 <div className="ehs-shell-menu-label">
-                  {lang === "no" ? "Tema" : "Theme"}
+                   {t("theme.label")}
                 </div>
                 {(["light", "dark", "system"] as const).map((opt) => (
                   <DropdownMenuItem
@@ -267,15 +258,7 @@ export function PortalLayout({
                       setPref(opt);
                     }}
                   >
-                    {opt === "light"
-                      ? lang === "no"
-                        ? "Lys"
-                        : "Light"
-                      : opt === "dark"
-                      ? lang === "no"
-                        ? "Mørk"
-                        : "Dark"
-                      : "System"}
+                     {t(`theme.${opt}`)}
                   </DropdownMenuItem>
                 ))}
                 <div className="ehs-shell-menu-sep" />
@@ -283,7 +266,7 @@ export function PortalLayout({
                   className="ehs-shell-menu-item"
                   onClick={() => setFeedbackOpen(!feedbackOpen)}
                 >
-                  <MessageSquare size={12} /> {lang === "no" ? "Tilbakemelding" : "Feedback"}
+                  <MessageSquare size={12} /> {t("portal.layout.feedback")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="ehs-shell-menu-item is-danger"
@@ -357,8 +340,8 @@ export function PortalLayout({
               type="button"
               className="ehs-shell-icon-btn ehs-portal-only-mobile ehs-portal-mobile-utility h-8 min-w-[32px] px-2 rounded-md border flex items-center justify-center text-xs font-semibold transition-colors bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 dark:bg-slate-800/80 dark:hover:bg-slate-700 dark:border-slate-700/60 dark:text-slate-200"
               onClick={() => setPref(theme === "dark" ? "light" : "dark")}
-              aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"}
-              title={theme === "dark" ? "Use light theme" : "Use dark theme"}
+              aria-label={t(theme === "dark" ? "portal.layout.useLightTheme" : "portal.layout.useDarkTheme")}
+              title={t(theme === "dark" ? "portal.layout.useLightTheme" : "portal.layout.useDarkTheme")}
             >
               {theme === "dark" ? (
                 <Sun size={14} strokeWidth={1.75} />
@@ -536,7 +519,7 @@ export function PortalLayout({
                   <button
                     type="button"
                     className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                    aria-label="Close"
+                    aria-label={t("common.close")}
                     onClick={() => setIsMoreOpen(false)}
                     style={{
                       display: "inline-flex",

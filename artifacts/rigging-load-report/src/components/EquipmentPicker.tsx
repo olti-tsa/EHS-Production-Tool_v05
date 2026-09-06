@@ -3,10 +3,10 @@ import {
   loadEquipmentLibrary,
   searchLibrary,
   tabsFor,
-  tabLabel,
   type LibraryItem,
   type LibraryTab,
 } from "../lib/equipmentLibrary";
+import { useI18n } from "../lib/i18n/I18nContext";
 
 type Props = {
   open: boolean;
@@ -19,9 +19,9 @@ type Props = {
   onPick: (item: LibraryItem) => void;
 };
 
-const fmt = (n: number, d = 1) =>
+const fmt = (n: number, locale: string, d = 1) =>
   Number.isFinite(n)
-    ? n.toLocaleString("en-US", { maximumFractionDigits: d })
+    ? n.toLocaleString(locale, { maximumFractionDigits: d })
     : "—";
 
 export function EquipmentPicker({
@@ -36,6 +36,7 @@ export function EquipmentPicker({
   const [query, setQuery] = useState("");
   const [subFilter, setSubFilter] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const { t, locale } = useI18n();
 
   // Lazy-load the library the first time the picker opens.
   useEffect(() => {
@@ -106,8 +107,11 @@ export function EquipmentPicker({
   const heading =
     title ??
     (tab
-      ? `Add from EHS Library — ${tabLabel(tab)}`
-      : "Add from EHS Library");
+      ? t("equipmentPicker.titleForTab", {
+          tab: t(`equipmentPicker.tab.${tab}` as Parameters<typeof t>[0]),
+        })
+      : t("equipmentPicker.title"));
+  const numberLocale = locale === "no" ? "nb-NO" : "en-US";
 
   return (
     <div
@@ -127,9 +131,9 @@ export function EquipmentPicker({
             type="button"
             className="btn btn-soft btn-sm"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
           >
-            Close
+            {t("common.close")}
           </button>
         </div>
 
@@ -138,18 +142,18 @@ export function EquipmentPicker({
             ref={inputRef}
             className="led-input"
             type="search"
-            placeholder="Search by name, brand, category…"
+            placeholder={t("equipmentPicker.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search equipment library"
+            aria-label={t("equipmentPicker.searchAria")}
           />
           <select
             className="led-input"
             value={subFilter}
             onChange={(e) => setSubFilter(e.target.value)}
-            aria-label="Filter by sub-category"
+            aria-label={t("equipmentPicker.filterAria")}
           >
-            <option value="">All sub-categories</option>
+            <option value="">{t("equipmentPicker.allSubcategories")}</option>
             {subOptions.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -158,27 +162,30 @@ export function EquipmentPicker({
           </select>
           <span className="equip-picker-count">
             {loaded
-              ? `${filtered.length.toLocaleString("en-US")} of ${filteredByTab.length.toLocaleString("en-US")}`
-              : "Loading…"}
+              ? t("equipmentPicker.count", {
+                  shown: filtered.length.toLocaleString(locale === "no" ? "nb-NO" : "en-US"),
+                  total: filteredByTab.length.toLocaleString(locale === "no" ? "nb-NO" : "en-US"),
+                })
+              : t("common.loading")}
           </span>
         </div>
 
         <div className="equip-picker-list" role="listbox">
           {!loaded ? (
-            <div className="equip-empty">Loading library…</div>
+            <div className="equip-empty">{t("equipmentPicker.loading")}</div>
           ) : filtered.length === 0 ? (
             <div className="equip-empty">
-              No matches. Try a shorter search or clear the filter.
+              {t("equipmentPicker.empty")}
             </div>
           ) : (
             <table className="equip-picker-table">
               <thead>
                 <tr>
-                  <th>Item</th>
-                  <th>Category</th>
-                  <th className="led-num">Weight</th>
-                  <th className="led-num">Watts</th>
-                  <th className="led-num">Stock</th>
+                  <th>{t("equipmentPicker.table.item")}</th>
+                  <th>{t("equipmentPicker.table.category")}</th>
+                  <th className="led-num">{t("equipmentPicker.table.weight")}</th>
+                  <th className="led-num">{t("equipmentPicker.table.watts")}</th>
+                  <th className="led-num">{t("equipmentPicker.table.stock")}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -196,19 +203,19 @@ export function EquipmentPicker({
                       <div className="equip-sub">{it.subCategory}</div>
                     </td>
                     <td className="led-num">
-                      {it.weight ? `${fmt(it.weight, 1)} kg` : "—"}
+                      {it.weight ? `${fmt(it.weight, numberLocale, 1)} kg` : "—"}
                     </td>
                     <td className="led-num">
-                      {it.watts ? `${fmt(it.watts, 0)} W` : "—"}
+                      {it.watts ? `${fmt(it.watts, numberLocale, 0)} W` : "—"}
                     </td>
-                    <td className="led-num">{fmt(it.stock, 0)}</td>
+                    <td className="led-num">{fmt(it.stock, numberLocale, 0)}</td>
                     <td>
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
                         onClick={() => onPick(it)}
                       >
-                        Add
+                        {t("common.add")}
                       </button>
                     </td>
                   </tr>

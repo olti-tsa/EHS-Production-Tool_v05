@@ -19,14 +19,6 @@ type DietaryTag =
   | "gluten-free"
   | "lactose-free";
 
-const CATEGORY_LABEL: Record<DietaryTag, string> = {
-  vegetarian: "Vegetarian",
-  vegan: "Vegan",
-  halal: "Halal",
-  "gluten-free": "Gluten-free",
-  "lactose-free": "Lactose-free",
-};
-
 // Stable category order on the sheet — chefs scan top-down for the
 // usual suspects, so we lock the order here rather than relying on
 // `Object.keys` iteration order from the server response.
@@ -52,6 +44,28 @@ export type CateringSheetInput = {
     }>;
   }>;
   profilelessCount: number;
+  locale: "en" | "no";
+  /** Resolved in the React caller so this pure exporter never calls hooks. */
+  copy: CateringSheetCopy;
+};
+
+export type CateringSheetCopy = {
+  categoryLabel: Record<DietaryTag, string>;
+  days: string;
+  totalMeals: string;
+  noSpecialDietary: string;
+  noAllergens: string;
+  name: string;
+  role: string;
+  allergens: string;
+  meals: string;
+  cateringBrief: string;
+  generated: string;
+  profilelessNote: string;
+  untitledProject: string;
+  venueTba: string;
+  print: string;
+  footer: string;
 };
 
 function escHtml(s: string): string {
@@ -67,10 +81,10 @@ function escHtml(s: string): string {
  *  the same calendar day they belong to regardless of the producer's
  *  browser timezone. Same logic as `CateringView.fmtDate` but expanded
  *  to a long form (chefs prefer "Monday 18 May" over "Mon 18"). */
-function fmtDateLong(iso: string): string {
+function fmtDateLong(iso: string, locale: CateringSheetInput["locale"]): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", {
+  return d.toLocaleDateString(locale === "no" ? "nb-NO" : "en-GB", {
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -79,8 +93,8 @@ function fmtDateLong(iso: string): string {
   });
 }
 
-function fmtGeneratedNow(): string {
-  return new Date().toLocaleString("en-GB", {
+function fmtGeneratedNow(locale: CateringSheetInput["locale"]): string {
+  return new Date().toLocaleString(locale === "no" ? "nb-NO" : "en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -112,18 +126,18 @@ function summaryBlock(input: CateringSheetInput): string {
     const count = catTotals[k];
     return `
       <div class="cs-meta-cell">
-        <div class="cs-meta-key">${escHtml(CATEGORY_LABEL[k])}</div>
+        <div class="cs-meta-key">${escHtml(input.copy.categoryLabel[k])}</div>
         <div class="cs-meta-val">${count}</div>
       </div>`;
   }).join("");
   return `
     <div class="cs-meta">
       <div class="cs-meta-cell">
-        <div class="cs-meta-key">Days</div>
+        <div class="cs-meta-key">${escHtml(input.copy.days)}</div>
         <div class="cs-meta-val">${dayCount}</div>
       </div>
       <div class="cs-meta-cell">
-        <div class="cs-meta-key">Total meals</div>
+        <div class="cs-meta-key">${escHtml(input.copy.totalMeals)}</div>
         <div class="cs-meta-val">${mealsTotal}</div>
       </div>
       ${catCells}
@@ -135,27 +149,27 @@ function summaryBlock(input: CateringSheetInput): string {
  *  hate having to flip back and forth. Long days will still split
  *  naturally at row boundaries (CSS can't promise atomicity for
  *  arbitrarily tall blocks). */
-function dayBlock(day: CateringSheetInput["days"][number]): string {
+function dayBlock(day: CateringSheetInput["days"][number], input: CateringSheetInput): string {
   const dietaryRow = CATEGORY_ORDER.filter((k) => (day.byCategory[k] ?? 0) > 0)
     .map(
       (k) =>
-        `<span class="cs-pill">${escHtml(CATEGORY_LABEL[k])} · ${day.byCategory[k]}</span>`,
+        `<span class="cs-pill">${escHtml(input.copy.categoryLabel[k])} · ${day.byCategory[k]}</span>`,
     )
     .join("");
   const dietaryHtml = dietaryRow
     ? `<div class="cs-pills">${dietaryRow}</div>`
-    : `<div class="cs-empty-line">No special dietary categories on this day.</div>`;
+    : `<div class="cs-empty-line">${escHtml(input.copy.noSpecialDietary)}</div>`;
 
   const rosterHtml =
     day.allergenRoster.length === 0
-      ? `<div class="cs-empty-line">No allergens reported for this day's crew.</div>`
+      ? `<div class="cs-empty-line">${escHtml(input.copy.noAllergens)}</div>`
       : `
         <table class="cs-table">
           <thead>
             <tr>
-              <th style="width: 28%">Name</th>
-              <th style="width: 22%">Role</th>
-              <th>Allergens</th>
+              <th style="width: 28%">${escHtml(input.copy.name)}</th>
+              <th style="width: 22%">${escHtml(input.copy.role)}</th>
+              <th>${escHtml(input.copy.allergens)}</th>
             </tr>
           </thead>
           <tbody>
@@ -175,14 +189,14 @@ function dayBlock(day: CateringSheetInput["days"][number]): string {
   return `
     <section class="cs-day">
       <div class="cs-day-head">
-        <h2>${escHtml(fmtDateLong(day.date))}</h2>
+        <h2>${escHtml(fmtDateLong(day.date, input.locale))}</h2>
         <div class="cs-day-meta">
           <span class="cs-day-iso">${escHtml(day.date)}</span>
-          <span class="cs-day-total"><strong>${day.total}</strong> meal${day.total === 1 ? "" : "s"}</span>
+          <span class="cs-day-total"><strong>${day.total}</strong> ${escHtml(input.copy.meals)}</span>
         </div>
       </div>
       ${dietaryHtml}
-      <div class="cs-day-section-head">Allergens</div>
+      <div class="cs-day-section-head">${escHtml(input.copy.allergens)}</div>
       ${rosterHtml}
     </section>`;
 }
@@ -193,24 +207,22 @@ export function openCateringSheet(input: CateringSheetInput):
   if (!input.days || input.days.length === 0) {
     return { ok: false, reason: "no-days" };
   }
-  const generated = fmtGeneratedNow();
-  const projectName = input.brief.projectName || "Untitled project";
-  const venue = input.brief.venue || "Venue TBA";
+  const generated = fmtGeneratedNow(input.locale);
+  const projectName = input.brief.projectName || input.copy.untitledProject;
+  const venue = input.brief.venue || input.copy.venueTba;
 
   const profilelessNote =
     input.profilelessCount > 0
       ? `<div class="cs-note">
-           Note: ${input.profilelessCount} crew member${input.profilelessCount === 1 ? " has" : "s have"}
-           not yet filled in dietary info. They are included in the meal
-           totals above but not in the dietary or allergen breakdowns.
+           ${escHtml(input.copy.profilelessNote)}
          </div>`
       : "";
 
   const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="${input.locale === "no" ? "nb-NO" : "en"}">
 <head>
   <meta charset="utf-8" />
-  <title>${escHtml(`Catering — ${projectName} · ${venue}`)}</title>
+  <title>${escHtml(`${input.copy.cateringBrief} — ${projectName} · ${venue}`)}</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -412,19 +424,19 @@ export function openCateringSheet(input: CateringSheetInput):
   <div class="cs-page">
     <div class="cs-band">
       <div>
-        <div class="cs-band-sub">Catering brief — for the venue chef</div>
+        <div class="cs-band-sub">${escHtml(input.copy.cateringBrief)}</div>
         <h1>${escHtml(projectName)}</h1>
         <div class="cs-band-venue">${escHtml(venue)}</div>
       </div>
-      <div class="cs-band-right">Generated ${escHtml(generated)}</div>
+      <div class="cs-band-right">${escHtml(input.copy.generated)} ${escHtml(generated)}</div>
     </div>
     ${summaryBlock(input)}
-    ${input.days.map(dayBlock).join("")}
+    ${input.days.map((day) => dayBlock(day, input)).join("")}
     ${profilelessNote}
-    <div class="cs-foot">EHS Production Tool · brief ${escHtml(input.brief.id)}</div>
+    <div class="cs-foot">${escHtml(input.copy.footer)}</div>
   </div>
   <div class="cs-noprint">
-    <button onclick="window.print()">Print / Save as PDF</button>
+    <button onclick="window.print()">${escHtml(input.copy.print)}</button>
   </div>
 </body>
 </html>`;

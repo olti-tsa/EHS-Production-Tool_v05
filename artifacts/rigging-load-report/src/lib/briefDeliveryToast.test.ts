@@ -8,7 +8,8 @@ describe("Share brief delivery toast", () => {
       briefDeliveryToast({ sent: 3, skipped: 4, alreadySent: 8 }),
       {
         kind: "success",
-        message: "Briefs emailed successfully to 3 crew members",
+        messageKey: "crew.dispatch.deliverySuccessMany",
+        params: { count: 3 },
       },
     );
   });
@@ -16,14 +17,15 @@ describe("Share brief delivery toast", () => {
   it("uses singular wording for one successful delivery", () => {
     assert.deepEqual(briefDeliveryToast({ sent: 1 }), {
       kind: "success",
-      message: "Briefs emailed successfully to 1 crew member",
+      messageKey: "crew.dispatch.deliverySuccessOne",
+      params: { count: 1 },
     });
   });
 
   it("reports missing email profiles when every delivery is skipped", () => {
     assert.deepEqual(briefDeliveryToast({ sent: 0, skipped: 2 }), {
       kind: "error",
-      message: "No briefs were emailed. Check freelancer email profiles.",
+      messageKey: "crew.dispatch.deliverySkipped",
     });
   });
 
@@ -32,7 +34,7 @@ describe("Share brief delivery toast", () => {
       briefDeliveryToast({ sent: 0, skipped: 0, alreadySent: 2 }),
       {
         kind: "error",
-        message: "Brief emails are already being sent.",
+        messageKey: "crew.dispatch.deliveryInProgress",
       },
     );
   });

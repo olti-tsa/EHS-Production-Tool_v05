@@ -9,6 +9,7 @@ import type {
   CrewShiftPhaseKey,
   CrewShiftTimeMap,
 } from "../lib/crewShiftAssignments";
+import { useT } from "../lib/i18n/I18nContext";
 
 type Props = {
   crew: CrewMember[];
@@ -92,6 +93,7 @@ export function CrewReportView({
   brief,
   readOnly = false,
 }: Props) {
+  const t = useT();
   // Headcount source for the adequacy meter: the merged roster the
   // master sheet is actually displaying (gig + local), bubbled up
   // from MasterCrewSheet via onMergedRolesChange. Falls back to the
@@ -137,9 +139,9 @@ export function CrewReportView({
   return (
     <div className="led-report">
       <header className="crew-page-header">
-        <p className="crew-eyebrow">Roster, hotel, catering and call sheets.</p>
+        <p className="crew-eyebrow">{t("crew.sheet.subtitle")}</p>
         <div className="crew-page-title">
-          <h2>Crew &amp; Logistics</h2>
+          <h2>{t("crew.sheet.title")}</h2>
         </div>
       </header>
 
@@ -148,27 +150,27 @@ export function CrewReportView({
           always reflect the merged gig+local roster. */}
       <div className="crew-stats-row">
         <div className="crew-stat-card">
-          <div className="crew-stat-label">Crew</div>
+          <div className="crew-stat-label">{t("crew.sheet.crew")}</div>
           <div className="crew-stat-value">{counts.total}</div>
         </div>
         <div className="crew-stat-card">
-          <div className="crew-stat-label">Accepted</div>
+          <div className="crew-stat-label">{t("crew.status.accepted")}</div>
           <div className="crew-stat-value crew-stat-value-ok">
             {counts.accepted}
           </div>
         </div>
         <div className="crew-stat-card">
-          <div className="crew-stat-label">Pending</div>
+          <div className="crew-stat-label">{t("crew.sheet.pending")}</div>
           <div className="crew-stat-value crew-stat-value-warn">
             {counts.pending}
           </div>
         </div>
         <div className="crew-stat-card">
-          <div className="crew-stat-label">Hotel rooms</div>
+          <div className="crew-stat-label">{t("crew.sheet.hotelRooms")}</div>
           <div className="crew-stat-value">{counts.hotelRooms}</div>
         </div>
         <div className="crew-stat-card">
-          <div className="crew-stat-label">Hotel nights</div>
+          <div className="crew-stat-label">{t("crew.sheet.hotelNights")}</div>
           <div className="crew-stat-value">{counts.hotelNights}</div>
         </div>
       </div>

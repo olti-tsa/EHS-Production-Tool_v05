@@ -40,6 +40,18 @@ import { rasterizeSvgToPng, safeFilename } from "./ledExport";
 
 type Mode = "power" | "signal";
 
+export type LedProjectPdfCopy = Record<
+  | "projectPack" | "powerDrawing" | "signalDrawing" | "technicalSummary"
+  | "cableSummary" | "project" | "venue" | "client" | "date" | "screens"
+  | "panels" | "totalPixels" | "area" | "weight" | "maxOutput"
+  | "averageOutput" | "outputsNeeded" | "peakWhite" | "oneThirdMax"
+  | "screen" | "panel" | "grid" | "pixels" | "maxWatts" | "averageWatts"
+  | "amps" | "total" | "signalJumpers" | "signalLength" | "powerJumpers"
+  | "powerLength" | "brackets" | "unnamed" | "continued" | "noCanvas"
+  | "noScreens" | "cableFootnote" | "filenameFallback" | "productTitle",
+  string
+>;
+
 export type LedProjectPdfInput = {
   screens: LedScreen[];
   panels: LedPanel[];
@@ -60,7 +72,16 @@ export type LedProjectPdfInput = {
   /** Optional override for the canvas SVG element. Defaults to the
    *  first `.led-canvas` found in the document. */
   canvasSvg?: SVGSVGElement | null;
+  /** Copy is resolved by the React caller at export time; this pure module
+   * deliberately has no dependency on the i18n context. */
+  copy: LedProjectPdfCopy;
+  locale?: string;
 };
+
+function copyOf(input: LedProjectPdfInput, key: keyof LedProjectPdfCopy, params: Record<string, string | number> = {}): string {
+  const text = input.copy[key];
+  return text.replace(/\{(\w+)\}/g, (_, name: string) => String(params[name] ?? `{${name}}`));
+}
 
 /** Build the PDF and trigger a browser download. */
 export async function downloadLedProjectPdf(
@@ -70,12 +91,12 @@ export async function downloadLedProjectPdf(
     document.querySelector<SVGSVGElement>(".led-canvas");
   if (!live) {
     throw new Error(
-      "Open the LED tab and add at least one screen before exporting the project PDF.",
+      copyOf(input, "noCanvas"),
     );
   }
   if (input.screens.length === 0) {
     throw new Error(
-      "Add at least one LED screen before exporting the project PDF.",
+      copyOf(input, "noScreens"),
     );
   }
 
@@ -96,7 +117,7 @@ export async function downloadLedProjectPdf(
   const margin = 12;
 
   // ── Page 1 — Cover: logo + metadata + totals + both summaries ───
-  drawHeader(pdf, "LED Project Pack", pageW, margin, logoDataUrl);
+  drawHeader(pdf, copyOf(input, "projectPack"), pageW, margin, logoDataUrl, input);
   drawMetaBlock(pdf, input, margin, 26, pageW - margin * 2);
   drawTotalsBlock(
     pdf,
@@ -107,10 +128,11 @@ export async function downloadLedProjectPdf(
     margin,
     68,
     pageW - margin * 2,
+    input,
   );
 
   // Technical summary, inline on the cover.
-  drawSectionTitle(pdf, "Technical summary", margin, 104);
+  drawSectionTitle(pdf, copyOf(input, "technicalSummary"), margin, 104);
   drawTechSummary(
     pdf,
     input.screens,
@@ -134,7 +156,7 @@ export async function downloadLedProjectPdf(
     pageH - margin - 40,
     Math.max(150, 108 + 6 + 8 + 8 * (input.screens.length + 1)),
   );
-  drawSectionTitle(pdf, "Cable summary", margin, cableY - 4);
+  drawSectionTitle(pdf, copyOf(input, "cableSummary"), margin, cableY - 4);
   drawCableSummary(
     pdf,
     input.screens,
@@ -151,17 +173,20 @@ export async function downloadLedProjectPdf(
 
   // ── Page 2 — Power drawing ──────────────────────────────────────
   pdf.addPage();
-  drawHeader(pdf, "Power drawing", pageW, margin, "");
+  drawHeader(pdf, copyOf(input, "powerDrawing"), pageW, margin, "", input);
   drawSubLine(pdf, input, margin, 26, pageW - margin * 2);
   await drawFittedImage(pdf, powerPng, margin, 32, pageW - margin * 2, pageH - 32 - margin);
 
   // ── Page 3 — Signal drawing ─────────────────────────────────────
   pdf.addPage();
-  drawHeader(pdf, "Signal drawing", pageW, margin, "");
+  drawHeader(pdf, copyOf(input, "signalDrawing"), pageW, margin, "", input);
   drawSubLine(pdf, input, margin, 26, pageW - margin * 2);
   await drawFittedImage(pdf, signalPng, margin, 32, pageW - margin * 2, pageH - 32 - margin);
 
-  const base = safeFilename(input.projectName || input.venue || "led-project");
+  const base = safeFilename(
+    input.projectName || input.venue,
+    copyOf(input, "filenameFallback"),
+  );
   pdf.save(`${base}_led-project.pdf`);
 }
 
@@ -323,6 +348,7 @@ function drawHeader(
   pageW: number,
   margin: number,
   logoDataUrl: string,
+  input: LedProjectPdfInput,
 ) {
   // Logo top-left. The image silently no-ops if the data URL is empty.
   let titleX = margin;
@@ -363,7 +389,7 @@ function drawHeader(
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(9);
   pdf.setTextColor(120, 120, 120);
-  pdf.text("EHS Production Tool — LED Pixel Map", pageW - margin, margin + 5, {
+  pdf.text(`${copyOf(input, "productTitle")} — ${copyOf(input, "projectPack")}`, pageW - margin, margin + 5, {
     align: "right",
   });
   pdf.setDrawColor(248, 128, 0);
@@ -402,10 +428,10 @@ function drawMetaBlock(
 
   const colW = width / 4;
   const fields: Array<[string, string]> = [
-    ["Project", input.projectName || "—"],
-    ["Venue", input.venue || "—"],
-    ["Client", input.client || "—"],
-    ["Date", input.reportDate || "—"],
+    [copyOf(input, "project"), input.projectName || "—"],
+    [copyOf(input, "venue"), input.venue || "—"],
+    [copyOf(input, "client"), input.client || "—"],
+    [copyOf(input, "date"), input.reportDate || "—"],
   ];
   fields.forEach(([label, value], i) => {
     const cx = x + 6 + i * colW;
@@ -441,6 +467,7 @@ function drawTotalsBlock(
   x: number,
   y: number,
   width: number,
+  input: LedProjectPdfInput,
 ) {
   let totPanels = 0;
   let totPixels = 0;
@@ -460,23 +487,23 @@ function drawTotalsBlock(
   const outputs = Math.max(1, Math.ceil(totPixels / PIXELS_PER_OUTPUT));
 
   const stats: Array<{ label: string; value: string; note?: string }> = [
-    { label: "SCREENS", value: String(screens.length) },
-    { label: "PANELS", value: String(totPanels) },
-    { label: "TOTAL PIXELS", value: totPixels.toLocaleString() },
-    { label: "AREA", value: `${totArea.toFixed(1)} m²` },
-    { label: "WEIGHT", value: `${totWeight.toFixed(1)} kg` },
+    { label: copyOf(input, "screens"), value: String(screens.length) },
+    { label: copyOf(input, "panels"), value: String(totPanels) },
+    { label: copyOf(input, "totalPixels"), value: totPixels.toLocaleString(input.locale) },
+    { label: copyOf(input, "area"), value: `${totArea.toFixed(1)} m²` },
+    { label: copyOf(input, "weight"), value: `${totWeight.toFixed(1)} kg` },
     {
-      label: "MAX OUTPUT",
+      label: copyOf(input, "maxOutput"),
       value: `${(totMaxWatts / 1000).toFixed(1)} kW`,
-      note: "peak white",
+      note: copyOf(input, "peakWhite"),
     },
     {
-      label: "AVG OUTPUT",
+      label: copyOf(input, "averageOutput"),
       value: `${(totAvgWatts / 1000).toFixed(1)} kW`,
-      note: "~⅓ of max",
+      note: copyOf(input, "oneThirdMax"),
     },
     {
-      label: "OUTPUTS NEEDED",
+      label: copyOf(input, "outputsNeeded"),
       value: String(outputs),
       note: `@ ${PIXELS_PER_OUTPUT.toLocaleString()} px/output`,
     },
@@ -556,6 +583,7 @@ function drawTable(
   pageTitle: string,
   pageBottom: number,
   drawPageHeader: (pdf: JsPDF, x: number) => number,
+  inputForCopy?: LedProjectPdfInput,
 ): number {
   const totalWeight = colWeights.reduce((a, b) => a + b, 0);
   const colWidths = colWeights.map((w) => (w / totalWeight) * width);
@@ -608,7 +636,13 @@ function drawTable(
       pdf.setFont("helvetica", "italic");
       pdf.setFontSize(9);
       pdf.setTextColor(110, 110, 110);
-      pdf.text(`${pageTitle} (continued)`, x, headerOffset);
+       pdf.text(
+         inputForCopy
+           ? copyOf(inputForCopy, "continued", { title: pageTitle })
+           : `${pageTitle} (continued)`,
+         x,
+         headerOffset,
+       );
       const next = headerOffset + 4;
       tableTopY.value = next;
       cy = drawHeaderRow(next);
@@ -658,15 +692,15 @@ function drawTechSummary(
   logoDataUrl: string,
 ) {
   const headers = [
-    "Screen",
-    "Panel",
-    "Grid (W×H)",
-    "Pixels",
-    "Area m²",
-    "Weight kg",
-    "Max W",
-    "Avg W",
-    "Amps",
+    copyOf(input, "screen"),
+    copyOf(input, "panel"),
+    copyOf(input, "grid"),
+    copyOf(input, "pixels"),
+    `${copyOf(input, "area")} m²`,
+    `${copyOf(input, "weight")} kg`,
+    copyOf(input, "maxWatts"),
+    copyOf(input, "averageWatts"),
+    copyOf(input, "amps"),
   ];
   const rows: string[][] = [];
   let totPanels = 0;
@@ -695,7 +729,7 @@ function drawTechSummary(
     totMaxWatts += maxWatts;
 
     rows.push([
-      s.name || "(unnamed)",
+      s.name || copyOf(input, "unnamed"),
       panel.name || "—",
       `${s.panelsWide} × ${s.panelsTall}`,
       `${m.pixelsX} × ${m.pixelsY}`,
@@ -708,8 +742,8 @@ function drawTechSummary(
   }
 
   rows.push([
-    `TOTAL (${screens.length} screens)`,
-    `${totPanels} panels`,
+    `${copyOf(input, "total")} (${screens.length} ${copyOf(input, "screens").toLowerCase()})`,
+    `${totPanels} ${copyOf(input, "panels").toLowerCase()}`,
     "",
     `${totPixels.toLocaleString()} px`,
     totArea.toFixed(2),
@@ -727,13 +761,14 @@ function drawTechSummary(
     headers,
     rows,
     [3, 2.6, 1.9, 2.3, 1.4, 1.6, 1.5, 1.5, 1.3],
-    "Technical summary",
+    copyOf(input, "technicalSummary"),
     pageH - margin,
     (p, px) => {
-      drawHeader(p, "Technical summary", pageW, margin, logoDataUrl);
+      drawHeader(p, copyOf(input, "technicalSummary"), pageW, margin, logoDataUrl, input);
       drawSubLine(p, input, px, 26, pageW - margin * 2);
       return 32;
     },
+    input,
   );
 }
 
@@ -751,12 +786,12 @@ function drawCableSummary(
   logoDataUrl: string,
 ) {
   const headers = [
-    "Screen",
-    "Signal jumpers (CAT)",
-    `Signal length m (×${SIGNAL_CABLE_LENGTH_M})`,
-    "TrueOne jumpers",
-    `Power length m (×${POWER_TRUE1_CABLE_LENGTH_M})`,
-    "Brackets",
+    copyOf(input, "screen"),
+    copyOf(input, "signalJumpers"),
+    copyOf(input, "signalLength", { length: SIGNAL_CABLE_LENGTH_M }),
+    copyOf(input, "powerJumpers"),
+    copyOf(input, "powerLength", { length: POWER_TRUE1_CABLE_LENGTH_M }),
+    copyOf(input, "brackets"),
   ];
   const rows: string[][] = [];
   let totSig = 0;
@@ -775,7 +810,7 @@ function drawCableSummary(
         ? bom.brackets.map((b) => `${b.count}× ${b.name}`).join(", ")
         : "—";
     rows.push([
-      s.name || "(unnamed)",
+      s.name || copyOf(input, "unnamed"),
       String(bom.signalCables),
       bom.signalLengthM.toFixed(1),
       String(bom.powerCables),
@@ -785,7 +820,7 @@ function drawCableSummary(
   }
 
   rows.push([
-    "TOTAL",
+    copyOf(input, "total"),
     String(totSig),
     totSigM.toFixed(1),
     String(totPwr),
@@ -801,13 +836,14 @@ function drawCableSummary(
     headers,
     rows,
     [3, 2, 2.5, 2, 2.5, 4],
-    "Cable summary",
+    copyOf(input, "cableSummary"),
     pageH - margin - 12, // Reserve space for the footnote at page bottom.
     (p, px) => {
-      drawHeader(p, "Cable summary", pageW, margin, logoDataUrl);
+      drawHeader(p, copyOf(input, "cableSummary"), pageW, margin, logoDataUrl, input);
       drawSubLine(p, input, px, 26, pageW - margin * 2);
       return 32;
     },
+    input,
   );
 
   // Footnote — placed below the (possibly paginated) table.
@@ -815,7 +851,10 @@ function drawCableSummary(
   pdf.setFontSize(8);
   pdf.setTextColor(110, 110, 110);
   pdf.text(
-    `Counts cabinet-to-cabinet jumpers only; per-screen feed from the processor / distro is out of scope. Standard lengths: signal ${SIGNAL_CABLE_LENGTH_M} m, TrueOne ${POWER_TRUE1_CABLE_LENGTH_M} m.`,
+    copyOf(input, "cableFootnote", {
+      signal: SIGNAL_CABLE_LENGTH_M,
+      power: POWER_TRUE1_CABLE_LENGTH_M,
+    }),
     x,
     endY + 6,
     { maxWidth: width },

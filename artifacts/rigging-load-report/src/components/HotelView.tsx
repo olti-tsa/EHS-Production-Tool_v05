@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { openRoomingList } from "../lib/roomingListExport";
+import { useI18n, useT } from "../lib/i18n/I18nContext";
 
 /** Server response shape for `GET /api/portal/briefs/:id/hotel`.
  *  Mirrors what `portalBriefs.ts` returns. Kept inline (not in `lib/`)
@@ -45,12 +46,6 @@ type HotelCrewRow = {
   roomLocked: boolean;
 };
 
-const ROOM_SHARE_LABEL: Record<RoomShare, string> = {
-  twin: "Twin",
-  single: "Single",
-  either: "Either",
-};
-
 /** Same UTC-stable date formatter as CateringView — render YYYY-MM-DD
  *  strings without timezone day-shift. */
 function fmtDate(iso: string | null): string {
@@ -81,6 +76,17 @@ export function HotelView({
    *  App.tsx so this component stays decoupled from the auth lib. */
   getToken: () => Promise<string | null>;
 }) {
+  const { t, locale } = useI18n();
+  const roomShareLabel: Record<RoomShare, string> = {
+    twin: t("hotel.roomShare.twin"),
+    single: t("hotel.roomShare.single"),
+    either: t("hotel.roomShare.either"),
+  };
+  const genderLabel: Record<Exclude<Gender, "">, string> = {
+    female: t("hotel.gender.female"),
+    male: t("hotel.gender.male"),
+    other: t("hotel.gender.other"),
+  };
   const [data, setData] = useState<HotelResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,10 +126,10 @@ export function HotelView({
         if (!res.ok) {
           const msg =
             res.status === 403
-              ? "You don't own this brief."
+              ? t("hotel.error.notOwner")
               : res.status === 404
-                ? "Brief not found."
-                : "Could not load hotel data.";
+                ? t("hotel.error.notFound")
+                : t("hotel.error.load");
           setError(msg);
           setLoading(false);
           return;
@@ -131,7 +137,7 @@ export function HotelView({
         const json = (await res.json()) as HotelResponse;
         if (cancelled) return;
         if (!json.ok) {
-          setError(json.error ?? "Could not load hotel data.");
+          setError(json.error ?? t("hotel.error.load"));
           setLoading(false);
           return;
         }
@@ -140,17 +146,17 @@ export function HotelView({
         setLoading(false);
       } catch {
         if (cancelled) return;
-        setError("Connection lost — showing last known data.");
+        setError(t("hotel.error.connection"));
         setLoading(false);
       }
     };
     void fetchOnce();
-    const t = window.setInterval(fetchOnce, 60_000);
+    const pollTimer = window.setInterval(fetchOnce, 60_000);
     return () => {
       cancelled = true;
-      window.clearInterval(t);
+      window.clearInterval(pollTimer);
     };
-  }, [briefId, getToken, baseUrl]);
+  }, [briefId, getToken, baseUrl, t]);
 
   /** Optimistically apply a partial update to a row, then PATCH the
    *  server. On failure we surface the error and revert by re-fetching
@@ -212,7 +218,7 @@ export function HotelView({
         // canonical server state instead of their failed optimistic
         // edit. The poll loop will overwrite within 60s but that's
         // too slow for a wrong checkbox state.
-        setError("Could not save change — refreshing…");
+        setError(t("hotel.error.saveRefreshing"));
         // Trigger an immediate re-fetch by clearing the data; the
         // useEffect will not re-fire (briefId hasn't changed), so
         // do an inline refetch here.
@@ -244,7 +250,7 @@ export function HotelView({
         }
       }
     } catch {
-      setError("Connection lost — change may not have saved.");
+      setError(t("hotel.error.changeConnection"));
     } finally {
       setSavingByGigId((m) => {
         const { [gigId]: _drop, ...rest } = m;
@@ -320,13 +326,13 @@ export function HotelView({
         },
       );
       if (!res.ok) {
-        setError("Could not lock room — refreshing…");
+        setError(t("hotel.error.lockRefreshing"));
       } else {
         setError(null);
       }
       await refetch();
     } catch {
-      setError("Connection lost — change may not have saved.");
+      setError(t("hotel.error.changeConnection"));
     } finally {
       setRoomActionInFlight(false);
     }
@@ -352,13 +358,13 @@ export function HotelView({
         },
       );
       if (!res.ok) {
-        setError("Could not unlock room — refreshing…");
+        setError(t("hotel.error.unlockRefreshing"));
       } else {
         setError(null);
       }
       await refetch();
     } catch {
-      setError("Connection lost — change may not have saved.");
+      setError(t("hotel.error.changeConnection"));
     } finally {
       setRoomActionInFlight(false);
     }
@@ -390,14 +396,14 @@ export function HotelView({
         },
       );
       if (!res.ok) {
-        setError("Could not swap — refreshing…");
+        setError(t("hotel.error.swapRefreshing"));
       } else {
         setError(null);
       }
       setSwapSelection([]);
       await refetch();
     } catch {
-      setError("Connection lost — swap may not have saved.");
+      setError(t("hotel.error.swapConnection"));
       setSwapSelection([]);
     } finally {
       setRoomActionInFlight(false);
@@ -543,6 +549,15 @@ export function HotelView({
       brief: data.brief,
       rooms,
       noHotelGuests,
+      locale,
+      copy: {
+        untitledProject: t("export.roomingList.untitledProject"), venueTba: t("export.roomingList.venueTba"), documentTitle: (project, venue) => t("export.roomingList.documentTitle", { project, venue }),
+        rooms: t("export.roomingList.rooms"), twin: t("export.roomingList.twin"), single: t("export.roomingList.single"), roomNights: t("export.roomingList.roomNights"), dateRange: t("export.roomingList.dateRange"),
+        room: (number) => t("export.roomingList.room", { number }), twinRoom: t("export.roomingList.twinRoom"), singleRoom: t("export.roomingList.singleRoom"), singleSoloRoom: t("export.roomingList.singleSoloRoom"),
+        locked: t("export.roomingList.locked"), night: (count) => t(count === 1 ? "export.roomingList.night" : "export.roomingList.nights", { count: count.toLocaleString(locale === "no" ? "nb-NO" : "en-US") }), guest: t("export.roomingList.table.guest"), role: t("export.roomingList.table.role"), phone: t("export.roomingList.table.phone"),
+        checkIn: t("export.roomingList.table.checkIn"), checkOut: t("export.roomingList.table.checkOut"), notStaying: t("export.roomingList.notStaying"), notStayingDetail: t("export.roomingList.notStayingDetail"),
+        title: t("export.roomingList.title"), generated: (date) => t("export.roomingList.generated", { date }), footer: (briefId) => t("export.roomingList.footer", { briefId }), print: t("export.roomingList.print"),
+      },
     });
   }
 
@@ -550,9 +565,9 @@ export function HotelView({
     return (
       <div className="led-report">
         <header className="led-report-header">
-          <h2>Hotel</h2>
+          <h2>{t("hotel.title")}</h2>
         </header>
-        <div className="led-empty">Loading…</div>
+        <div className="led-empty">{t("common.loading")}</div>
       </div>
     );
   }
@@ -561,13 +576,9 @@ export function HotelView({
     <div className="led-report">
       <header className="led-report-header">
         <div>
-          <h2>Hotel</h2>
+          <h2>{t("hotel.title")}</h2>
           <p className="led-report-sub">
-            Toggle hotel-needed per crew member. Check-in and check-out
-            default to the first and morning-after-the-last assigned
-            working day; click into a date to override. Room-share
-            preference and gender come from each freelancer's portal
-            profile and feed the pairing suggester.
+            {t("hotel.subtitle")}
           </p>
         </div>
         {stats && (
@@ -576,12 +587,10 @@ export function HotelView({
             style={{ display: "flex", alignItems: "center", gap: 8 }}
           >
             <span className="badge">
-              <strong>{stats.heads}</strong> need
-              {stats.heads === 1 ? "s" : ""} hotel
+              {t("hotel.needHotelCount", { count: stats.heads })}
             </span>
             <span className="badge">
-              <strong>{stats.nights}</strong> room-night
-              {stats.nights === 1 ? "" : "s"}
+              {t("hotel.roomNightsCount", { count: stats.nights })}
             </span>
             <button
               type="button"
@@ -589,8 +598,8 @@ export function HotelView({
               disabled={roomGroups.length === 0}
               title={
                 roomGroups.length === 0
-                  ? "Toggle hotel-needed on at least one crew member to enable the rooming list."
-                  : "Open the rooming list in a new tab — print or save as PDF for the hotel."
+                  ? t("hotel.printDisabledTitle")
+                  : t("hotel.printTitle")
               }
               style={{
                 padding: "6px 12px",
@@ -604,7 +613,7 @@ export function HotelView({
                 opacity: roomGroups.length === 0 ? 0.6 : 1,
               }}
             >
-              Print rooming list
+              {t("hotel.print")}
             </button>
           </div>
         )}
@@ -628,17 +637,17 @@ export function HotelView({
 
       {stats && stats.heads > 0 && (
         <div className="led-dashboard">
-          <Stat label="Twin (will share)" value={stats.twin} />
-          <Stat label="Single (private)" value={stats.single} />
-          <Stat label="Either" value={stats.either} />
-          <Stat label="Rooms suggested" value={roomGroups.length} />
+          <Stat label={t("hotel.stats.twin")} value={stats.twin} t={t} />
+          <Stat label={t("hotel.stats.single")} value={stats.single} t={t} />
+          <Stat label={t("hotel.stats.either")} value={stats.either} t={t} />
+          <Stat label={t("hotel.stats.roomsSuggested")} value={roomGroups.length} t={t} />
         </div>
       )}
 
       {roomGroups.length > 0 && (
         <section className="led-card" style={{ marginBottom: 12 }}>
           <div className="led-card-head">
-            <h3>Rooms</h3>
+            <h3>{t("hotel.rooms")}</h3>
             <span className="badge">
               <strong>{roomGroups.length}</strong>
             </span>
@@ -650,10 +659,7 @@ export function HotelView({
               margin: "0 0 10px 0",
             }}
           >
-            Auto-paired by overlapping stay and room-share preference,
-            with same-gender matched where stated. Lock a room to
-            freeze it. Tick one person from each of two rooms then hit
-            Swap to swap them.
+            {t("hotel.roomsHint")}
           </p>
           {swapSelection.length === 2 && (
             <div
@@ -669,7 +675,7 @@ export function HotelView({
               }}
             >
               <span style={{ fontSize: 13, flex: 1 }}>
-                Swap{" "}
+                {t("hotel.swap")}{" "}
                 <strong>{nameOf(data?.crew, swapSelection[0])}</strong>{" "}
                 ↔{" "}
                 <strong>{nameOf(data?.crew, swapSelection[1])}</strong>?
@@ -680,7 +686,7 @@ export function HotelView({
                 disabled={roomActionInFlight}
                 style={btnStyle(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -690,7 +696,7 @@ export function HotelView({
                 disabled={roomActionInFlight}
                 style={btnStyle(true)}
               >
-                {roomActionInFlight ? "Swapping…" : "Swap"}
+                {roomActionInFlight ? t("hotel.swapping") : t("hotel.swap")}
               </button>
             </div>
           )}
@@ -734,12 +740,12 @@ export function HotelView({
                     }}
                   >
                     <div style={{ fontWeight: 700, fontSize: 13 }}>
-                      Room {group.roomNumber}
+                      {t("hotel.room", { number: group.roomNumber })}
                       {anyLocked && (
                         <span
-                          title="Locked by producer"
+                          title={t("hotel.lockedByProducer")}
                           style={{ marginLeft: 6, color: "#fbbf24" }}
-                          aria-label="locked"
+                          aria-label={t("hotel.locked")}
                         >
                           🔒
                         </span>
@@ -752,8 +758,8 @@ export function HotelView({
                       }}
                     >
                       {group.occupants.length === 1
-                        ? "1 bed used"
-                        : `${group.occupants.length} sharing`}
+                        ? t("hotel.bedUsed")
+                        : t("hotel.sharingCount", { count: group.occupants.length })}
                     </span>
                   </div>
                   <ul
@@ -788,13 +794,14 @@ export function HotelView({
                           <input
                             type="checkbox"
                             checked={selected}
+                            aria-label={t("hotel.selectForSwap", { name: o.name })}
                             disabled={
                               roomActionInFlight || sameRoomBlocks
                             }
                             title={
                               sameRoomBlocks
-                                ? "Pick someone from a different room"
-                                : "Tick to swap"
+                                ? t("hotel.pickDifferentRoom")
+                                : t("hotel.tickToSwap")
                             }
                             onChange={() =>
                               toggleSwapSelection(
@@ -814,8 +821,8 @@ export function HotelView({
                                 marginLeft: 6,
                               }}
                             >
-                              {ROOM_SHARE_LABEL[o.roomShare]}
-                              {o.gender ? ` · ${o.gender}` : ""}
+                              {roomShareLabel[o.roomShare]}
+                              {o.gender ? ` · ${genderLabel[o.gender]}` : ""}
                             </span>
                           </span>
                         </li>
@@ -830,7 +837,7 @@ export function HotelView({
                         onClick={() => void unlockRoom(occupantIds)}
                         style={btnStyle(false)}
                       >
-                        Unlock
+                        {t("hotel.unlock")}
                       </button>
                     ) : (
                       <button
@@ -839,7 +846,7 @@ export function HotelView({
                         onClick={() => void lockRoom(occupantIds)}
                         style={btnStyle(false)}
                       >
-                        Lock
+                        {t("hotel.lock")}
                       </button>
                     )}
                   </div>
@@ -852,13 +859,12 @@ export function HotelView({
 
       {split.needsHotel.length === 0 ? (
         <div className="led-empty">
-          No crew currently flagged as needing a hotel. Toggle people
-          on in the section below as you decide who's travelling.
+          {t("hotel.emptyNeedsHotel")}
         </div>
       ) : (
         <section className="led-card" style={{ marginBottom: 12 }}>
           <div className="led-card-head">
-            <h3>Needs hotel</h3>
+            <h3>{t("hotel.needsHotel")}</h3>
             <span className="badge">
               <strong>{split.needsHotel.length}</strong>
             </span>
@@ -867,6 +873,9 @@ export function HotelView({
             rows={split.needsHotel}
             savingByGigId={savingByGigId}
             patchRow={patchRow}
+            t={t}
+            roomShareLabel={roomShareLabel}
+            genderLabel={genderLabel}
           />
         </section>
       )}
@@ -874,7 +883,7 @@ export function HotelView({
       {split.local.length > 0 && (
         <section className="led-card">
           <div className="led-card-head">
-            <h3>Local crew (no hotel)</h3>
+            <h3>{t("hotel.localCrew")}</h3>
             <span className="badge">
               <strong>{split.local.length}</strong>
             </span>
@@ -886,21 +895,22 @@ export function HotelView({
               margin: "0 0 8px 0",
             }}
           >
-            These crew members aren't currently flagged for a hotel.
-            Flip the switch to add them.
+            {t("hotel.localCrewHint")}
           </p>
           <CrewTable
             rows={split.local}
             savingByGigId={savingByGigId}
             patchRow={patchRow}
+            t={t}
+            roomShareLabel={roomShareLabel}
+            genderLabel={genderLabel}
           />
         </section>
       )}
 
       {(!data?.crew || data.crew.length === 0) && (
         <div className="led-empty">
-          No confirmed crew on this brief yet — rows will appear here
-          as freelancers accept.
+          {t("hotel.empty")}
         </div>
       )}
     </div>
@@ -936,12 +946,20 @@ function btnStyle(primary: boolean): React.CSSProperties {
   };
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  t,
+}: {
+  label: string;
+  value: number;
+  t: ReturnType<typeof useT>;
+}) {
   return (
     <div className="led-stat">
       <div className="led-stat-label">{label}</div>
       <div className="led-stat-value">{value}</div>
-      <div className="led-stat-sub">crew</div>
+      <div className="led-stat-sub">{t("hotel.crew")}</div>
     </div>
   );
 }
@@ -950,6 +968,9 @@ function CrewTable({
   rows,
   savingByGigId,
   patchRow,
+  t,
+  roomShareLabel,
+  genderLabel,
 }: {
   rows: HotelCrewRow[];
   savingByGigId: Record<string, boolean>;
@@ -961,6 +982,9 @@ function CrewTable({
       checkOutDate?: string | null;
     },
   ) => Promise<void>;
+  t: ReturnType<typeof useT>;
+  roomShareLabel: Record<RoomShare, string>;
+  genderLabel: Record<Exclude<Gender, "">, string>;
 }) {
   return (
     <div style={{ overflowX: "auto" }}>
@@ -973,15 +997,15 @@ function CrewTable({
       >
         <thead>
           <tr>
-            <Th>Hotel?</Th>
-            <Th>Name</Th>
-            <Th>Role</Th>
-            <Th>Room</Th>
-            <Th>Check-in</Th>
-            <Th>Check-out</Th>
-            <Th>Room share</Th>
-            <Th>Gender</Th>
-            <Th>Phone</Th>
+            <Th>{t("hotel.table.hotel")}</Th>
+            <Th>{t("hotel.table.name")}</Th>
+            <Th>{t("hotel.table.role")}</Th>
+            <Th>{t("hotel.table.room")}</Th>
+            <Th>{t("hotel.table.checkIn")}</Th>
+            <Th>{t("hotel.table.checkOut")}</Th>
+            <Th>{t("hotel.table.roomShare")}</Th>
+            <Th>{t("hotel.table.gender")}</Th>
+            <Th>{t("hotel.table.phone")}</Th>
           </tr>
         </thead>
         <tbody>
@@ -991,6 +1015,7 @@ function CrewTable({
                 <input
                   type="checkbox"
                   checked={row.hotelRequired}
+                  aria-label={t("hotel.toggleHotel", { name: row.name })}
                   disabled={!!savingByGigId[row.gigId]}
                   onChange={(e) =>
                     patchRow(row.gigId, { hotelRequired: e.target.checked })
@@ -1007,11 +1032,11 @@ function CrewTable({
                       marginTop: 2,
                     }}
                   >
-                    No portal profile yet
+                    {t("hotel.noPortalProfile")}
                   </div>
                 )}
               </Td>
-              <Td>{row.role || "—"}</Td>
+              <Td>{row.role || t("hotel.notAvailable")}</Td>
               <Td>
                 {row.roomKey ? (
                   <span
@@ -1029,18 +1054,18 @@ function CrewTable({
                     }}
                     title={
                       row.roomLocked
-                        ? "Locked by producer"
-                        : "Auto-suggested by pairing engine"
+                        ? t("hotel.lockedByProducer")
+                        : t("hotel.autoSuggested")
                     }
                   >
                     {row.roomLocked ? "🔒 " : ""}
                     {(() => {
                       const m = /^room-(\d+)$/.exec(row.roomKey);
-                      return m ? `Room ${m[1]}` : row.roomKey;
+                      return m ? t("hotel.room", { number: m[1] }) : row.roomKey;
                     })()}
                   </span>
                 ) : (
-                  <span style={{ color: "var(--muted, #94a3b8)" }}>—</span>
+                  <span style={{ color: "var(--muted, #94a3b8)" }}>{t("hotel.notAvailable")}</span>
                 )}
               </Td>
               <Td>
@@ -1051,6 +1076,8 @@ function CrewTable({
                   onChange={(next) =>
                     patchRow(row.gigId, { checkInDate: next })
                   }
+                  t={t}
+                  ariaLabel={t("hotel.checkInFor", { name: row.name })}
                 />
               </Td>
               <Td>
@@ -1061,6 +1088,8 @@ function CrewTable({
                   onChange={(next) =>
                     patchRow(row.gigId, { checkOutDate: next })
                   }
+                  t={t}
+                  ariaLabel={t("hotel.checkOutFor", { name: row.name })}
                 />
               </Td>
               <Td>
@@ -1073,7 +1102,7 @@ function CrewTable({
                     color: "var(--text, inherit)",
                   }}
                 >
-                  {ROOM_SHARE_LABEL[row.roomShare]}
+                  {roomShareLabel[row.roomShare]}
                 </span>
               </Td>
               <Td>
@@ -1086,8 +1115,8 @@ function CrewTable({
                   }}
                 >
                   {row.gender
-                    ? row.gender.charAt(0).toUpperCase() + row.gender.slice(1)
-                    : "—"}
+                    ? genderLabel[row.gender]
+                    : t("hotel.notAvailable")}
                 </span>
               </Td>
               <Td>
@@ -1139,11 +1168,15 @@ function DateCell({
   explicit,
   disabled,
   onChange,
+  t,
+  ariaLabel,
 }: {
   iso: string | null;
   explicit: boolean;
   disabled: boolean;
   onChange: (next: string | null) => void;
+  t: ReturnType<typeof useT>;
+  ariaLabel: string;
 }) {
   // The native date input takes "YYYY-MM-DD" exactly — same shape we
   // store + emit, no formatting needed. An empty string means the
@@ -1155,6 +1188,7 @@ function DateCell({
         type="date"
         value={iso ?? ""}
         disabled={disabled}
+        aria-label={ariaLabel}
         onChange={(e) => {
           const v = e.target.value;
           onChange(v === "" ? null : v);
@@ -1176,12 +1210,12 @@ function DateCell({
             fontStyle: "italic",
           }}
         >
-          auto from working days
+          {t("hotel.autoFromWorkingDays")}
         </span>
       )}
       {iso && explicit && (
         <span style={{ fontSize: 10, color: "var(--accent, #fbbf24)" }}>
-          override
+          {t("hotel.override")}
         </span>
       )}
     </div>

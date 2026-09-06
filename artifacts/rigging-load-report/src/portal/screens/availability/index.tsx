@@ -3,15 +3,15 @@ import { PALETTE, type ThemeMode } from "../../lib/portalTheme";
 import { type PortalData } from "../../lib/portalStorage";
 import { useAuth } from "@clerk/react";
 import { toast } from "sonner";
-import { useT } from "../../../lib/i18n/I18nContext";
+import { useI18n } from "../../../lib/i18n/I18nContext";
 
 import type { CalendarEntry, ExternalBusy, CalendarConnection, CalendarFeed, CalendarHold } from "./types";
 import {
   isoDateOnly,
-  responseError,
   buildMonthCells,
   overlapsLocalDay,
   replaceAvailabilityEntriesInRange,
+  responseError,
 } from "./utils";
 
 import { CalendarGrid } from "./CalendarGrid";
@@ -49,7 +49,7 @@ function navBtnStyle(theme: ThemeMode): React.CSSProperties {
 
 export function Availability({ theme, data, setData }: { theme: ThemeMode; data: PortalData; setData: React.Dispatch<React.SetStateAction<PortalData>> }) {
   const c = PALETTE[theme];
-  const t = useT();
+  const { locale, t } = useI18n();
   const { getToken } = useAuth();
   const [tab, setTab] = useState<"calendar" | "integrations">("calendar");
 
@@ -174,10 +174,10 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
       body: JSON.stringify({ url: icsUrl })
     });
     if (!res.ok) {
-      toast.error(await res.text());
+      toast.error(t("portal.availability.toast.icsAddFailed"));
       return;
     }
-    toast.success("ICS connection added");
+    toast.success(t("portal.availability.toast.icsAdded"));
     setIcsUrl("");
     loadIntegrations();
   };
@@ -190,17 +190,23 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       if (!res.ok) {
-        toast.error("Failed to start connection");
+        toast.error(t("portal.availability.toast.connectionStartFailed"));
         return;
       }
       const data = await res.json();
       if (data.configured === false) {
-        toast.error("Admin configuration required: The " + provider + " integration has not been configured by your admin yet.");
+        const providerName =
+          provider === "google"
+            ? t("portal.availability.provider.google")
+            : provider === "microsoft"
+              ? t("portal.availability.provider.microsoft")
+              : provider;
+        toast.error(t("portal.availability.toast.adminConfigurationRequired", { provider: providerName }));
       } else if (data.url) {
         window.location.href = data.url;
       }
     } catch(e) {
-      toast.error("Failed to start connection");
+      toast.error(t("portal.availability.toast.connectionStartFailed"));
     }
   };
 
@@ -211,10 +217,10 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     if (res.ok) {
-      toast.success("Sync queued");
+      toast.success(t("portal.availability.toast.syncQueued"));
       setTimeout(() => loadIntegrations(), 2000);
     } else {
-      toast.error("Sync failed");
+      toast.error(t("portal.availability.toast.syncFailed"));
     }
   };
 
@@ -223,10 +229,10 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
     try {
       await navigator.clipboard.writeText(feed.url);
       setCopied(true);
-      toast.success("Copied to clipboard");
+      toast.success(t("portal.availability.toast.copied"));
       window.setTimeout(() => setCopied(false), 2000);
     } catch (e) {
-      toast.error("Failed to copy");
+      toast.error(t("portal.availability.toast.copyFailed"));
     }
   };
 
@@ -241,7 +247,7 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
       const res = await fetch(`${baseUrl}api/portal/calendar/download.ics`, {
          headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-      if (!res.ok) throw new Error("Failed to download");
+      if (!res.ok) throw new Error(t("portal.availability.toast.downloadFailed"));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -251,8 +257,8 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch {
+      toast.error(t("portal.availability.toast.downloadFailed"));
     }
   };
 
@@ -264,10 +270,10 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     if (!res.ok) {
-      toast.error(await res.text());
+      toast.error(t("portal.availability.toast.rotateFailed"));
       return;
     }
-    toast.success("Subscription rotated");
+    toast.success(t("portal.availability.toast.subscriptionRotated"));
     setRotateConfirm(false);
     loadIntegrations();
   };
@@ -279,10 +285,10 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     });
     if (!res.ok) {
-      toast.error(await res.text());
+      toast.error(t("portal.availability.toast.connectionRemoveFailed"));
       return;
     }
-    toast.success("Connection removed");
+    toast.success(t("portal.availability.toast.connectionRemoved"));
     loadIntegrations();
   };
 
@@ -313,7 +319,8 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
       return arr;
     }
   }, [viewYear, viewMonth, viewMode, viewWeekStart]);
-  const monthName = new Date(viewYear, viewMonth, 1).toLocaleString("en-GB", { month: "long", year: "numeric" });
+  const dateLocale = locale === "no" ? "nb-NO" : "en-GB";
+  const monthName = new Date(viewYear, viewMonth, 1).toLocaleString(dateLocale, { month: "long", year: "numeric" });
 
   const gigsOverlap = useCallback((iso: string) => {
     return data.gigs.some((g) => g.assignedDates?.includes(iso) || (g.startDate <= iso && g.endDate >= iso && (g.status === "confirmed" || g.status === "done" || g.status === "invoiced" || g.status === "paid")));
@@ -361,7 +368,12 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
         }),
       });
       if (!res.ok) {
-        toast.error(await responseError(res));
+        toast.error(
+          await responseError(
+            res,
+            t("portal.availability.toast.updateFailed"),
+          ),
+        );
         return;
       }
       const optimisticEntries: CalendarEntry[] =
@@ -459,7 +471,11 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
           <div style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8, flexShrink: 0 }}>
             <button onClick={() => shiftDate(-1)} style={navBtnStyle(theme)} aria-label={t("portal.availability.prev")}>‹</button>
             <div style={{ flex: 1, textAlign: "center", fontSize: 18, fontWeight: 800 }}>
-              {viewMode === "month" ? monthName : `Week of ${viewWeekStart.toLocaleDateString("en-GB", { month: "short", day: "numeric" })}`}
+              {viewMode === "month"
+                ? monthName
+                : t("portal.availability.view.weekOf", {
+                    date: viewWeekStart.toLocaleDateString(dateLocale, { month: "short", day: "numeric" }),
+                  })}
             </div>
             <button onClick={() => shiftDate(+1)} style={navBtnStyle(theme)} aria-label={t("portal.availability.next")}>›</button>
             <div style={{ display: "flex", gap: 4, background: c.cardBgSubtle, padding: 4, borderRadius: 8, border: `1px solid ${c.border}` }}>
@@ -503,7 +519,7 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
             <span className="availability-toggle-bar__label">
               {viewMode === "month" ? monthName : t("portal.availability.view.week")}
             </span>
-            <div className="availability-toggle-bar__buttons" role="group" aria-label="Set availability for current view">
+            <div className="availability-toggle-bar__buttons" role="group" aria-label={t("portal.availability.bulk.currentViewAria")}>
               <button
                 type="button"
                 aria-pressed={activeBulkStatus === "available"}
@@ -555,7 +571,6 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
           handleDownload={handleDownload}
           getWebcalUrl={getWebcalUrl}
           copied={copied}
-          t={t as any}
         />
       )}
 

@@ -9,6 +9,21 @@
 
 import type { BriefAttachment } from "./projectBrief";
 
+export type BriefAttachmentUploadErrorCode =
+  | "auth_required"
+  | "request_failed"
+  | "upload_failed";
+
+export class BriefAttachmentUploadError extends Error {
+  constructor(
+    readonly code: BriefAttachmentUploadErrorCode,
+    readonly status?: number,
+  ) {
+    super(code);
+    this.name = "BriefAttachmentUploadError";
+  }
+}
+
 /** Minimal handle to whatever the producer wants to attach. We accept
  *  data URLs because that's the form the floor-plan helper already
  *  produces, but a Blob with metadata works just as well. */
@@ -76,7 +91,7 @@ export async function uploadBriefAttachment(
   }
   const token = await getToken();
   if (!token) {
-    throw new Error("Sign in required to upload attachments.");
+    throw new BriefAttachmentUploadError("auth_required");
   }
 
   // Step 1 — request a presigned upload URL.
@@ -96,10 +111,10 @@ export async function uploadBriefAttachment(
   try {
     reqJson = (await reqRes.json()) as UploadUrlResponse;
   } catch {
-    throw new Error(`Upload URL request failed (${reqRes.status}).`);
+    throw new BriefAttachmentUploadError("request_failed", reqRes.status);
   }
   if (!reqRes.ok || !reqJson.ok || !reqJson.uploadURL || !reqJson.objectPath) {
-    throw new Error(reqJson.error || `Upload URL request failed (${reqRes.status}).`);
+    throw new BriefAttachmentUploadError("request_failed", reqRes.status);
   }
 
   // Step 2 — PUT the bytes directly to GCS at the signed URL. The
@@ -114,7 +129,7 @@ export async function uploadBriefAttachment(
     body: blob,
   });
   if (!putRes.ok) {
-    throw new Error(`File upload failed (${putRes.status}).`);
+    throw new BriefAttachmentUploadError("upload_failed", putRes.status);
   }
 
   return {

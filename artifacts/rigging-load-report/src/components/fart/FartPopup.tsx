@@ -353,7 +353,7 @@ export function FartPopup({
       ))}
       <div className="fart-overlay-content">
         <div className="fart-overlay-text">
-          {trimmedMessage || t(headlineKey, { name: trimmedName || "Someone" })}
+          {trimmedMessage || t(headlineKey, { name: trimmedName || t("fart.someone") })}
         </div>
         <div className="fart-overlay-sender">— {trimmedName}</div>
       </div>

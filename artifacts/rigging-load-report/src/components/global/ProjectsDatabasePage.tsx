@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState, useMemo } from "react";
 import { Archive, ArchiveRestore, Search, Plus, FileText, ChevronRight, Trash2, ArrowRight } from "lucide-react";
 import { DeleteProjectDialog } from "../DeleteProjectDialog";
 import { ProjectStatusDialog } from "../ProjectStatusDialog";
-import { useT } from "../../lib/i18n/I18nContext";
+import { useI18n, useT } from "../../lib/i18n/I18nContext";
 import {
   getNextProjectStatus,
   PROJECT_STATUS_META,
@@ -51,6 +51,7 @@ export function ProjectsDatabasePage({
   canPermanentlyDelete,
 }: Props) {
   const t = useT();
+  const { locale } = useI18n();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -73,7 +74,7 @@ export function ProjectsDatabasePage({
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         },
       );
-      if (!res.ok) throw new Error("Failed to load projects");
+      if (!res.ok) throw new Error(t("projects.database.error.load"));
       const json = await res.json();
       setProjects(
         (json.projects || []).map((project: ProjectRow) => ({
@@ -200,7 +201,7 @@ export function ProjectsDatabasePage({
 
   const formatDate = (ds: string) => {
     if (!ds) return "—";
-    return new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat(locale === "no" ? "nb-NO" : "en-GB", {
       day: "numeric",
       month: "short",
       year: "numeric"
@@ -212,14 +213,14 @@ export function ProjectsDatabasePage({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 16, marginBottom: 24 }}>
         <div style={{ minWidth: 0 }}>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)" }}>
-            Projects Database
+            {t("projects.database.title")}
           </h2>
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>
-            Central repository of all production projects.
+            {t("projects.database.subtitle")}
           </p>
         </div>
         <button className="ehs-primary-btn" onClick={onNewProject}>
-          <Plus size={16} /> New Project
+          <Plus size={16} /> {t("projects.database.action.new")}
         </button>
       </div>
 
@@ -229,7 +230,7 @@ export function ProjectsDatabasePage({
             <Search size={16} color="var(--text-muted)" />
             <input 
               type="text" 
-              placeholder="Search name, client, venue, or Easyjob number..." 
+              placeholder={t("projects.database.searchPlaceholder")}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -271,7 +272,7 @@ export function ProjectsDatabasePage({
 
         {loading ? (
           <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
-            Loading database...
+            {t("projects.database.loading")}
           </div>
         ) : error ? (
           <div style={{ padding: 40, textAlign: "center", color: "var(--danger)", fontSize: 14 }}>
@@ -282,15 +283,15 @@ export function ProjectsDatabasePage({
             <div className="ehs-empty-state-icon">
               <FileText size={24} />
             </div>
-            <h3>No projects found</h3>
+            <h3>{t("projects.database.empty.title")}</h3>
             <p>
               {projects.length === 0 
-                ? "Your database is empty. Create your first project to get started."
-                : "No projects match your current filters."}
+                ? t("projects.database.empty.body")
+                : t("projects.database.empty.filtered")}
             </p>
             {projects.length === 0 && (
               <button className="ehs-primary-btn" onClick={onNewProject}>
-                <Plus size={16} /> Create Project
+                <Plus size={16} /> {t("projects.database.action.create")}
               </button>
             )}
           </div>
@@ -299,14 +300,14 @@ export function ProjectsDatabasePage({
             <table className="ehs-table">
               <thead>
                 <tr>
-                  <th>Project Name</th>
-                  <th>Client</th>
-                  <th>Venue</th>
-                  <th>Easyjob Number</th>
-                  <th>Crew</th>
-                  <th>Status</th>
-                  <th>Last Updated</th>
-                  <th>Role</th>
+                  <th>{t("projects.database.table.name")}</th>
+                  <th>{t("projects.database.table.client")}</th>
+                  <th>{t("projects.database.table.venue")}</th>
+                  <th>{t("projects.database.table.easyjobNumber")}</th>
+                  <th>{t("projects.database.table.crew")}</th>
+                  <th>{t("projects.database.table.status")}</th>
+                  <th>{t("projects.database.table.updated")}</th>
+                  <th>{t("projects.database.table.role")}</th>
                   <th style={{ width: 170 }}></th>
                 </tr>
               </thead>
@@ -314,7 +315,7 @@ export function ProjectsDatabasePage({
                 {filtered.map(p => (
                   <tr key={p.id} className="is-clickable" onClick={() => onOpenProject(p.id)}>
                     <td>
-                      <div style={{ fontWeight: 600 }}>{p.name || "Untitled"}</div>
+                      <div style={{ fontWeight: 600 }}>{p.name || t("projects.database.untitled")}</div>
                       {p.manager ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontWeight: 'normal', fontSize: 12, color: 'var(--text-muted)' }}>
                           {p.manager.avatarUrl ? (
@@ -324,14 +325,14 @@ export function ProjectsDatabasePage({
                               {p.manager.name.charAt(0).toUpperCase()}
                             </div>
                           )}
-                          <span title={p.manager.email || undefined}>Created by: {p.manager.name}</span>
+                          <span title={p.manager.email || undefined}>{t("projects.database.createdBy", { name: p.manager.name })}</span>
                         </div>
                       ) : null}
                     </td>
                     <td>{p.client || "—"}</td>
                     <td>{p.venue || "—"}</td>
                     <td>{p.easyjob_number ? <span style={{ fontFamily: "monospace", color: "var(--text-muted)" }}>{p.easyjob_number}</span> : "—"}</td>
-                    <td>{p.crewCount} <span style={{ color: "var(--text-muted)", fontSize: 11 }}>pax</span></td>
+                    <td>{p.crewCount} <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{t("projects.database.pax")}</span></td>
                     <td>
                       <span
                         className={`ehs-badge ${p.status}`}

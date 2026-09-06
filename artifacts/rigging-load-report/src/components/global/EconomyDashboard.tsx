@@ -4,7 +4,8 @@ import {
   FileSpreadsheet, Download, Plus, CheckCircle, XCircle, AlertCircle, RefreshCw,
   Search, Filter, ChevronRight, Settings, Flag, Edit2, Lock
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { useI18n, useT } from "../../lib/i18n/I18nContext";
+import type { TranslationKey } from "../../lib/i18n/types";
 
 // --- API Types ---
 
@@ -98,17 +99,25 @@ interface Props {
 
 const TABS = ["Overview", "Projects", "Timecards", "Expenses", "Reconciliation"] as const;
 type Tab = typeof TABS[number];
+const TAB_LABEL_KEYS: Record<Tab, TranslationKey> = {
+  Overview: "economy.tab.overview",
+  Projects: "economy.tab.projects",
+  Timecards: "economy.tab.timecards",
+  Expenses: "economy.tab.expenses",
+  Reconciliation: "economy.tab.reconciliation",
+};
 
 const CATEGORIES: EconomyCategory[] = ["labor", "hotel", "catering", "transport", "subRentals"];
 
-function fmtMinor(minor: number | null | undefined): string {
+function fmtMinor(minor: number | null | undefined, locale: string): string {
   if (minor == null) return "—";
-  return new Intl.NumberFormat('en-NO', { style: 'currency', currency: 'NOK', maximumFractionDigits: 0 }).format(minor / 100);
+  return new Intl.NumberFormat(locale === "no" ? "nb-NO" : "en-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 }).format(minor / 100);
 }
 
-function fmtHours(min: number | null | undefined): string {
-  if (min == null) return "0h";
-  return `${Math.round((min / 60) * 100) / 100}h`;
+function fmtHours(min: number | null | undefined, locale: string): string {
+  return new Intl.NumberFormat(locale === "no" ? "nb-NO" : "en-NO", {
+    style: "unit", unit: "hour", unitDisplay: "narrow", maximumFractionDigits: 2,
+  }).format((min ?? 0) / 60);
 }
 
 function minToHHMM(m: number | null | undefined): string {
@@ -118,7 +127,42 @@ function minToHHMM(m: number | null | undefined): string {
   return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
+function fmtDate(value: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale === "no" ? "nb-NO" : "en-NO", {
+    year: "numeric", month: "short", day: "numeric",
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function fmtPercent(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale === "no" ? "nb-NO" : "en-NO", {
+    style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1,
+  }).format(value / 100);
+}
+
 export function EconomyDashboard({ getToken, onOpenProject }: Props) {
+  const t = useT();
+  const { locale } = useI18n();
+  const categoryLabels = useMemo<Record<EconomyCategory, string>>(() => ({
+    labor: t("economy.categories.labor"),
+    hotel: t("economy.categories.hotel"),
+    catering: t("economy.categories.catering"),
+    transport: t("economy.categories.transport"),
+    subRentals: t("economy.categories.subRentals"),
+  }), [t]);
+  const timecardStatusLabels = useMemo<Record<EconomyTimecard["status"], string>>(() => ({
+    draft: t("economy.timecards.status.draft"),
+    submitted: t("economy.timecards.status.submitted"),
+    approved: t("economy.timecards.status.approved"),
+    rejected: t("economy.timecards.status.rejected"),
+    flagged: t("economy.timecards.status.flagged"),
+    locked: t("economy.timecards.status.locked"),
+  }), [t]);
+  const reconciliationStatusLabels = useMemo<Record<EasyjobData["status"], string>>(() => ({
+    unlinked: t("economy.recon.unlinked"),
+    pending: t("economy.recon.pending"),
+    matched: t("economy.recon.matched"),
+    mismatch: t("economy.recon.mismatch"),
+  }), [t]);
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -170,14 +214,14 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
 
       const res = await fetch(`${baseUrl}/api/economy`, { headers });
       if (!res.ok) {
-        throw new Error(`Failed to load economy data (Status: ${res.status})`);
+        throw new Error(t("economy.error.loadStatus", { status: res.status }));
       }
       const json = await res.json();
-      if (!json.ok) throw new Error(json.error || "Economy API returned an error");
+      if (!json.ok) throw new Error(json.error || t("economy.error.api"));
       setData(json);
       setError(null);
     } catch (err: any) {
-      setError(err.message || "Failed to load economy data");
+      setError(err.message || t("economy.error.load"));
       if (!isBackground) setData(null);
     } finally {
       if (!isBackground) setLoading(false);
@@ -195,13 +239,13 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
       const baseUrl = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
       
       const res = await fetch(`${baseUrl}/api/economy/export.csv`, { headers });
-      if (!res.ok) throw new Error("Export failed on server");
+      if (!res.ok) throw new Error(t("economy.error.export"));
       
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `economy-export-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      link.download = `economy-export-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -236,7 +280,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
           reference: expenseDraft.reference || undefined,
         })
       });
-      if (!res.ok) throw new Error("Failed to save expense");
+      if (!res.ok) throw new Error(t("economy.error.saveExpense"));
       await fetchData(true);
       setExpenseDraft(null);
     } catch (err: any) {
@@ -272,7 +316,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
         },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error("Failed to save project settings");
+      if (!res.ok) throw new Error(t("economy.error.saveSettings"));
       await fetchData(true);
       setSettingsDraft(null);
     } catch (err: any) {
@@ -295,7 +339,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
         },
         body: JSON.stringify({ decision, reason: reason || "" })
       });
-      if (!res.ok) throw new Error("Failed to process timecard decision");
+      if (!res.ok) throw new Error(t("economy.error.timecardDecision"));
       await fetchData(true);
       setTimecardRejectDraft(null);
     } catch (err: any) {
@@ -318,7 +362,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
         },
         body: JSON.stringify({})
       });
-      if (!res.ok) throw new Error("Failed to lock timecard");
+      if (!res.ok) throw new Error(t("economy.error.lockTimecard"));
       await fetchData(true);
     } catch (err: any) {
       alert(err.message);
@@ -347,7 +391,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
           reason: timecardAdjustDraft.reason
         })
       });
-      if (!res.ok) throw new Error("Failed to adjust timecard");
+      if (!res.ok) throw new Error(t("economy.error.adjustTimecard"));
       await fetchData(true);
       setTimecardAdjustDraft(null);
     } catch (err: any) {
@@ -381,12 +425,12 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
     <div className="eco-container">
       <div className="eco-header">
         <div>
-          <h2 className="eco-title">Economy & Finance</h2>
-          <p className="eco-subtitle">Master ledger, cost tracking, and payroll reconciliation.</p>
+          <h2 className="eco-title">{t("economy.title")}</h2>
+          <p className="eco-subtitle">{t("economy.subtitle")}</p>
         </div>
         <div className="eco-actions">
           <button className="ehs-ghost-btn" onClick={() => fetchData(false)}>
-            <RefreshCw size={16} className={loading ? "spin" : ""} style={{ marginRight: 6 }} /> Refresh
+            <RefreshCw size={16} className={loading ? "spin" : ""} style={{ marginRight: 6 }} /> {t("economy.action.refresh")}
           </button>
           <button className="ehs-primary-btn" onClick={() => {
             if (data?.projects.length) {
@@ -400,10 +444,10 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
                 amountMajor: ""
               });
             } else {
-              alert("No projects available to assign expenses to.");
+              alert(t("economy.error.noProjectsForExpense"));
             }
           }}>
-            <Plus size={16} style={{ marginRight: 6 }} /> Add Expense
+            <Plus size={16} style={{ marginRight: 6 }} /> {t("economy.action.addExpense")}
           </button>
         </div>
       </div>
@@ -415,7 +459,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
             className={`eco-tab ${activeTab === tab ? "is-active" : ""}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab}
+            {t(TAB_LABEL_KEYS[tab])}
             {tab === "Timecards" && data?.timecards.filter(t => t.status === "submitted").length ? (
               <span className="eco-tab-badge">{data.timecards.filter(t => t.status === "submitted").length}</span>
             ) : null}
@@ -425,7 +469,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
 
       {loading && !data ? (
         <div className="eco-loading" style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>
-          Loading financial data from server...
+          {t("economy.loading")}
         </div>
       ) : error ? (
         <div className="eco-error" style={{ padding: 40, textAlign: "center", color: "var(--danger)", fontSize: 14 }}>
@@ -439,49 +483,49 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
               <div className="eco-kpi-grid">
                 <div className="eco-kpi-card">
                   <div className="kpi-header">
-                    <span className="kpi-label">Gross Revenue</span>
+                    <span className="kpi-label">{t("economy.kpi.revenue")}</span>
                     <TrendingUp size={20} color="var(--success)" />
                   </div>
-                  <div className="kpi-value">{fmtMinor(data.totals.revenueMinor)}</div>
-                  <div className="kpi-meta">Across {data.projects.length} active projects</div>
+                  <div className="kpi-value">{fmtMinor(data.totals.revenueMinor, locale)}</div>
+                  <div className="kpi-meta">{t("economy.kpi.revenueMeta", { n: data.projects.length })}</div>
                 </div>
                 <div className="eco-kpi-card">
                   <div className="kpi-header">
-                    <span className="kpi-label">Total Expenses</span>
+                    <span className="kpi-label">{t("economy.kpi.expenses")}</span>
                     <TrendingDown size={20} color="var(--danger)" />
                   </div>
-                  <div className="kpi-value">{fmtMinor(data.totals.expensesMinor)}</div>
-                  <div className="kpi-meta">Direct + Payable Labor</div>
+                  <div className="kpi-value">{fmtMinor(data.totals.expensesMinor, locale)}</div>
+                  <div className="kpi-meta">{t("economy.kpi.expensesMeta")}</div>
                 </div>
                 <div className="eco-kpi-card">
                   <div className="kpi-header">
-                    <span className="kpi-label">Net Profit</span>
+                    <span className="kpi-label">{t("economy.kpi.profit")}</span>
                     <DollarSign size={20} color="var(--primary)" />
                   </div>
                   <div className={`kpi-value ${data.totals.netProfitMinor < 0 ? 'text-danger' : 'text-success'}`}>
-                    {fmtMinor(data.totals.netProfitMinor)}
+                    {fmtMinor(data.totals.netProfitMinor, locale)}
                   </div>
                   <div className="kpi-meta">
                     {data.totals.revenueMinor > 0 
-                      ? `${((data.totals.netProfitMinor / data.totals.revenueMinor) * 100).toFixed(1)}% global margin`
-                      : "0.0% global margin"}
+                      ? t("economy.kpi.margin", { pct: new Intl.NumberFormat(locale === "no" ? "nb-NO" : "en-NO", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format((data.totals.netProfitMinor / data.totals.revenueMinor) * 100) })
+                      : t("economy.kpi.marginZero")}
                   </div>
                 </div>
               </div>
 
               <div className="eco-panel">
                 <div className="panel-header">
-                  <h3>Project Portfolio Breakdown</h3>
+                  <h3>{t("economy.overview.title")}</h3>
                 </div>
                 <div className="eco-table-wrap">
                   <table className="eco-table">
                     <thead>
                       <tr>
-                        <th>Project</th>
-                        <th style={{ textAlign: "right" }}>Revenue</th>
-                        <th style={{ textAlign: "right" }}>Expenses</th>
-                        <th style={{ textAlign: "right" }}>Net Profit</th>
-                        <th style={{ textAlign: "right" }}>Margin</th>
+                        <th>{t("economy.overview.table.project")}</th>
+                        <th style={{ textAlign: "right" }}>{t("economy.overview.table.revenue")}</th>
+                        <th style={{ textAlign: "right" }}>{t("economy.overview.table.expenses")}</th>
+                        <th style={{ textAlign: "right" }}>{t("economy.overview.table.profit")}</th>
+                        <th style={{ textAlign: "right" }}>{t("economy.overview.table.margin")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -490,20 +534,20 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
                           <td>
                             <span className="eco-link" onClick={() => onOpenProject(p.projectId)}>{p.projectName}</span>
                           </td>
-                          <td style={{ textAlign: "right" }}>{fmtMinor(p.revenueMinor)}</td>
-                          <td style={{ textAlign: "right" }}>{fmtMinor(p.totalExpensesMinor)}</td>
+                          <td style={{ textAlign: "right" }}>{fmtMinor(p.revenueMinor, locale)}</td>
+                          <td style={{ textAlign: "right" }}>{fmtMinor(p.totalExpensesMinor, locale)}</td>
                           <td style={{ textAlign: "right" }} className={p.netProfitMinor < 0 ? "text-danger" : "text-success"}>
-                            {fmtMinor(p.netProfitMinor)}
+                            {fmtMinor(p.netProfitMinor, locale)}
                           </td>
                           <td style={{ textAlign: "right" }}>
                             <span className={`eco-tag ${p.netMarginBasisPoints < 0 ? 'is-danger' : p.netMarginBasisPoints > 2000 ? 'is-success' : ''}`}>
-                              {(p.netMarginBasisPoints / 100).toFixed(1)}%
+                              {fmtPercent(p.netMarginBasisPoints / 100, locale)}
                             </span>
                           </td>
                         </tr>
                       ))}
                       {data.projects.length === 0 && (
-                        <tr><td colSpan={5} className="eco-empty">No projects found.</td></tr>
+                        <tr><td colSpan={5} className="eco-empty">{t("economy.overview.empty")}</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -519,27 +563,27 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
                   <div className="panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <h3 className="eco-link" style={{ margin: "0 0 4px 0" }} onClick={() => onOpenProject(p.projectId)}>{p.projectName}</h3>
-                      <div className="eco-muted" style={{ fontSize: 12 }}>Client: {p.client || "None"}</div>
+                      <div className="eco-muted" style={{ fontSize: 12 }}>{t("economy.projects.client", { client: p.client || t("economy.projects.clientNone") })}</div>
                     </div>
                     {p.accessRole === "owner" && (
                       <button className="ehs-ghost-btn" onClick={() => openSettingsModal(p)}>
-                        <Settings size={14} style={{ marginRight: 6 }} /> Settings
+                        <Settings size={14} style={{ marginRight: 6 }} /> {t("economy.projects.settings")}
                       </button>
                     )}
                   </div>
                   <div className="project-card-stats">
                     <div className="pc-stat">
-                      <span>Revenue</span>
-                      <strong>{fmtMinor(p.revenueMinor)}</strong>
+                      <span>{t("economy.projects.revenue")}</span>
+                      <strong>{fmtMinor(p.revenueMinor, locale)}</strong>
                     </div>
                     <div className="pc-stat">
-                      <span>Expenses</span>
-                      <strong>{fmtMinor(p.totalExpensesMinor)}</strong>
+                      <span>{t("economy.projects.expenses")}</span>
+                      <strong>{fmtMinor(p.totalExpensesMinor, locale)}</strong>
                     </div>
                     <div className="pc-stat">
-                      <span>Margin</span>
+                      <span>{t("economy.projects.margin")}</span>
                       <strong className={p.netMarginBasisPoints < 0 ? 'text-danger' : 'text-success'}>
-                        {(p.netMarginBasisPoints / 100).toFixed(1)}%
+                        {fmtPercent(p.netMarginBasisPoints / 100, locale)}
                       </strong>
                     </div>
                   </div>
@@ -552,12 +596,12 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
                       return (
                         <div key={cat.category} className="breakdown-item">
                           <div className="bd-labels">
-                            <span className="bd-name">{cat.category}</span>
+                            <span className="bd-name">{categoryLabels[cat.category]}</span>
                             <div className="bd-values">
-                              <strong>{fmtMinor(cat.actualMinor)}</strong>
+                              <strong>{fmtMinor(cat.actualMinor, locale)}</strong>
                               <span className="bd-divider">/</span>
                               <span className="bd-budget">
-                                {cat.budgetMinor > 0 ? fmtMinor(cat.budgetMinor) : "No budget"}
+                                {cat.budgetMinor > 0 ? fmtMinor(cat.budgetMinor, locale) : t("economy.projects.noBudget")}
                               </span>
                             </div>
                           </div>
@@ -574,7 +618,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
                 </div>
               ))}
               {data.projects.length === 0 && (
-                <div className="eco-empty">No projects found.</div>
+                <div className="eco-empty">{t("economy.overview.empty")}</div>
               )}
             </div>
           )}
@@ -583,79 +627,79 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
             <div className="eco-panel">
               <div className="panel-header" style={{ display: "flex", justifyContent: "space-between" }}>
                 <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  Timecards & Hours Master Queue
+                  {t("economy.timecards.title")}
                 </h3>
               </div>
               <div className="eco-table-wrap">
                 <table className="eco-table">
                   <thead>
                     <tr>
-                      <th>Freelancer</th>
-                      <th>Project</th>
-                      <th>Date</th>
-                      <th>Hours (Net)</th>
-                      <th>Cost</th>
-                      <th>Status</th>
-                      <th>Actions</th>
+                      <th>{t("economy.timecards.table.freelancer")}</th>
+                      <th>{t("economy.timecards.table.project")}</th>
+                      <th>{t("economy.timecards.table.date")}</th>
+                      <th>{t("economy.timecards.table.hours")}</th>
+                      <th>{t("economy.timecards.table.cost")}</th>
+                      <th>{t("economy.timecards.table.status")}</th>
+                      <th>{t("economy.timecards.table.actions")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.timecards.sort((a,b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime()).map(t => {
-                      const costMinor = (t.flatFeeMinor ?? 0) > 0 ? t.flatFeeMinor! : Math.ceil((t.payableMinutes * t.rateMinor) / 60);
+                    {data.timecards.sort((a,b) => new Date(b.workDate).getTime() - new Date(a.workDate).getTime()).map(timecard => {
+                      const costMinor = (timecard.flatFeeMinor ?? 0) > 0 ? timecard.flatFeeMinor! : Math.ceil((timecard.payableMinutes * timecard.rateMinor) / 60);
                       return (
-                        <tr key={t.id}>
+                        <tr key={timecard.id}>
                           <td>
-                            <div style={{ fontWeight: 500 }}>{t.freelancerName}</div>
-                            {t.notes && <div className="eco-muted" style={{ fontSize: 11, maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={t.notes}>{t.notes}</div>}
+                            <div style={{ fontWeight: 500 }}>{timecard.freelancerName}</div>
+                            {timecard.notes && <div className="eco-muted" style={{ fontSize: 11, maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={timecard.notes}>{timecard.notes}</div>}
                           </td>
                           <td>
-                            <span className="eco-link" onClick={() => onOpenProject(t.projectId)}>{t.projectName}</span>
+                            <span className="eco-link" onClick={() => onOpenProject(timecard.projectId)}>{timecard.projectName}</span>
                           </td>
-                          <td>{format(parseISO(t.workDate), "MMM d, yyyy")}</td>
+                          <td>{fmtDate(timecard.workDate, locale)}</td>
                           <td>
-                            <div style={{ fontWeight: 600 }}>{fmtHours(t.payableMinutes)} ({minToHHMM(t.payableMinutes)})</div>
-                            {(t.producerAdjustmentMinutes || 0) !== 0 && (
+                            <div style={{ fontWeight: 600 }}>{fmtHours(timecard.payableMinutes, locale)} ({minToHHMM(timecard.payableMinutes)})</div>
+                            {(timecard.producerAdjustmentMinutes || 0) !== 0 && (
                               <div style={{ fontSize: 11, color: "var(--primary)" }}>
-                                Adj: {t.producerAdjustmentMinutes! > 0 ? '+' : ''}{t.producerAdjustmentMinutes}m
+                                {t("economy.timecards.adj", { adj: `${timecard.producerAdjustmentMinutes! > 0 ? "+" : ""}${timecard.producerAdjustmentMinutes}` })}
                               </div>
                             )}
                           </td>
-                          <td>{fmtMinor(costMinor)}</td>
+                          <td>{fmtMinor(costMinor, locale)}</td>
                           <td>
-                            <span className={`eco-status-pill status-${t.status}`}>{t.status}</span>
-                            {t.flagReason && <div style={{ fontSize: 10, color: "var(--danger)", marginTop: 4 }}>Flag: {t.flagReason}</div>}
+                            <span className={`eco-status-pill status-${timecard.status}`}>{timecardStatusLabels[timecard.status]}</span>
+                            {timecard.flagReason && <div style={{ fontSize: 10, color: "var(--danger)", marginTop: 4 }}>{t("economy.timecards.flag", { reason: timecard.flagReason })}</div>}
                           </td>
                           <td>
-                            {t.accessRole === "owner" && (
+                            {timecard.accessRole === "owner" && (
                               <div className="eco-row-actions">
-                                {t.status === "submitted" && (
+                                {timecard.status === "submitted" && (
                                   <>
-                                    <button className="btn-approve" onClick={() => handleTimecardDecide(t.id, "approve")}><CheckCircle size={14} /> Approve</button>
-                                    <button className="btn-reject" onClick={() => setTimecardRejectDraft({ id: t.id, decision: "reject", reason: "" })}><XCircle size={14} /> Reject</button>
-                                    <button className="btn-flag" onClick={() => setTimecardRejectDraft({ id: t.id, decision: "flag", reason: "" })}><Flag size={14} /> Flag</button>
+                                    <button className="btn-approve" onClick={() => handleTimecardDecide(timecard.id, "approve")}><CheckCircle size={14} /> {t("economy.timecards.action.approve")}</button>
+                                    <button className="btn-reject" onClick={() => setTimecardRejectDraft({ id: timecard.id, decision: "reject", reason: "" })}><XCircle size={14} /> {t("economy.timecards.action.reject")}</button>
+                                    <button className="btn-flag" onClick={() => setTimecardRejectDraft({ id: timecard.id, decision: "flag", reason: "" })}><Flag size={14} /> {t("economy.timecards.action.flag")}</button>
                                   </>
                                 )}
-                                {t.status === "submitted" && (
+                                {timecard.status === "submitted" && (
                                   <button className="btn-adjust" onClick={() => setTimecardAdjustDraft({
-                                    id: t.id,
-                                    breakMinutes: t.producerBreakMinutes ?? t.breakMinutes,
-                                    adjustmentMinutes: t.producerAdjustmentMinutes || 0,
-                                    overtimeMinutes: t.overtimeMinutes,
+                                    id: timecard.id,
+                                    breakMinutes: timecard.producerBreakMinutes ?? timecard.breakMinutes,
+                                    adjustmentMinutes: timecard.producerAdjustmentMinutes || 0,
+                                    overtimeMinutes: timecard.overtimeMinutes,
                                     reason: ""
-                                  })}><Edit2 size={14} /> Adjust</button>
+                                  })}><Edit2 size={14} /> {t("economy.timecards.action.adjust")}</button>
                                 )}
-                                {t.status === "approved" && (
-                                  <button className="btn-lock" onClick={() => handleTimecardLock(t.id)}><Lock size={14} /> Lock</button>
+                                {timecard.status === "approved" && (
+                                  <button className="btn-lock" onClick={() => handleTimecardLock(timecard.id)}><Lock size={14} /> {t("economy.timecards.action.lock")}</button>
                                 )}
                               </div>
                             )}
-                            {t.accessRole !== "owner" && <span className="eco-muted">Read only</span>}
+                            {timecard.accessRole !== "owner" && <span className="eco-muted">{t("economy.timecards.readonly")}</span>}
                           </td>
                         </tr>
                       )
                     })}
                     {data.timecards.length === 0 && (
-                      <tr><td colSpan={7} className="eco-empty">No timecards found.</td></tr>
+                      <tr><td colSpan={7} className="eco-empty">{t("economy.timecards.empty")}</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -666,38 +710,38 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
           {activeTab === "Expenses" && (
             <div className="eco-panel">
               <div className="panel-header">
-                <h3>Direct Expenses</h3>
+                <h3>{t("economy.expenses.title")}</h3>
               </div>
               <div className="eco-table-wrap">
                 <table className="eco-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Project</th>
-                      <th>Category</th>
-                      <th>Description</th>
-                      <th>Vendor / Ref</th>
-                      <th style={{ textAlign: "right" }}>Amount</th>
+                      <th>{t("economy.expenses.table.date")}</th>
+                      <th>{t("economy.expenses.table.project")}</th>
+                      <th>{t("economy.expenses.table.category")}</th>
+                      <th>{t("economy.expenses.table.description")}</th>
+                      <th>{t("economy.expenses.table.vendor")}</th>
+                      <th style={{ textAlign: "right" }}>{t("economy.expenses.table.amount")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.expenses.sort((a,b) => new Date(b.incurredOn).getTime() - new Date(a.incurredOn).getTime()).map(e => (
                       <tr key={e.id}>
-                        <td>{format(parseISO(e.incurredOn), "MMM d, yyyy")}</td>
+                        <td>{fmtDate(e.incurredOn, locale)}</td>
                         <td>
                           <span className="eco-link" onClick={() => onOpenProject(e.projectId)}>{e.projectName}</span>
                         </td>
-                        <td><span className="eco-tag">{e.category}</span></td>
+                        <td><span className="eco-tag">{categoryLabels[e.category]}</span></td>
                         <td>{e.description}</td>
                         <td>
                           <div style={{ fontSize: 12, fontWeight: 500 }}>{e.vendor || "—"}</div>
                           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{e.reference || "—"}</div>
                         </td>
-                        <td style={{ textAlign: "right", fontWeight: 500 }}>{fmtMinor(e.amountMinor)}</td>
+                        <td style={{ textAlign: "right", fontWeight: 500 }}>{fmtMinor(e.amountMinor, locale)}</td>
                       </tr>
                     ))}
                     {data.expenses.length === 0 && (
-                      <tr><td colSpan={6} className="eco-empty">No expenses recorded.</td></tr>
+                      <tr><td colSpan={6} className="eco-empty">{t("economy.expenses.empty")}</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -708,21 +752,21 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
           {activeTab === "Reconciliation" && (
             <div className="eco-panel">
               <div className="panel-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ margin: 0 }}>Easyjob Reconciliation</h3>
+                <h3 style={{ margin: 0 }}>{t("economy.recon.title")}</h3>
                 <button className="ehs-ghost-btn" style={{ padding: "4px 12px", fontSize: 12, fontWeight: 600 }} onClick={handleExportCsv}>
-                  <Download size={14} style={{ marginRight: 6 }} /> Export Master CSV
+                  <Download size={14} style={{ marginRight: 6 }} /> {t("economy.recon.export")}
                 </button>
               </div>
               <div className="eco-table-wrap">
                 <table className="eco-table">
                   <thead>
                     <tr>
-                      <th>Project</th>
-                      <th>Easyjob Number</th>
-                      <th style={{ textAlign: "right" }}>Contract Revenue</th>
-                      <th style={{ textAlign: "right" }}>Recorded Revenue</th>
-                      <th style={{ textAlign: "right" }}>Difference</th>
-                      <th>Status</th>
+                      <th>{t("economy.recon.table.project")}</th>
+                      <th>{t("economy.recon.table.easyjobId")}</th>
+                      <th style={{ textAlign: "right" }}>{t("economy.recon.table.internalRev")}</th>
+                      <th style={{ textAlign: "right" }}>{t("economy.recon.table.easyjobRev")}</th>
+                      <th style={{ textAlign: "right" }}>{t("economy.recon.table.difference")}</th>
+                      <th>{t("economy.recon.table.status")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -730,18 +774,18 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
                       <tr key={p.projectId}>
                         <td><span className="eco-link" onClick={() => onOpenProject(p.projectId)}>{p.projectName}</span></td>
                         <td style={{ fontFamily: "monospace" }}>{p.easyjob.number || "—"}</td>
-                        <td style={{ textAlign: "right", color: "var(--text-muted)" }}>{fmtMinor(p.revenueMinor)}</td>
-                        <td style={{ textAlign: "right", fontWeight: 500 }}>{fmtMinor(p.easyjob.recordedRevenueMinor)}</td>
+                        <td style={{ textAlign: "right", color: "var(--text-muted)" }}>{fmtMinor(p.revenueMinor, locale)}</td>
+                        <td style={{ textAlign: "right", fontWeight: 500 }}>{fmtMinor(p.easyjob.recordedRevenueMinor, locale)}</td>
                         <td style={{ textAlign: "right", color: (p.easyjob.differenceMinor || 0) < 0 ? "var(--danger)" : (p.easyjob.differenceMinor || 0) > 0 ? "var(--success)" : "inherit" }}>
-                          {(p.easyjob.differenceMinor || 0) > 0 ? "+" : ""}{fmtMinor(p.easyjob.differenceMinor)}
+                          {(p.easyjob.differenceMinor || 0) > 0 ? "+" : ""}{fmtMinor(p.easyjob.differenceMinor, locale)}
                         </td>
                         <td>
-                          <span className={`eco-status-pill status-${p.easyjob.status}`}>{p.easyjob.status}</span>
+                          <span className={`eco-status-pill status-${p.easyjob.status}`}>{reconciliationStatusLabels[p.easyjob.status]}</span>
                         </td>
                       </tr>
                     ))}
                     {data.projects.length === 0 && (
-                      <tr><td colSpan={6} className="eco-empty">No reconciliation data available.</td></tr>
+                      <tr><td colSpan={6} className="eco-empty">{t("economy.recon.empty")}</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -757,52 +801,52 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
         <div className="ehs-modal-backdrop" onClick={() => !savingSettings && setSettingsDraft(null)}>
           <div className="ehs-modal" style={{ maxWidth: 500, width: "100%", minWidth: "min(100vw - 32px, 320px)" }} onClick={e => e.stopPropagation()}>
             <div className="ehs-modal-header">
-              <h3>Project Settings: {settingsDraft.projectName}</h3>
-              <button className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setSettingsDraft(null)}><XCircle size={16} /></button>
+              <h3>{t("economy.modal.settings.title", { project: settingsDraft.projectName })}</h3>
+              <button aria-label={t("common.close")} className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setSettingsDraft(null)}><XCircle size={16} /></button>
             </div>
             <form onSubmit={handleSaveSettings}>
               <div className="ehs-modal-body">
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Contract Revenue (NOK)</label>
+                    <label>{t("economy.modal.settings.contractRevenue")}</label>
                     <input type="number" required min="0" step="0.01" className="ehs-input" value={settingsDraft.contractRevenueMajor} onChange={e => setSettingsDraft({...settingsDraft, contractRevenueMajor: e.target.value})} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Easyjob Revenue (NOK)</label>
+                    <label>{t("economy.modal.settings.easyjobRevenue")}</label>
                     <input type="number" min="0" step="0.01" className="ehs-input" value={settingsDraft.easyjobRevenueMajor} onChange={e => setSettingsDraft({...settingsDraft, easyjobRevenueMajor: e.target.value})} />
                   </div>
                 </div>
 
                 <hr style={{ margin: "16px 0", border: "none", borderTop: "1px solid var(--border-color)" }} />
-                <h4 style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-main)" }}>Category Budgets (NOK)</h4>
+                <h4 style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-main)" }}>{t("economy.modal.settings.budgets")}</h4>
                 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Labor</label>
+                    <label>{categoryLabels.labor}</label>
                     <input type="number" min="0" step="0.01" className="ehs-input" value={settingsDraft.laborBudgetMajor} onChange={e => setSettingsDraft({...settingsDraft, laborBudgetMajor: e.target.value})} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Hotel</label>
+                    <label>{categoryLabels.hotel}</label>
                     <input type="number" min="0" step="0.01" className="ehs-input" value={settingsDraft.hotelBudgetMajor} onChange={e => setSettingsDraft({...settingsDraft, hotelBudgetMajor: e.target.value})} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Catering</label>
+                    <label>{categoryLabels.catering}</label>
                     <input type="number" min="0" step="0.01" className="ehs-input" value={settingsDraft.cateringBudgetMajor} onChange={e => setSettingsDraft({...settingsDraft, cateringBudgetMajor: e.target.value})} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Transport</label>
+                    <label>{categoryLabels.transport}</label>
                     <input type="number" min="0" step="0.01" className="ehs-input" value={settingsDraft.transportBudgetMajor} onChange={e => setSettingsDraft({...settingsDraft, transportBudgetMajor: e.target.value})} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Sub-Rentals</label>
+                    <label>{categoryLabels.subRentals}</label>
                     <input type="number" min="0" step="0.01" className="ehs-input" value={settingsDraft.subRentalsBudgetMajor} onChange={e => setSettingsDraft({...settingsDraft, subRentalsBudgetMajor: e.target.value})} />
                   </div>
                 </div>
               </div>
               <div className="ehs-modal-footer">
-                <button type="button" className="ehs-ghost-btn" onClick={() => setSettingsDraft(null)}>Cancel</button>
+                <button type="button" className="ehs-ghost-btn" onClick={() => setSettingsDraft(null)}>{t("common.cancel")}</button>
                 <button type="submit" className="ehs-primary-btn" disabled={savingSettings}>
-                  {savingSettings ? "Saving..." : "Save Settings"}
+                  {savingSettings ? t("common.saving") : t("economy.modal.settings.save")}
                 </button>
               </div>
             </form>
@@ -815,13 +859,13 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
         <div className="ehs-modal-backdrop" onClick={() => !savingExpense && setExpenseDraft(null)}>
           <div className="ehs-modal" style={{ width: "100%", minWidth: "min(100vw - 32px, 320px)" }} onClick={e => e.stopPropagation()}>
             <div className="ehs-modal-header">
-              <h3>Add Direct Expense</h3>
-              <button className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setExpenseDraft(null)}><XCircle size={16} /></button>
+              <h3>{t("economy.modal.expense.title")}</h3>
+              <button aria-label={t("common.close")} className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setExpenseDraft(null)}><XCircle size={16} /></button>
             </div>
             <form onSubmit={handleSaveExpense}>
               <div className="ehs-modal-body">
                 <div className="ehs-form-group">
-                  <label>Project</label>
+                  <label>{t("economy.modal.expense.project")}</label>
                   <select 
                     required
                     className="ehs-input" 
@@ -835,44 +879,44 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Category</label>
+                    <label>{t("economy.modal.expense.category")}</label>
                     <select 
                       required 
                       className="ehs-input" 
                       value={expenseDraft.category} 
                       onChange={e => setExpenseDraft({...expenseDraft, category: e.target.value as EconomyCategory})}
                     >
-                      {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      {CATEGORIES.map(c => <option key={c} value={c}>{categoryLabels[c]}</option>)}
                     </select>
                   </div>
                   <div className="ehs-form-group">
-                    <label>Date</label>
+                    <label>{t("economy.modal.expense.date")}</label>
                     <input type="date" required className="ehs-input" value={expenseDraft.date} onChange={e => setExpenseDraft({...expenseDraft, date: e.target.value})} />
                   </div>
                 </div>
                 <div className="ehs-form-group">
-                  <label>Amount (NOK)</label>
+                  <label>{t("economy.modal.expense.amount")}</label>
                   <input type="number" required min="0" step="0.01" className="ehs-input" value={expenseDraft.amountMajor} onChange={e => setExpenseDraft({...expenseDraft, amountMajor: e.target.value})} placeholder="0.00" />
                 </div>
                 <div className="ehs-form-group">
-                  <label>Description</label>
-                  <input required className="ehs-input" value={expenseDraft.description} onChange={e => setExpenseDraft({...expenseDraft, description: e.target.value})} placeholder="e.g. Hotel for local crew" />
+                  <label>{t("economy.modal.expense.description")}</label>
+                  <input required className="ehs-input" value={expenseDraft.description} onChange={e => setExpenseDraft({...expenseDraft, description: e.target.value})} placeholder={t("economy.modal.expense.descriptionPlaceholder")} />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Vendor (Optional)</label>
-                    <input className="ehs-input" value={expenseDraft.vendor} onChange={e => setExpenseDraft({...expenseDraft, vendor: e.target.value})} placeholder="e.g. Scandic" />
+                    <label>{t("economy.modal.expense.vendor")}</label>
+                    <input className="ehs-input" value={expenseDraft.vendor} onChange={e => setExpenseDraft({...expenseDraft, vendor: e.target.value})} placeholder={t("economy.modal.expense.vendorPlaceholder")} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Reference (Optional)</label>
-                    <input className="ehs-input" value={expenseDraft.reference} onChange={e => setExpenseDraft({...expenseDraft, reference: e.target.value})} placeholder="e.g. Inv 1042" />
+                    <label>{t("economy.modal.expense.reference")}</label>
+                    <input className="ehs-input" value={expenseDraft.reference} onChange={e => setExpenseDraft({...expenseDraft, reference: e.target.value})} placeholder={t("economy.modal.expense.referencePlaceholder")} />
                   </div>
                 </div>
               </div>
               <div className="ehs-modal-footer">
-                <button type="button" className="ehs-ghost-btn" onClick={() => setExpenseDraft(null)}>Cancel</button>
+                <button type="button" className="ehs-ghost-btn" onClick={() => setExpenseDraft(null)}>{t("common.cancel")}</button>
                 <button type="submit" className="ehs-primary-btn" disabled={savingExpense}>
-                  {savingExpense ? "Saving..." : "Save Expense"}
+                  {savingExpense ? t("common.saving") : t("economy.modal.expense.save")}
                 </button>
               </div>
             </form>
@@ -885,32 +929,32 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
         <div className="ehs-modal-backdrop" onClick={() => !savingTimecard && setTimecardAdjustDraft(null)}>
           <div className="ehs-modal" style={{ maxWidth: 400, width: "100%", minWidth: "min(100vw - 32px, 320px)" }} onClick={e => e.stopPropagation()}>
             <div className="ehs-modal-header">
-              <h3>Adjust Timecard</h3>
-              <button className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setTimecardAdjustDraft(null)}><XCircle size={16} /></button>
+              <h3>{t("economy.modal.adjust.title")}</h3>
+              <button aria-label={t("common.close")} className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setTimecardAdjustDraft(null)}><XCircle size={16} /></button>
             </div>
             <form onSubmit={handleSaveTimecardAdjust}>
               <div className="ehs-modal-body">
                 <div className="ehs-form-group">
-                  <label>Break Minutes</label>
+                  <label>{t("economy.modal.adjust.break")}</label>
                   <input type="number" required min="0" className="ehs-input" value={timecardAdjustDraft.breakMinutes} onChange={e => setTimecardAdjustDraft({...timecardAdjustDraft, breakMinutes: parseInt(e.target.value) || 0})} />
                 </div>
                 <div className="ehs-form-group">
-                  <label>Adjustment Minutes (+/-)</label>
+                  <label>{t("economy.modal.adjust.adjustment")}</label>
                   <input type="number" required className="ehs-input" value={timecardAdjustDraft.adjustmentMinutes} onChange={e => setTimecardAdjustDraft({...timecardAdjustDraft, adjustmentMinutes: parseInt(e.target.value) || 0})} />
                 </div>
                 <div className="ehs-form-group">
-                  <label>Overtime Minutes</label>
+                  <label>{t("economy.modal.adjust.overtime")}</label>
                   <input type="number" required min="0" className="ehs-input" value={timecardAdjustDraft.overtimeMinutes} onChange={e => setTimecardAdjustDraft({...timecardAdjustDraft, overtimeMinutes: parseInt(e.target.value) || 0})} />
                 </div>
                 <div className="ehs-form-group">
-                  <label>Reason (Required for adjustment)</label>
-                  <input required className="ehs-input" value={timecardAdjustDraft.reason} onChange={e => setTimecardAdjustDraft({...timecardAdjustDraft, reason: e.target.value})} placeholder="e.g. Forgot to clock out" />
+                  <label>{t("economy.modal.adjust.reason")}</label>
+                  <input required className="ehs-input" value={timecardAdjustDraft.reason} onChange={e => setTimecardAdjustDraft({...timecardAdjustDraft, reason: e.target.value})} placeholder={t("economy.modal.adjust.reasonPlaceholder")} />
                 </div>
               </div>
               <div className="ehs-modal-footer">
-                <button type="button" className="ehs-ghost-btn" onClick={() => setTimecardAdjustDraft(null)}>Cancel</button>
+                <button type="button" className="ehs-ghost-btn" onClick={() => setTimecardAdjustDraft(null)}>{t("common.cancel")}</button>
                 <button type="submit" className="ehs-primary-btn" disabled={savingTimecard}>
-                  {savingTimecard ? "Saving..." : "Save Adjustments"}
+                  {savingTimecard ? t("common.saving") : t("economy.modal.adjust.save")}
                 </button>
               </div>
             </form>
@@ -923,20 +967,20 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
         <div className="ehs-modal-backdrop" onClick={() => !savingTimecard && setTimecardRejectDraft(null)}>
           <div className="ehs-modal" style={{ maxWidth: 400, width: "100%", minWidth: "min(100vw - 32px, 320px)" }} onClick={e => e.stopPropagation()}>
             <div className="ehs-modal-header">
-              <h3>{timecardRejectDraft.decision === 'flag' ? 'Flag' : 'Reject'} Timecard</h3>
-              <button className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setTimecardRejectDraft(null)}><XCircle size={16} /></button>
+              <h3>{timecardRejectDraft.decision === "flag" ? t("economy.modal.timecard.flag") : t("economy.modal.timecard.reject")}</h3>
+              <button aria-label={t("common.close")} className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setTimecardRejectDraft(null)}><XCircle size={16} /></button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleTimecardDecide(timecardRejectDraft.id, timecardRejectDraft.decision, timecardRejectDraft.reason); }}>
               <div className="ehs-modal-body">
                 <div className="ehs-form-group">
-                  <label>Reason (Visible to freelancer)</label>
-                  <textarea required className="ehs-input" rows={3} value={timecardRejectDraft.reason} onChange={e => setTimecardRejectDraft({...timecardRejectDraft, reason: e.target.value})} placeholder="Please explain why..." />
+                  <label>{t("economy.modal.timecard.reason")}</label>
+                  <textarea required className="ehs-input" rows={3} value={timecardRejectDraft.reason} onChange={e => setTimecardRejectDraft({...timecardRejectDraft, reason: e.target.value})} placeholder={t("economy.modal.timecard.reasonPlaceholder")} />
                 </div>
               </div>
               <div className="ehs-modal-footer">
-                <button type="button" className="ehs-ghost-btn" onClick={() => setTimecardRejectDraft(null)}>Cancel</button>
+                <button type="button" className="ehs-ghost-btn" onClick={() => setTimecardRejectDraft(null)}>{t("common.cancel")}</button>
                 <button type="submit" className="ehs-primary-btn" disabled={savingTimecard}>
-                  {savingTimecard ? "Submitting..." : `Submit ${timecardRejectDraft.decision}`}
+                  {savingTimecard ? t("economy.modal.timecard.submitting") : t("economy.modal.timecard.submit", { action: timecardRejectDraft.decision === "flag" ? t("economy.timecards.action.flag") : t("economy.timecards.action.reject") })}
                 </button>
               </div>
             </form>

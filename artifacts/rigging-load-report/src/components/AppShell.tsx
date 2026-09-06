@@ -153,7 +153,7 @@ function buildNavGroups(t: Translator): NavGroup[] {
         { id: "riggPlan", label: t("shell.nav.riggPlan"), icon: LayoutGrid },
         { id: "inspection", label: t("shell.nav.inspection"), icon: ClipboardCheck },
         { id: "tasks", label: t("shell.nav.tasks"), icon: CheckSquare },
-        { id: "chat", label: t("shell.nav.chat") || "Chat", icon: MessageSquare },
+        { id: "chat", label: t("shell.nav.chat"), icon: MessageSquare },
       ],
     },
     {
@@ -250,7 +250,7 @@ export function AppShell({
   onResetProject,
   deleteProjectTrigger,
   readOnly = false,
-  readOnlyLabel = "View-only project",
+  readOnlyLabel,
   children,
 }: AppShellProps) {
   const t = useT();
@@ -506,7 +506,7 @@ export function AppShell({
                   className="ehs-shell-menu-item"
                   onClick={() => setFeedbackOpen(!feedbackOpen)}
                 >
-                  <MessageSquare size={12} /> Feedback
+                  <MessageSquare size={12} /> {t("feedback.menuLabel")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="ehs-shell-menu-item is-danger"
@@ -546,10 +546,10 @@ export function AppShell({
               type="button"
               className="ehs-shell-home-button"
               onClick={onHome}
-              title="Return to Home Dashboard"
+              title={t("shell.homeTitle")}
             >
               <Home size={14} />
-              <span>Home</span>
+              <span>{t("shell.home")}</span>
             </button>
           ) : null}
           <div className="ehs-shell-crumbs">
@@ -649,15 +649,15 @@ export function AppShell({
                 <button
                   type="button"
                   className="ehs-mobile-utility ehs-mobile-only-utility ehs-shell-icon-btn h-8 min-w-[32px] px-2 rounded-md border flex items-center justify-center text-xs font-semibold transition-colors bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 dark:bg-slate-800/80 dark:hover:bg-slate-700 dark:border-slate-700/60 dark:text-slate-200"
-                  aria-label="Notifications"
-                  title="Notifications"
+                  aria-label={t("shell.notifications")}
+                  title={t("shell.notifications")}
                 >
                   <Bell size={14} />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="z-[60] bg-white dark:bg-slate-900">
                 <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-                  No new notifications
+                  {t("shell.notifications.empty")}
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -751,7 +751,7 @@ export function AppShell({
         <div className="ehs-shell-content">
           {readOnly ? (
             <div className="ehs-shell-readonly-banner" role="status">
-              {readOnlyLabel}
+              {readOnlyLabel ?? t("shell.readOnly")}
             </div>
           ) : null}
           <div

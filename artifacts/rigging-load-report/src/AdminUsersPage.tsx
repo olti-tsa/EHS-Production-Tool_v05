@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@clerk/react";
+import { useT } from "./lib/i18n/I18nContext";
 
 type Result = {
   ok: boolean;
@@ -18,6 +19,7 @@ const API_BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
 export default function AdminUsersPage() {
   const { getToken } = useAuth();
+  const t = useT();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState<null | "promote" | "demote" | "delete">(null);
   const [result, setResult] = useState<Result | null>(null);
@@ -43,7 +45,7 @@ export default function AdminUsersPage() {
       });
       const json = (await r.json().catch(() => ({}))) as Result;
       if (!r.ok) {
-        setError(json.error || `HTTP ${r.status}`);
+        setError(json.error || t("admin.users.httpError", { status: r.status }));
       } else {
         setResult(json);
       }
@@ -77,22 +79,21 @@ export default function AdminUsersPage() {
           padding: 24,
         }}
       >
-        <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Admin · Users</h1>
+        <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>{t("admin.users.title")}</h1>
         <p style={{ margin: "0 0 20px", opacity: 0.7, fontSize: 14 }}>
-          Restricted to <code>@ehs.no</code> staff. Use this to fix users who
-          got tagged as the wrong type, or to remove a user so they can
-          register fresh.
+          {t("admin.users.descriptionBefore")} <code>@ehs.no</code>{" "}
+          {t("admin.users.descriptionAfter")}
         </p>
 
         <label style={{ display: "block", marginBottom: 16 }}>
           <span style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
-            User email
+            {t("admin.users.email")}
           </span>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="someone@ehs.no"
+             placeholder={t("admin.users.emailPlaceholder")}
             style={{
               width: "100%",
               padding: "10px 12px",
@@ -118,7 +119,7 @@ export default function AdminUsersPage() {
             }
             style={btn("#f88000")}
           >
-            {busy === "promote" ? "Working…" : "Switch to Employee"}
+            {busy === "promote" ? t("admin.users.working") : t("admin.users.employee")}
           </button>
           <button
             disabled={disabled}
@@ -131,14 +132,14 @@ export default function AdminUsersPage() {
             }
             style={btn("#444")}
           >
-            {busy === "demote" ? "Working…" : "Switch to Freelancer"}
+            {busy === "demote" ? t("admin.users.working") : t("admin.users.freelancer")}
           </button>
           <button
             disabled={disabled}
             onClick={() => {
               if (
                 !confirm(
-                  `Permanently delete the Clerk account for ${trimmed}? They will be able to register again with the same email.`,
+                  t("admin.users.deleteConfirm", { email: trimmed }),
                 )
               )
                 return;
@@ -146,7 +147,7 @@ export default function AdminUsersPage() {
             }}
             style={btn("#c0392b")}
           >
-            {busy === "delete" ? "Working…" : "Delete user"}
+            {busy === "delete" ? t("admin.users.working") : t("admin.users.delete")}
           </button>
         </div>
 

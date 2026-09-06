@@ -37,6 +37,13 @@ export function ProjectChat({ projectId }: Props) {
   const isNearBottomRef = useRef(true);
 
   const t = useT();
+  const chatError = error
+    ? t(
+        error === "sendFailed"
+          ? "chat.error.send"
+          : "chat.error.load",
+      )
+    : null;
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
@@ -99,7 +106,7 @@ export function ProjectChat({ projectId }: Props) {
       await inviteMember(inviteEmail.trim(), inviteRole);
       setInviteEmail("");
     } catch (err) {
-      setInviteError(err instanceof Error ? err.message : "Failed to invite member");
+      setInviteError(t("chat.error.invite"));
     } finally {
       setIsInviting(false);
     }
@@ -109,8 +116,8 @@ export function ProjectChat({ projectId }: Props) {
     return (
       <div className="chat-empty-state">
         <MessageSquare size={32} />
-        <h3>No Project Active</h3>
-        <p>Please save the project first before using team chat.</p>
+        <h3>{t("chat.noProject")}</h3>
+        <p>{t("chat.saveFirst")}</p>
       </div>
     );
   }
@@ -125,12 +132,13 @@ export function ProjectChat({ projectId }: Props) {
         <div className="chat-header">
           <div className="chat-header-title">
             <MessageSquare size={16} />
-            {t("shell.nav.chat") || "Discussion"}
+            {t("shell.nav.chat")}
           </div>
           <button 
             className={`btn-icon ${showMembers ? "is-active" : ""}`}
             onClick={() => setShowMembers(!showMembers)}
-            title="Team members"
+            title={t("chat.teamMembers")}
+            aria-label={t("chat.teamMembers")}
           >
             <Users size={16} />
           </button>
@@ -138,10 +146,10 @@ export function ProjectChat({ projectId }: Props) {
 
         <div className="chat-messages-area" ref={scrollRef} onScroll={handleScroll}>
           {isInitializing && messages.length === 0 ? (
-            <div className="chat-loading">Loading messages...</div>
+            <div className="chat-loading">{t("chat.loading")}</div>
           ) : messages.length === 0 ? (
             <div className="chat-empty-messages">
-              No messages yet. Start the conversation!
+              {t("chat.empty")}
             </div>
           ) : (
             <div className="chat-messages-list">
@@ -156,7 +164,7 @@ export function ProjectChat({ projectId }: Props) {
                         <div className="chat-avatar">
                           {(msg.authorName || msg.authorEmail || "?").charAt(0).toUpperCase()}
                         </div>
-                        <div className="chat-author-name">{msg.authorName || msg.authorEmail || "Unknown"}</div>
+                        <div className="chat-author-name">{msg.authorName || msg.authorEmail || t("common.unknown")}</div>
                         <div className="chat-timestamp">{format(date, "HH:mm")}</div>
                       </div>
                     )}
@@ -177,7 +185,7 @@ export function ProjectChat({ projectId }: Props) {
 
           {showNewMessageAffordance && (
             <button className="chat-new-message-pill" onClick={scrollToBottom}>
-              New messages ↓
+              {t("chat.newMessages")} ↓
             </button>
           )}
         </div>
@@ -185,8 +193,8 @@ export function ProjectChat({ projectId }: Props) {
         {error && (
           <div className="chat-error-bar">
             <AlertCircle size={14} />
-            <span>{error}</span>
-            <button type="button" className="btn-icon" onClick={() => void retry()} title="Retry">
+             <span>{chatError}</span>
+            <button type="button" className="btn-icon" onClick={() => void retry()} title={t("common.retry")} aria-label={t("common.retry")}>
               <RefreshCw size={13} />
             </button>
           </div>
@@ -196,15 +204,15 @@ export function ProjectChat({ projectId }: Props) {
           {!canSend ? (
             <div className="chat-composer-viewer-msg">
               {isViewer
-                ? "You have view-only access to this project discussion."
-                : "Loading your project access…"}
+                ? t("chat.viewOnly")
+                : t("chat.loadingAccess")}
             </div>
           ) : (
             <>
               <textarea
                 ref={inputRef}
                 className="chat-textarea"
-                placeholder="Type a message... (Shift+Enter for newline)"
+                placeholder={t("chat.messagePlaceholder")}
                 value={composerText}
                 onChange={e => setComposerText(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -218,7 +226,8 @@ export function ProjectChat({ projectId }: Props) {
                 className="chat-send-btn" 
                 onClick={handleSend}
                 disabled={!composerText.trim() || isSending}
-                title="Send message"
+                title={t("chat.send")}
+                aria-label={t("chat.send")}
               >
                 <Send size={16} />
               </button>
@@ -230,8 +239,8 @@ export function ProjectChat({ projectId }: Props) {
       {showMembers && (
         <div className="chat-sidebar">
           <div className="chat-sidebar-header">
-            <h3>Team Members</h3>
-            <button className="btn-icon" onClick={() => setShowMembers(false)}>
+            <h3>{t("chat.teamMembers")}</h3>
+            <button className="btn-icon" onClick={() => setShowMembers(false)} aria-label={t("chat.closeMembers")}>
               <X size={16} />
             </button>
           </div>
@@ -243,8 +252,8 @@ export function ProjectChat({ projectId }: Props) {
                   {(member.name || member.email || "?").charAt(0).toUpperCase()}
                 </div>
                 <div className="chat-member-info">
-                  <div className="chat-member-name">{member.name || member.email || "Unknown user"}</div>
-                  <div className="chat-member-role">{member.role}</div>
+                  <div className="chat-member-name">{member.name || member.email || t("chat.unknownUser")}</div>
+                  <div className="chat-member-role">{t(`chat.role.${member.role}` as Parameters<typeof t>[0])}</div>
                 </div>
                 {isOwner && member.role !== "owner" && (
                   <button 
@@ -255,11 +264,12 @@ export function ProjectChat({ projectId }: Props) {
                         await removeMember(member.userId);
                       } catch (err) {
                         setMemberActionError(
-                          err instanceof Error ? err.message : "Failed to remove member",
+                          t("chat.error.remove"),
                         );
                       }
                     }}
-                    title="Remove member"
+                    title={t("chat.removeMember")}
+                    aria-label={t("chat.removeMember")}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -273,11 +283,12 @@ export function ProjectChat({ projectId }: Props) {
 
           {isOwner && (
             <div className="chat-invite-section">
-              <h4>Invite Colleague</h4>
+              <h4>{t("chat.inviteColleague")}</h4>
               <form onSubmit={handleInvite} className="chat-invite-form">
                 <input
                   type="email"
-                  placeholder="Email address"
+                  placeholder={t("chat.emailPlaceholder")}
+                  aria-label={t("chat.emailPlaceholder")}
                   className="chat-invite-input"
                   value={inviteEmail}
                   onChange={e => setInviteEmail(e.target.value)}
@@ -290,10 +301,10 @@ export function ProjectChat({ projectId }: Props) {
                     onChange={e => setInviteRole(e.target.value as ChatRole)}
                     disabled={isInviting}
                   >
-                    <option value="editor">Editor</option>
-                    <option value="viewer">Viewer</option>
+                    <option value="editor">{t("chat.role.editor")}</option>
+                    <option value="viewer">{t("chat.role.viewer")}</option>
                   </select>
-                  <button type="submit" className="btn btn-primary btn-sm" disabled={!inviteEmail.trim() || isInviting}>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={!inviteEmail.trim() || isInviting} aria-label={t("chat.invite")}>
                     {isInviting ? "..." : <UserPlus size={14} />}
                   </button>
                 </div>

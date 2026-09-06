@@ -5,6 +5,7 @@ import {
   buildDayAvailabilityReplacement,
   overlapsLocalDay,
   replaceAvailabilityEntriesInRange,
+  responseError,
 } from "./utils";
 
 describe("availability state range replacement", () => {
@@ -204,5 +205,23 @@ describe("availability state range replacement", () => {
       withoutExistingAvailability.map((entry) => entry.status),
       ["available", "unavailable", "available"],
     );
+  });
+});
+
+describe("availability response errors", () => {
+  it("uses the caller-translated fallback when the response has no error", async () => {
+    const response = new Response(JSON.stringify({}), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+    assert.equal(await responseError(response, "Kunne ikke lagre."), "Kunne ikke lagre.");
+  });
+
+  it("preserves an explicit server error", async () => {
+    const response = new Response(JSON.stringify({ error: "Conflict" }), {
+      status: 409,
+      headers: { "Content-Type": "application/json" },
+    });
+    assert.equal(await responseError(response, "Fallback"), "Conflict");
   });
 });

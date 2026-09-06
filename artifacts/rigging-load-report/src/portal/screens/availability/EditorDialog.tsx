@@ -4,9 +4,9 @@ import { useT } from "../../../lib/i18n/I18nContext";
 import { toast } from "sonner";
 import {
   buildDayAvailabilityReplacement,
-  responseError,
   localTimeOnly,
   localDateTime,
+  responseError,
 } from "./utils";
 import type { CalendarEntry } from "./types";
 
@@ -99,10 +99,12 @@ export function EditorDialog({
         body: JSON.stringify({ rangeStart, rangeEnd, entries: [] })
       });
       if (!res.ok) {
-        toast.error(await responseError(res));
+        toast.error(
+          await responseError(res, t("portal.availability.toast.clearFailed")),
+        );
         return;
       }
-      toast.success(t("portal.availability.toast.cleared") || "Availability cleared");
+      toast.success(t("portal.availability.toast.cleared"));
       onSave();
       onClose();
       return;
@@ -113,10 +115,12 @@ export function EditorDialog({
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) {
-      toast.error(await responseError(res));
+      toast.error(
+        await responseError(res, t("portal.availability.toast.clearFailed")),
+      );
       return;
     }
-    toast.success("Availability cleared");
+    toast.success(t("portal.availability.toast.cleared"));
     onSave();
     onClose();
   };
@@ -159,7 +163,7 @@ export function EditorDialog({
       const weekday = localDate.getDay();
       const untilLocal = localDateTime(until, "23:59");
       if (!untilLocal) {
-        toast.error("Choose a valid recurrence end date.");
+        toast.error(t("portal.availability.editor.invalidRecurrenceEnd"));
         return;
       }
       const untilIso = untilLocal.toISOString();
@@ -226,11 +230,13 @@ export function EditorDialog({
     }
 
     if (!res.ok) {
-      toast.error(await responseError(res));
+      toast.error(
+        await responseError(res, t("portal.availability.toast.updateFailed")),
+      );
       return;
     }
 
-    toast.success("Availability updated successfully");
+    toast.success(t("portal.availability.toast.updated"));
     onSave();
     onClose();
   };
@@ -252,7 +258,7 @@ export function EditorDialog({
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
           {(["available", "unavailable", "tentative"] as const).map(s => (
             <button key={s} onClick={() => setStatus(s)} aria-pressed={status === s} style={{ flex: 1, padding: "8px", textTransform: "capitalize", borderRadius: 8, border: `1px solid ${status === s ? c.accent : c.border}`, background: status === s ? c.cardBgSubtle : "transparent", color: c.text, cursor: "pointer", fontWeight: status === s ? "bold" : "normal" }}>
-              {s === "available" ? t("portal.availability.legend.available") : s === "unavailable" ? t("portal.availability.legend.unavailable") : s}
+              {s === "available" ? t("portal.availability.legend.available") : s === "unavailable" ? t("portal.availability.legend.unavailable") : t("portal.availability.legend.tentative")}
             </button>
           ))}
         </div>
@@ -295,7 +301,10 @@ export function EditorDialog({
                 <option value="weekly">{t("portal.availability.editor.repeatWeekly")}</option>
               </select>
               {recurrence === "weekly" && (
-                <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} style={inputStyle(theme)} />
+                <label style={{ fontSize: 12, color: c.muted }}>
+                  {t("portal.availability.editor.until")}
+                  <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} style={{ ...inputStyle(theme), display: "block", marginTop: 4 }} />
+                </label>
               )}
             </div>
           </div>

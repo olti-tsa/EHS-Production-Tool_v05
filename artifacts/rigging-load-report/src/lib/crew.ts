@@ -47,14 +47,26 @@ export type CrewRequestStatus = (typeof CREW_REQUEST_STATUSES)[number];
  *  "how do we render them". */
 export const CREW_REQUEST_STATUS_META: Record<
   CrewRequestStatus,
-  { label: string; tone: "warn" | "ok" | "muted" | "bad" }
+  {
+    labelKey:
+      | "crew.status.requested"
+      | "crew.status.accepted"
+      | "crew.status.partiallyAccepted"
+      | "crew.status.declined"
+      | "crew.status.noReply"
+      | "crew.status.tooLate";
+    tone: "warn" | "ok" | "muted" | "bad";
+  }
 > = {
-  requested: { label: "Requested", tone: "warn" },
-  accepted: { label: "Accepted", tone: "ok" },
-  partially_accepted: { label: "Partially accepted", tone: "warn" },
-  declined: { label: "Declined", tone: "muted" },
-  "no-reply": { label: "No reply", tone: "bad" },
-  too_late: { label: "Too late", tone: "bad" },
+  requested: { labelKey: "crew.status.requested", tone: "warn" },
+  accepted: { labelKey: "crew.status.accepted", tone: "ok" },
+  partially_accepted: {
+    labelKey: "crew.status.partiallyAccepted",
+    tone: "warn",
+  },
+  declined: { labelKey: "crew.status.declined", tone: "muted" },
+  "no-reply": { labelKey: "crew.status.noReply", tone: "bad" },
+  too_late: { labelKey: "crew.status.tooLate", tone: "bad" },
 };
 
 export type CrewMember = {

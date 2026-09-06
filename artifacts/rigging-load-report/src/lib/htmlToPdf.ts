@@ -26,6 +26,28 @@ export type HtmlToPdfOptions = {
   singlePage?: boolean;
 };
 
+export type HtmlToPdfErrorCode =
+  | "iframe-document-unavailable"
+  | "render-failed";
+
+/** Stable, non-localized export failure. UI callers must map `code` to
+ * translated copy and may log `cause` for diagnostics. */
+export class HtmlToPdfError extends Error {
+  readonly code: HtmlToPdfErrorCode;
+  readonly cause?: unknown;
+
+  constructor(code: HtmlToPdfErrorCode, cause?: unknown) {
+    super(`[html-to-pdf:${code}]`);
+    this.name = "HtmlToPdfError";
+    this.code = code;
+    this.cause = cause;
+  }
+}
+
+export function isHtmlToPdfError(error: unknown): error is HtmlToPdfError {
+  return error instanceof HtmlToPdfError;
+}
+
 /** Render an HTML document string to a multi-page A4 PDF and return it
  *  as a Blob. Use this when you want to attach the PDF to something
  *  (upload it, embed it, etc.) instead of triggering a browser download.
@@ -34,9 +56,14 @@ export async function htmlToPdfBlob(
   html: string,
   options: HtmlToPdfOptions = {},
 ): Promise<Blob> {
-  const pdf = await renderHtmlToJsPdf(html, options);
-  // jsPDF's `output("blob")` returns a Blob synchronously.
-  return pdf.output("blob");
+  try {
+    const pdf = await renderHtmlToJsPdf(html, options);
+    // jsPDF's `output("blob")` returns a Blob synchronously.
+    return pdf.output("blob");
+  } catch (error) {
+    if (isHtmlToPdfError(error)) throw error;
+    throw new HtmlToPdfError("render-failed", error);
+  }
 }
 
 export async function downloadHtmlAsPdf(
@@ -44,8 +71,13 @@ export async function downloadHtmlAsPdf(
   filename: string,
   options: HtmlToPdfOptions = {},
 ): Promise<void> {
-  const pdf = await renderHtmlToJsPdf(html, options);
-  pdf.save(filename);
+  try {
+    const pdf = await renderHtmlToJsPdf(html, options);
+    pdf.save(filename);
+  } catch (error) {
+    if (isHtmlToPdfError(error)) throw error;
+    throw new HtmlToPdfError("render-failed", error);
+  }
 }
 
 async function renderHtmlToJsPdf(
@@ -70,7 +102,7 @@ async function renderHtmlToJsPdf(
 
   try {
     const doc = iframe.contentDocument;
-    if (!doc) throw new Error("Could not access iframe document");
+    if (!doc) throw new HtmlToPdfError("iframe-document-unavailable");
     doc.open();
     doc.write(html);
     doc.close();
@@ -157,13 +189,19 @@ async function renderHtmlToJsPdf(
     }
 
     return pdf;
+  } catch (error) {
+    if (isHtmlToPdfError(error)) throw error;
+    throw new HtmlToPdfError("render-failed", error);
   } finally {
     iframe.remove();
   }
 }
 
 /** Filesystem-safe filename slug. */
-export function pdfFilename(parts: Array<string | undefined | null>): string {
+export function pdfFilename(
+  parts: Array<string | undefined | null>,
+  fallback: string,
+): string {
   const cleaned = parts
     .map((p) => (p ?? "").trim())
     .filter((p) => p.length > 0)
@@ -171,5 +209,5 @@ export function pdfFilename(parts: Array<string | undefined | null>): string {
     .replace(/[\\/:*?"<>|]+/g, "_")
     .replace(/\s+/g, " ")
     .trim();
-  return (cleaned || "Export") + ".pdf";
+  return (cleaned || fallback) + ".pdf";
 }

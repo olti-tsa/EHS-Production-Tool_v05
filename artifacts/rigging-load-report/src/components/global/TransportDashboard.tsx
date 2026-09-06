@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { Truck, Calendar as CalendarIcon, MapPin, Users, Edit2, Plus, AlertCircle, CheckCircle, Clock, Navigation, Play, Check, RotateCcw, X, Save, Building, Maximize, Weight } from "lucide-react";
 import { format, parseISO, isSameDay, startOfDay, addDays, isBefore } from "date-fns";
+import { nb } from "date-fns/locale";
+import { useI18n, useT } from "../../lib/i18n/I18nContext";
 
 export type Vehicle = {
   id: string;
@@ -68,6 +70,8 @@ async function responseError(res: Response, fallback: string): Promise<string> {
 }
 
 export function TransportDashboard({ getToken, onOpenProject }: Props) {
+  const t = useT();
+  const { locale } = useI18n();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -100,9 +104,9 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
         fetch(`${baseUrl}api/portal/freelancers`, { headers }),
       ]);
 
-      if (!transportRes.ok) throw new Error("Failed to load transport data");
-      if (!projectsRes.ok) throw new Error("Failed to load projects");
-      if (!crewRes.ok) throw new Error("Failed to load crew");
+      if (!transportRes.ok) throw new Error(t("transport.error.load"));
+      if (!projectsRes.ok) throw new Error(t("transport.error.projects"));
+      if (!crewRes.ok) throw new Error(t("transport.error.crew"));
 
       const transportData = await transportRes.json();
       const projectsData = await projectsRes.json();
@@ -152,7 +156,7 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
         });
       }
       
-      if (!res.ok) throw new Error(await responseError(res, "Failed to save vehicle"));
+      if (!res.ok) throw new Error(await responseError(res, t("transport.error.saveVehicle")));
       await fetchData();
       setIsVehicleModalOpen(false);
       setEditingVehicle(null);
@@ -200,7 +204,7 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
         });
       }
       
-      if (!res.ok) throw new Error(await responseError(res, "Failed to save run"));
+      if (!res.ok) throw new Error(await responseError(res, t("transport.error.saveRun")));
       await fetchData();
       setIsRunModalOpen(false);
       setEditingRun(null);
@@ -223,7 +227,7 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) throw new Error(t("transport.error.updateStatus"));
       // refresh canonical
       await fetchData();
     } catch (err: any) {
@@ -253,10 +257,10 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)" }}>
-            Transport & Logistics
+            {t("transport.title")}
           </h2>
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>
-            Dispatch dashboard for fleet and cargo movements.
+            {t("transport.subtitle")}
           </p>
         </div>
         <div style={{ display: "flex", gap: 12 }}>
@@ -264,31 +268,31 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
              setEditingVehicle({ vehicleType: "truck", availabilityStatus: "available" });
              setIsVehicleModalOpen(true);
            }}>
-             <Plus size={16} style={{ marginRight: 6 }} /> Add Vehicle
+              <Plus size={16} style={{ marginRight: 6 }} /> {t("transport.action.addVehicle")}
            </button>
            <button className="ehs-primary-btn" onClick={() => {
               setEditingRun({ status: "scheduled", departureAt: toLocalDateTimeInput(new Date()) });
              setIsRunModalOpen(true);
            }}>
-             <Navigation size={16} style={{ marginRight: 6 }} /> Schedule Run
+              <Navigation size={16} style={{ marginRight: 6 }} /> {t("transport.action.scheduleRun")}
            </button>
         </div>
       </div>
       
       {loading ? (
-        <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>Loading transport operations...</div>
+         <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>{t("transport.loading")}</div>
       ) : error ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--danger)", fontSize: 14 }}>{error}</div>
       ) : (
         <div className="transport-grid">
           
           <div className="transport-runs">
-            <h3 className="section-title">Upcoming Runs</h3>
+             <h3 className="section-title">{t("transport.runs.title")}</h3>
             {runDates.length === 0 ? (
               <div className="ehs-empty-state">
                 <div className="ehs-empty-state-icon"><Navigation size={24} /></div>
-                <h3>No scheduled runs</h3>
-                <p>There are no upcoming transport runs.</p>
+                 <h3>{t("transport.runs.empty.title")}</h3>
+                 <p>{t("transport.runs.empty.body")}</p>
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
@@ -298,9 +302,9 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
                   const isPast = d.getTime() < todayStart;
                   const isTomorrow = d.getTime() === addDays(new Date(todayStart), 1).getTime();
                   
-                  let label = format(d, "EEEE, MMMM d, yyyy");
-                  if (isToday) label = "Today";
-                  else if (isTomorrow) label = "Tomorrow";
+                   let label = format(d, "EEEE, MMMM d, yyyy", { locale: locale === "no" ? nb : undefined });
+                   if (isToday) label = t("transport.runs.today");
+                   else if (isTomorrow) label = t("transport.runs.tomorrow");
 
                   return (
                     <div key={dateKey}>
@@ -313,7 +317,8 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
                             key={run.id} 
                             run={run} 
                             onChangeStatus={(status) => handleChangeRunStatus(run.id, status)}
-                            onOpenProject={() => run.projectId && onOpenProject(run.projectId)}
+                             onOpenProject={() => run.projectId && onOpenProject(run.projectId)}
+                             t={t}
                           />
                         ))}
                       </div>
@@ -325,7 +330,7 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
           </div>
 
           <div className="transport-fleet">
-            <h3 className="section-title">Fleet Status</h3>
+             <h3 className="section-title">{t("transport.fleet.title")}</h3>
             <div className="fleet-list">
               {vehicles.map(vehicle => (
                 <div key={vehicle.id} className="fleet-card" onClick={() => {
@@ -337,11 +342,11 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
                       <Truck size={14} color="var(--text-muted)" />
                       <span>{vehicle.name}</span>
                     </div>
-                    <span className={`status-dot ${vehicle.availabilityStatus}`} title={vehicle.availabilityStatus} />
+                     <span className={`status-dot ${vehicle.availabilityStatus}`} title={t(`transport.vehicle.status.${vehicle.availabilityStatus}`)} />
                   </div>
                   <div className="fleet-card-plate">{vehicle.licensePlate}</div>
                   <div className="fleet-card-meta">
-                    {vehicle.vehicleType} {vehicle.capacityKg ? `· ${vehicle.capacityKg}kg` : ""} {vehicle.volumeM3 ? `· ${vehicle.volumeM3}m³` : ""}
+                     {t(`transport.vehicle.type.${vehicle.vehicleType}`)} {vehicle.capacityKg ? `· ${vehicle.capacityKg}kg` : ""} {vehicle.volumeM3 ? `· ${vehicle.volumeM3}m³` : ""}
                   </div>
                   {vehicle.primaryDriverName && (
                     <div className="fleet-card-driver">
@@ -352,7 +357,7 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
               ))}
               {vehicles.length === 0 && (
                 <div style={{ color: "var(--text-muted)", fontSize: 13, textAlign: "center", padding: 20 }}>
-                  No vehicles registered.
+                   {t("transport.fleet.empty")}
                 </div>
               )}
             </div>
@@ -366,39 +371,39 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
         <div className="ehs-modal-backdrop" onClick={() => !vehicleSaving && setIsVehicleModalOpen(false)}>
           <div className="ehs-modal" role="dialog" onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 600, minWidth: "min(100vw - 32px, 320px)" }}>
             <div className="ehs-modal-header">
-              <h3>{editingVehicle.id ? "Edit Vehicle Status" : "Add Vehicle"}</h3>
+               <h3>{editingVehicle.id ? t("transport.vehicle.modal.edit") : t("transport.vehicle.modal.add")}</h3>
               <button className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setIsVehicleModalOpen(false)}>
-                <X size={16} />
+                 <X size={16} aria-label={t("common.close")} />
               </button>
             </div>
             <form onSubmit={handleSaveVehicle}>
               <div className="ehs-modal-body">
                 <div className="ehs-form-group">
-                  <label>Name</label>
-                  <input required className="ehs-input" value={editingVehicle.name || ""} onChange={e => setEditingVehicle({...editingVehicle, name: e.target.value})} placeholder="e.g. Truck 1" disabled={!!editingVehicle.id} />
+                   <label>{t("transport.vehicle.name")}</label>
+                   <input required className="ehs-input" value={editingVehicle.name || ""} onChange={e => setEditingVehicle({...editingVehicle, name: e.target.value})} placeholder={t("transport.vehicle.namePlaceholder")} disabled={!!editingVehicle.id} />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>License Plate</label>
-                    <input required className="ehs-input" value={editingVehicle.licensePlate || ""} onChange={e => setEditingVehicle({...editingVehicle, licensePlate: e.target.value})} placeholder="e.g. AB12345" disabled={!!editingVehicle.id} />
+                   <label>{t("transport.vehicle.licensePlate")}</label>
+                   <input required className="ehs-input" value={editingVehicle.licensePlate || ""} onChange={e => setEditingVehicle({...editingVehicle, licensePlate: e.target.value})} placeholder={t("transport.vehicle.licensePlatePlaceholder")} disabled={!!editingVehicle.id} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Type</label>
+                     <label>{t("transport.vehicle.type")}</label>
                     <select required className="ehs-input" value={editingVehicle.vehicleType || "truck"} onChange={e => setEditingVehicle({...editingVehicle, vehicleType: e.target.value as any})} disabled={!!editingVehicle.id}>
-                      <option value="truck">Truck</option>
-                      <option value="van">Van</option>
-                      <option value="trailer">Trailer</option>
-                      <option value="rental">Rental</option>
+                       <option value="truck">{t("transport.vehicle.type.truck")}</option>
+                       <option value="van">{t("transport.vehicle.type.van")}</option>
+                       <option value="trailer">{t("transport.vehicle.type.trailer")}</option>
+                       <option value="rental">{t("transport.vehicle.type.rental")}</option>
                     </select>
                   </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Capacity (kg)</label>
+                     <label>{t("transport.vehicle.capacity")}</label>
                     <input type="number" className="ehs-input" value={editingVehicle.capacityKg || ""} onChange={e => setEditingVehicle({...editingVehicle, capacityKg: e.target.value ? Number(e.target.value) : null})} disabled={!!editingVehicle.id} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Volume (m³)</label>
+                     <label>{t("transport.vehicle.volume")}</label>
                     <input type="number" className="ehs-input" value={editingVehicle.volumeM3 || ""} onChange={e => setEditingVehicle({...editingVehicle, volumeM3: e.target.value ? Number(e.target.value) : null})} disabled={!!editingVehicle.id} />
                   </div>
                 </div>
@@ -407,33 +412,33 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Primary Driver</label>
+                     <label>{t("transport.vehicle.primaryDriver")}</label>
                     <select className="ehs-input" value={editingVehicle.primaryDriverUserId || ""} onChange={e => setEditingVehicle({...editingVehicle, primaryDriverUserId: e.target.value || null})}>
-                      <option value="">-- None --</option>
+                       <option value="">{t("transport.vehicle.primaryDriver.none")}</option>
                       {crew.map(c => (
                         <option key={c.userId} value={c.userId}>{c.fullName}</option>
                       ))}
                     </select>
                   </div>
                   <div className="ehs-form-group">
-                    <label>Status</label>
+                     <label>{t("transport.vehicle.status")}</label>
                     <select required className="ehs-input" value={editingVehicle.availabilityStatus || "available"} onChange={e => setEditingVehicle({...editingVehicle, availabilityStatus: e.target.value as any})}>
-                      <option value="available">Available</option>
-                      <option value="assigned">Assigned</option>
-                      <option value="maintenance">Maintenance</option>
-                      <option value="unavailable">Unavailable</option>
+                       <option value="available">{t("transport.vehicle.status.available")}</option>
+                       <option value="assigned">{t("transport.vehicle.status.assigned")}</option>
+                       <option value="maintenance">{t("transport.vehicle.status.maintenance")}</option>
+                       <option value="unavailable">{t("transport.vehicle.status.unavailable")}</option>
                     </select>
                   </div>
                 </div>
                 <div className="ehs-form-group">
-                  <label>Notes</label>
+                   <label>{t("transport.vehicle.notes")}</label>
                   <textarea className="ehs-input" style={{ minHeight: 60 }} value={editingVehicle.notes || ""} onChange={e => setEditingVehicle({...editingVehicle, notes: e.target.value || null})} disabled={!!editingVehicle.id} />
                 </div>
               </div>
               <div className="ehs-modal-footer">
-                <button type="button" className="ehs-ghost-btn" onClick={() => setIsVehicleModalOpen(false)}>Cancel</button>
+                 <button type="button" className="ehs-ghost-btn" onClick={() => setIsVehicleModalOpen(false)}>{t("common.cancel")}</button>
                 <button type="submit" className="ehs-primary-btn" disabled={vehicleSaving}>
-                  {vehicleSaving ? "Saving..." : "Save Vehicle"}
+                   {vehicleSaving ? t("common.saving") : t("transport.vehicle.save")}
                 </button>
               </div>
             </form>
@@ -446,53 +451,53 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
         <div className="ehs-modal-backdrop" onClick={() => !runSaving && setIsRunModalOpen(false)}>
           <div className="ehs-modal" role="dialog" onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 600, minWidth: "min(100vw - 32px, 320px)" }}>
             <div className="ehs-modal-header">
-              <h3>Schedule Run</h3>
+               <h3>{t("transport.run.modal.title")}</h3>
               <button className="ehs-ghost-btn" style={{ padding: 4 }} onClick={() => setIsRunModalOpen(false)}>
-                <X size={16} />
+                 <X size={16} aria-label={t("common.close")} />
               </button>
             </div>
             <form onSubmit={handleSaveRun}>
               <div className="ehs-modal-body">
                 <div className="ehs-form-group">
-                  <label>Title / Description</label>
-                  <input required className="ehs-input" value={editingRun.title || ""} onChange={e => setEditingRun({...editingRun, title: e.target.value})} placeholder="e.g. Load out from venue" />
+                   <label>{t("transport.run.title")}</label>
+                   <input required className="ehs-input" value={editingRun.title || ""} onChange={e => setEditingRun({...editingRun, title: e.target.value})} placeholder={t("transport.run.titlePlaceholder")} />
                 </div>
                 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Project</label>
+                   <label>{t("transport.run.project")}</label>
                     <select required className="ehs-input" value={editingRun.projectId || ""} onChange={e => setEditingRun({...editingRun, projectId: e.target.value || null})}>
-                      <option value="">-- Select active project --</option>
+                       <option value="">{t("transport.run.project.none")}</option>
                       {projects.filter((p) => p.status === "active").map(p => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
                   </div>
                   <div className="ehs-form-group">
-                    <label>Status</label>
+                     <label>{t("transport.run.status")}</label>
                     <select required className="ehs-input" value={editingRun.status || "scheduled"} onChange={e => setEditingRun({...editingRun, status: e.target.value as any})}>
-                      <option value="scheduled">Scheduled</option>
-                      <option value="in_transit">In Transit</option>
-                      <option value="delivered">Delivered</option>
-                      <option value="returned">Returned / Done</option>
+                       <option value="scheduled">{t("transport.run.status.scheduled")}</option>
+                       <option value="in_transit">{t("transport.run.status.in_transit")}</option>
+                       <option value="delivered">{t("transport.run.status.delivered")}</option>
+                       <option value="returned">{t("transport.run.status.returned")}</option>
                     </select>
                   </div>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Vehicle</label>
+                     <label>{t("transport.run.vehicle")}</label>
                     <select required className="ehs-input" value={editingRun.vehicleId || ""} onChange={e => setEditingRun({...editingRun, vehicleId: e.target.value || null})}>
-                      <option value="">-- Select vehicle --</option>
+                       <option value="">{t("transport.run.vehicle.none")}</option>
                       {vehicles.map(v => (
                         <option key={v.id} value={v.id}>{v.name} ({v.licensePlate})</option>
                       ))}
                     </select>
                   </div>
                   <div className="ehs-form-group">
-                    <label>Driver</label>
+                     <label>{t("transport.run.driver")}</label>
                     <select className="ehs-input" value={editingRun.driverUserId || ""} onChange={e => setEditingRun({...editingRun, driverUserId: e.target.value || null})}>
-                      <option value="">-- TBA --</option>
+                       <option value="">{t("transport.run.driver.tba")}</option>
                       {crew.map(c => (
                         <option key={c.userId} value={c.userId}>{c.fullName}</option>
                       ))}
@@ -502,42 +507,42 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Origin</label>
-                    <input required className="ehs-input" value={editingRun.origin || ""} onChange={e => setEditingRun({...editingRun, origin: e.target.value})} placeholder="e.g. Warehouse" />
+                     <label>{t("transport.run.origin")}</label>
+                     <input required className="ehs-input" value={editingRun.origin || ""} onChange={e => setEditingRun({...editingRun, origin: e.target.value})} placeholder={t("transport.run.originPlaceholder")} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Destination</label>
-                    <input required className="ehs-input" value={editingRun.destination || ""} onChange={e => setEditingRun({...editingRun, destination: e.target.value})} placeholder="e.g. Spektrum" />
+                     <label>{t("transport.run.destination")}</label>
+                     <input required className="ehs-input" value={editingRun.destination || ""} onChange={e => setEditingRun({...editingRun, destination: e.target.value})} placeholder={t("transport.run.destinationPlaceholder")} />
                   </div>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Departure Time</label>
+                     <label>{t("transport.run.departureTime")}</label>
                     <input type="datetime-local" required className="ehs-input" value={editingRun.departureAt ? toLocalDateTimeInput(editingRun.departureAt) : ""} onChange={e => setEditingRun({...editingRun, departureAt: e.target.value})} />
                   </div>
                 </div>
                 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
                   <div className="ehs-form-group">
-                    <label>Load In (Optional)</label>
+                     <label>{t("transport.run.loadIn")}</label>
                     <input type="datetime-local" className="ehs-input" value={editingRun.loadInAt ? toLocalDateTimeInput(editingRun.loadInAt) : ""} onChange={e => setEditingRun({...editingRun, loadInAt: e.target.value || null})} />
                   </div>
                   <div className="ehs-form-group">
-                    <label>Load Out (Optional)</label>
+                     <label>{t("transport.run.loadOut")}</label>
                     <input type="datetime-local" className="ehs-input" value={editingRun.loadOutAt ? toLocalDateTimeInput(editingRun.loadOutAt) : ""} onChange={e => setEditingRun({...editingRun, loadOutAt: e.target.value || null})} />
                   </div>
                 </div>
 
                 <div className="ehs-form-group">
-                  <label>Cargo Notes</label>
-                  <textarea className="ehs-input" style={{ minHeight: 60 }} value={editingRun.cargoNotes || ""} onChange={e => setEditingRun({...editingRun, cargoNotes: e.target.value || null})} placeholder="e.g. 4x Eurotruss, 2x Racks..." />
+                   <label>{t("transport.run.cargoNotes")}</label>
+                   <textarea className="ehs-input" style={{ minHeight: 60 }} value={editingRun.cargoNotes || ""} onChange={e => setEditingRun({...editingRun, cargoNotes: e.target.value || null})} placeholder={t("transport.run.cargoNotesPlaceholder")} />
                 </div>
               </div>
               <div className="ehs-modal-footer">
-                <button type="button" className="ehs-ghost-btn" onClick={() => setIsRunModalOpen(false)}>Cancel</button>
+                 <button type="button" className="ehs-ghost-btn" onClick={() => setIsRunModalOpen(false)}>{t("common.cancel")}</button>
                 <button type="submit" className="ehs-primary-btn" disabled={runSaving}>
-                  {runSaving ? "Saving..." : "Save Run"}
+                   {runSaving ? t("common.saving") : t("transport.run.save")}
                 </button>
               </div>
             </form>
@@ -750,7 +755,7 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
   );
 }
 
-function RunCard({ run, onChangeStatus, onOpenProject }: { run: Run, onChangeStatus: (status: Run["status"]) => void, onOpenProject: () => void }) {
+function RunCard({ run, onChangeStatus, onOpenProject, t }: { run: Run, onChangeStatus: (status: Run["status"]) => void, onOpenProject: () => void, t: ReturnType<typeof useT> }) {
   return (
     <div className="run-card">
       <div className="run-header">
@@ -761,7 +766,7 @@ function RunCard({ run, onChangeStatus, onOpenProject }: { run: Run, onChangeSta
               <Building size={12} /> {run.projectName}
             </div>
           ) : (
-            <div className="run-project" style={{ color: "var(--text-muted)", cursor: "default" }}>Internal / No Project</div>
+            <div className="run-project" style={{ color: "var(--text-muted)", cursor: "default" }}>{t("transport.run.internal")}</div>
           )}
         </div>
       </div>
@@ -774,7 +779,7 @@ function RunCard({ run, onChangeStatus, onOpenProject }: { run: Run, onChangeSta
 
       <div className="run-meta">
         <div className="run-meta-item">
-          <Clock size={14} /> <strong>{format(new Date(run.departureAt), "HH:mm")}</strong> departure
+          <Clock size={14} /> <strong>{format(new Date(run.departureAt), "HH:mm")}</strong> {t("transport.run.departure")}
         </div>
         {run.vehicleName && (
           <div className="run-meta-item">
@@ -792,17 +797,17 @@ function RunCard({ run, onChangeStatus, onOpenProject }: { run: Run, onChangeSta
         <div className="run-meta" style={{ marginTop: -4 }}>
           {run.loadInAt && (
             <div className="run-meta-item">
-              <span style={{ color: "var(--text-muted)" }}>Load In:</span> <strong>{format(new Date(run.loadInAt), "HH:mm")}</strong>
+               <span style={{ color: "var(--text-muted)" }}>{t("transport.run.loadInLabel")}</span> <strong>{format(new Date(run.loadInAt), "HH:mm")}</strong>
             </div>
           )}
           {run.loadOutAt && (
             <div className="run-meta-item">
-              <span style={{ color: "var(--text-muted)" }}>Load Out:</span> <strong>{format(new Date(run.loadOutAt), "HH:mm")}</strong>
+               <span style={{ color: "var(--text-muted)" }}>{t("transport.run.loadOutLabel")}</span> <strong>{format(new Date(run.loadOutAt), "HH:mm")}</strong>
             </div>
           )}
           {run.cargoNotes && (
              <div className="run-meta-item" style={{ width: "100%", marginTop: 4 }}>
-               <span style={{ color: "var(--text-muted)" }}>Cargo:</span> {run.cargoNotes}
+               <span style={{ color: "var(--text-muted)" }}>{t("transport.run.cargoLabel")}</span> {run.cargoNotes}
              </div>
           )}
         </div>
@@ -810,16 +815,16 @@ function RunCard({ run, onChangeStatus, onOpenProject }: { run: Run, onChangeSta
 
       <div className="run-actions">
         <button type="button" className={`status-btn scheduled ${run.status === "scheduled" ? "is-active" : ""}`} onClick={() => onChangeStatus("scheduled")}>
-          Scheduled
+          {t("transport.run.status.scheduled")}
         </button>
         <button type="button" className={`status-btn in_transit ${run.status === "in_transit" ? "is-active" : ""}`} onClick={() => onChangeStatus("in_transit")}>
-          <Play size={10} style={{ marginRight: 2 }} /> In Transit
+          <Play size={10} style={{ marginRight: 2 }} /> {t("transport.run.status.in_transit")}
         </button>
         <button type="button" className={`status-btn delivered ${run.status === "delivered" ? "is-active" : ""}`} onClick={() => onChangeStatus("delivered")}>
-          <Check size={10} style={{ marginRight: 2 }} /> Delivered
+          <Check size={10} style={{ marginRight: 2 }} /> {t("transport.run.status.delivered")}
         </button>
         <button type="button" className={`status-btn returned ${run.status === "returned" ? "is-active" : ""}`} onClick={() => onChangeStatus("returned")}>
-          Returned
+          {t("transport.run.status.returned")}
         </button>
       </div>
     </div>

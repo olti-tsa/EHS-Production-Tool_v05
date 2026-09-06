@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RosterRow } from "./crewRoster.ts";
 import { dailyCallSheetHtml } from "./dailyCallSheetExport.ts";
+import { HtmlToPdfError, pdfFilename } from "./htmlToPdf.ts";
+
+const copy = {
+  notProvided: "Not provided", noKeyContacts: "No key contacts provided", noTasks: "No tasks provided",
+  hotelRequired: "Required", hotelRequiredDates: (dates: string) => `Required (${dates})`, hotelNotRequired: "Not required",
+  noneProvided: "None provided", empty: "No confirmed, accepted, or partially accepted crew with shifts on this date.",
+  logoAlt: "EHS company logo", title: "Daily call sheet", crewRole: "Crew / role", windows: "Windows",
+  timeline: "24-hour timeline", tasks: "Tasks", hotel: "Hotel", cateringDietaryAllergens: "Catering / dietary / allergens",
+  phone: "Phone", keyContacts: "Key contacts", filename: "Daily Call Sheet",
+};
 
 const row = (patch: Partial<RosterRow> = {}): RosterRow => ({
   source: "gig",
@@ -46,6 +56,8 @@ test("daily call sheet excludes declined windows and their phase tasks", () => {
     date: "2026-06-01",
     projectName: "<Project>",
     rows: [row()],
+    locale: "en",
+    copy,
   });
   assert.match(html, /08:00–12:00/);
   assert.doesNotMatch(html, /18:00–23:00/);
@@ -65,8 +77,21 @@ test("daily call sheet excludes pending and declined crew rows", () => {
   const html = dailyCallSheetHtml({
     date: "2026-06-01",
     rows: [row({ status: "requested" }), row({ id: "gig-2", status: "declined" })],
+    locale: "en",
+    copy,
   });
   assert.match(html, /No confirmed, accepted, or partially accepted crew/);
   assert.match(html, /<td colspan="7" class="empty">/);
   assert.doesNotMatch(html, /Alex &amp; Co/);
+});
+
+test("PDF filenames use caller-provided localized fallback copy", () => {
+  assert.equal(pdfFilename([undefined, "  "], "Eksport"), "Eksport.pdf");
+});
+
+test("HTML-to-PDF failures expose stable codes instead of user copy", () => {
+  const cause = new Error("browser detail");
+  const error = new HtmlToPdfError("render-failed", cause);
+  assert.equal(error.message, "[html-to-pdf:render-failed]");
+  assert.equal(error.cause, cause);
 });

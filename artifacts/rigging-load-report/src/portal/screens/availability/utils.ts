@@ -204,12 +204,15 @@ export function localTimeOnly(value: string): string {
   ).padStart(2, "0")}`;
 }
 
-export async function responseError(res: Response): Promise<string> {
+export async function responseError(
+  res: Response,
+  translatedFallback: string,
+): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string };
-    return body.error || "Could not save availability.";
+    return body.error || translatedFallback;
   } catch {
-    return "Could not save availability.";
+    return translatedFallback;
   }
 }
 

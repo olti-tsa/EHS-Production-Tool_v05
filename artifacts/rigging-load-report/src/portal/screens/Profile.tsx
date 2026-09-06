@@ -127,12 +127,15 @@ export function Profile({
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     const context = canvas.getContext("2d");
-    if (!context) throw new Error("Could not process image.");
+    if (!context) throw new Error(t("portal.profile.photo.processError"));
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
     const blob = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob(
-        (value) => (value ? resolve(value) : reject(new Error("Could not process image."))),
+        (value) =>
+          value
+            ? resolve(value)
+            : reject(new Error(t("portal.profile.photo.processError"))),
         "image/jpeg",
         0.86,
       ),
@@ -156,7 +159,7 @@ export function Profile({
     });
     const payload = (await response.json()) as { error?: string };
     if (!response.ok) {
-      throw new Error(payload.error || "Could not save profile photo.");
+      throw new Error(payload.error || t("portal.profile.photo.saveError"));
     }
     const next = { ...draft, photoObjectPath };
     setDraft(next);
@@ -197,17 +200,19 @@ export function Profile({
         error?: string;
       };
       if (!request.ok || !payload.uploadURL || !payload.objectPath) {
-        throw new Error(payload.error || "Could not start photo upload.");
+        throw new Error(payload.error || t("portal.profile.photo.startError"));
       }
       const upload = await fetch(payload.uploadURL, {
         method: "PUT",
         headers: { "Content-Type": prepared.type },
         body: prepared,
       });
-      if (!upload.ok) throw new Error("Photo upload failed.");
+      if (!upload.ok) throw new Error(t("portal.profile.photo.uploadError"));
       await savePhotoReference(payload.objectPath);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Photo upload failed.");
+      setSaveError(
+        err instanceof Error ? err.message : t("portal.profile.photo.uploadError"),
+      );
     } finally {
       setPhotoBusy(false);
     }
@@ -253,7 +258,7 @@ export function Profile({
               border: "1px solid rgba(180, 35, 24, 0.35)",
             }}
           >
-            {t("portal.profile.saveError")}
+            {saveError}
           </span>
         ) : null}
       </header>
@@ -277,7 +282,11 @@ export function Profile({
                 cursor: photoBusy ? "wait" : "pointer",
               }}
             >
-              {photoBusy ? "Uploading…" : draft.photoObjectPath ? "Change photo" : "Add photo"}
+              {photoBusy
+                ? t("portal.profile.photo.uploading")
+                : draft.photoObjectPath
+                  ? t("portal.profile.photo.change")
+                  : t("portal.profile.photo.add")}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -300,7 +309,9 @@ export function Profile({
                   void savePhotoReference("")
                     .catch((err: unknown) =>
                       setSaveError(
-                        err instanceof Error ? err.message : "Could not remove photo.",
+                        err instanceof Error
+                          ? err.message
+                          : t("portal.profile.photo.removeError"),
                       ),
                     )
                     .finally(() => setPhotoBusy(false));
@@ -316,7 +327,7 @@ export function Profile({
                   cursor: "pointer",
                 }}
               >
-                Remove
+                {t("portal.profile.photo.remove")}
               </button>
             ) : null}
           </div>

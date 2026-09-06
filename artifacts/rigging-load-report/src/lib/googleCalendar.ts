@@ -6,9 +6,9 @@ export type GoogleCalendarEvent = {
   location?: string;
 };
 
-function toGoogleUtcTimestamp(value: Date): string {
+function toGoogleUtcTimestamp(value: Date, invalidDateMessage: string): string {
   if (Number.isNaN(value.getTime())) {
-    throw new Error("Google Calendar events require valid start and end dates.");
+    throw new Error(invalidDateMessage);
   }
   return value
     .toISOString()
@@ -17,13 +17,16 @@ function toGoogleUtcTimestamp(value: Date): string {
 }
 
 /** Build a standard pre-filled Google Calendar event URL. */
-export function buildGoogleCalendarUrl(event: GoogleCalendarEvent): string {
+export function buildGoogleCalendarUrl(
+  event: GoogleCalendarEvent,
+  invalidDateMessage: string,
+): string {
   const params = [
     ["action", "TEMPLATE"],
     ["text", event.title],
     [
       "dates",
-      `${toGoogleUtcTimestamp(event.start)}/${toGoogleUtcTimestamp(event.end)}`,
+      `${toGoogleUtcTimestamp(event.start, invalidDateMessage)}/${toGoogleUtcTimestamp(event.end, invalidDateMessage)}`,
     ],
     ["details", event.details ?? ""],
     ["location", event.location ?? ""],

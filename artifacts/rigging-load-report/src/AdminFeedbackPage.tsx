@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useFeedbackReports, useUpdateFeedbackStatus, type FeedbackReport } from "./hooks/use-feedback";
 import { toast } from "sonner";
 import { Toaster } from "./components/ui/sonner";
+import { useI18n } from "./lib/i18n/I18nContext";
 
 const statusColors: Record<FeedbackReport["status"], { bg: string; text: string }> = {
   open: { bg: "rgba(244,63,94,0.15)", text: "#fb7185" }, // danger red
@@ -27,6 +28,7 @@ function getSafePageUrl(value: string | null): string | null {
 export default function AdminFeedbackPage() {
   const { data: reports, isLoading, error } = useFeedbackReports();
   const updateStatus = useUpdateFeedbackStatus();
+  const { t, locale } = useI18n();
 
   const [filterStatus, setFilterStatus] = useState<"all" | FeedbackReport["status"]>("all");
   const [filterType, setFilterType] = useState<"all" | FeedbackReport["type"]>("all");
@@ -61,9 +63,9 @@ export default function AdminFeedbackPage() {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
           <div>
-            <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Admin · Feedback</h1>
+            <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>{t("admin.feedback.title")}</h1>
             <p style={{ margin: 0, opacity: 0.7, fontSize: 14 }}>
-              Manage bug reports and feature requests from users.
+              {t("admin.feedback.subtitle")}
             </p>
           </div>
           
@@ -86,9 +88,9 @@ export default function AdminFeedbackPage() {
                 cursor: "pointer",
               }}
             >
-              <option value="all">All Types</option>
-              <option value="bug">Bugs</option>
-              <option value="feature_request">Feature Requests</option>
+              <option value="all">{t("admin.feedback.filter.allTypes")}</option>
+              <option value="bug">{t("admin.feedback.type.bugs")}</option>
+              <option value="feature_request">{t("admin.feedback.type.featureRequests")}</option>
             </select>
             
             <select
@@ -109,17 +111,17 @@ export default function AdminFeedbackPage() {
                 cursor: "pointer",
               }}
             >
-              <option value="all">All Statuses</option>
-              <option value="open">Open</option>
-              <option value="in_progress">In Progress</option>
-              <option value="resolved">Resolved</option>
+              <option value="all">{t("admin.feedback.filter.allStatuses")}</option>
+              <option value="open">{t("admin.feedback.status.open")}</option>
+              <option value="in_progress">{t("admin.feedback.status.inProgress")}</option>
+              <option value="resolved">{t("admin.feedback.status.resolved")}</option>
             </select>
           </div>
         </div>
 
         {isLoading ? (
           <div style={{ padding: 40, textAlign: "center", opacity: 0.5, fontSize: 14 }}>
-            Loading reports...
+            {t("admin.feedback.loading")}
           </div>
         ) : error ? (
           <div
@@ -132,23 +134,23 @@ export default function AdminFeedbackPage() {
               fontSize: 13,
             }}
           >
-            {error instanceof Error ? error.message : "Failed to load reports"}
+            {error instanceof Error ? error.message : t("admin.feedback.loadError")}
           </div>
         ) : filteredReports.length === 0 ? (
           <div style={{ padding: 40, textAlign: "center", opacity: 0.5, fontSize: 14 }}>
-            No feedback found matching the current filters.
+            {t("admin.feedback.empty")}
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, textAlign: "left" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border-color, #2a2a34)", color: "var(--text-muted, rgba(255,255,255,0.5))" }}>
-                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>Type</th>
-                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>Report</th>
-                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>Reporter</th>
-                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>Date</th>
-                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>Page URL</th>
-                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>Actions</th>
+                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>{t("admin.feedback.table.type")}</th>
+                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>{t("admin.feedback.table.report")}</th>
+                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>{t("admin.feedback.table.reporter")}</th>
+                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>{t("admin.feedback.table.date")}</th>
+                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>{t("admin.feedback.table.pageUrl")}</th>
+                  <th style={{ padding: "12px 16px", fontWeight: 500 }}>{t("admin.feedback.table.actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -169,7 +171,7 @@ export default function AdminFeedbackPage() {
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {report.type === "bug" ? "Bug" : "Feature"}
+                        {report.type === "bug" ? t("admin.feedback.type.bug") : t("admin.feedback.type.feature")}
                       </span>
                     </td>
                     <td style={{ padding: "16px", minWidth: 250 }}>
@@ -181,11 +183,11 @@ export default function AdminFeedbackPage() {
                       </div>
                     </td>
                     <td style={{ padding: "16px", color: "var(--text-muted, rgba(255,255,255,0.7))" }}>
-                      <div style={{ color: "var(--text-main, #fff)", fontWeight: 500 }}>{report.userEmail ?? "No verified email"}</div>
-                      <div style={{ fontSize: 12, marginTop: 2 }}>{report.userRole ?? "Unknown"}</div>
+                      <div style={{ color: "var(--text-main, #fff)", fontWeight: 500 }}>{report.userEmail ?? t("admin.feedback.noVerifiedEmail")}</div>
+                      <div style={{ fontSize: 12, marginTop: 2 }}>{report.userRole ?? t("common.unknown")}</div>
                     </td>
                     <td style={{ padding: "16px", color: "var(--text-muted, rgba(255,255,255,0.7))", whiteSpace: "nowrap" }}>
-                      {new Date(report.createdAt).toLocaleDateString()}
+                      {new Date(report.createdAt).toLocaleDateString(locale === "no" ? "nb-NO" : "en-US")}
                     </td>
                     <td style={{ padding: "16px", maxWidth: 180 }}>
                       {safePageUrl ? (
@@ -205,7 +207,7 @@ export default function AdminFeedbackPage() {
                           {safePageUrl}
                         </a>
                       ) : (
-                        <span style={{ opacity: 0.5 }}>Not provided</span>
+                        <span style={{ opacity: 0.5 }}>{t("admin.feedback.notProvided")}</span>
                       )}
                     </td>
                     <td style={{ padding: "16px" }}>
@@ -217,9 +219,9 @@ export default function AdminFeedbackPage() {
                              .value as FeedbackReport["status"];
                           try {
                             await updateStatus.mutate({ id: report.id, status: newStatus });
-                            toast.success("Status updated");
+                             toast.success(t("admin.feedback.statusUpdated"));
                           } catch (err) {
-                            toast.error("Failed to update status");
+                             toast.error(t("admin.feedback.updateError"));
                           }
                         }}
                         style={{
@@ -235,9 +237,9 @@ export default function AdminFeedbackPage() {
                           appearance: "none",
                         }}
                       >
-                        <option value="open">Open</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="resolved">Resolved</option>
+                        <option value="open">{t("admin.feedback.status.open")}</option>
+                        <option value="in_progress">{t("admin.feedback.status.inProgress")}</option>
+                        <option value="resolved">{t("admin.feedback.status.resolved")}</option>
                       </select>
                     </td>
                   </tr>

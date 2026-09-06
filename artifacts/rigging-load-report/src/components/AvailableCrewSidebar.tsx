@@ -45,6 +45,8 @@ import {
   type SkillSuggestion,
 } from "@workspace/skills";
 import { FreelancerProfileModal } from "./global/FreelancerProfileModal";
+import { useI18n, useT } from "../lib/i18n/I18nContext";
+import type { TranslationKey } from "../lib/i18n/types";
 
 type Status = "available" | "pending" | "booked" | "unknown" | "partial" | "unavailable" | "tentative";
 
@@ -121,7 +123,7 @@ type Props = {
  *  Console & Software subgroups (Sound / Lighting / AV) into a single
  *  scrollable strip — the producer can usually find what they want
  *  without an extra dropdown level. */
-const CHIP_GROUPS: Array<{ label: string; items: SkillSuggestion[] }> = (() => {
+const CHIP_GROUPS: Array<{ labelKey: TranslationKey; items: SkillSuggestion[] }> = (() => {
   const work: SkillSuggestion[] = [];
   const consoles: SkillSuggestion[] = [];
   const cert: SkillSuggestion[] = [];
@@ -131,9 +133,9 @@ const CHIP_GROUPS: Array<{ label: string; items: SkillSuggestion[] }> = (() => {
     else if (s.group === "Certification") cert.push(s);
   }
   return [
-    { label: "Work Type", items: work },
-    { label: "Console & Software", items: consoles },
-    { label: "Certification", items: cert },
+    { labelKey: "crew.sidebar.workType", items: work },
+    { labelKey: "crew.sidebar.consoleSoftware", items: consoles },
+    { labelKey: "crew.sidebar.certification", items: cert },
   ];
 })();
 
@@ -145,9 +147,9 @@ const CHIP_GROUPS: Array<{ label: string; items: SkillSuggestion[] }> = (() => {
  *  rows scannable at ~280px wide. Names with no surname fall through
  *  unchanged so we don't accidentally strip a single-token name down
  *  to an initial. */
-function shortName(full: string | null | undefined): string {
+function shortName(full: string | null | undefined, unnamed: string): string {
   const raw = (full || "").trim();
-  if (!raw) return "Unnamed";
+  if (!raw) return unnamed;
   const parts = raw.split(/\s+/);
   if (parts.length < 2) return raw;
   const first = parts[0];
@@ -155,14 +157,14 @@ function shortName(full: string | null | undefined): string {
   return `${first.charAt(0).toUpperCase()}. ${last}`;
 }
 
-const STATUS_META: Record<Status, { label: string; dot: string; tone: string }> = {
-  available: { label: "Available", dot: "#16a34a", tone: "ok" },
-  partial: { label: "Partial", dot: "#eab308", tone: "warn" },
-  tentative: { label: "Tentative", dot: "#eab308", tone: "warn" },
-  unknown: { label: "Unknown", dot: "#94a3b8", tone: "neutral" },
-  pending: { label: "Pending Brief", dot: "#d97706", tone: "warn" },
-  booked: { label: "Booked", dot: "#dc2626", tone: "bad" },
-  unavailable: { label: "Unavailable", dot: "#dc2626", tone: "bad" },
+const STATUS_META: Record<Status, { labelKey: TranslationKey; dot: string; tone: string }> = {
+  available: { labelKey: "crew.sidebar.status.available", dot: "#16a34a", tone: "ok" },
+  partial: { labelKey: "crew.sidebar.status.partial", dot: "#eab308", tone: "warn" },
+  tentative: { labelKey: "crew.sidebar.status.tentative", dot: "#eab308", tone: "warn" },
+  unknown: { labelKey: "crew.sidebar.status.unknown", dot: "#94a3b8", tone: "neutral" },
+  pending: { labelKey: "crew.sidebar.status.pending", dot: "#d97706", tone: "warn" },
+  booked: { labelKey: "crew.sidebar.status.booked", dot: "#dc2626", tone: "bad" },
+  unavailable: { labelKey: "crew.sidebar.status.unavailable", dot: "#dc2626", tone: "bad" },
 };
 
 export function AvailableCrewSidebar({
@@ -175,6 +177,7 @@ export function AvailableCrewSidebar({
   sendError = null,
   compact = false,
 }: Props) {
+  const t = useT();
   const { getToken, isSignedIn } = useAuth();
 
   // Filter state. `selectedSkills` is a Set of canonical skill labels
@@ -232,9 +235,9 @@ export function AvailableCrewSidebar({
            const text = await res.text();
            throw new Error(text);
         }
-        toast.success("Hold placed");
+        toast.success(t("crew.sidebar.holdPlaced"));
       } else {
-        if (!holdId) throw new Error("Missing hold ID");
+        if (!holdId) throw new Error(t("crew.sidebar.missingHoldId"));
         const res = await fetch(`${baseUrl}api/portal/calendar/holds/${holdId}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` }
@@ -243,14 +246,14 @@ export function AvailableCrewSidebar({
            const text = await res.text();
            throw new Error(text);
         }
-        toast.success("Hold released");
+        toast.success(t("crew.sidebar.holdReleased"));
       }
       // re-fetch
       const controller = new AbortController();
       await load(controller.signal);
     } catch (e: any) {
       console.error(e);
-      toast.error(e.message || "Failed to toggle hold");
+      toast.error(e instanceof Error && e.message ? e.message : t("crew.sidebar.holdError"));
     }
   }
 
@@ -313,7 +316,7 @@ export function AvailableCrewSidebar({
       );
       if (signal.aborted || myReq !== reqIdRef.current) return;
       if (!res.ok) {
-        throw new Error(`Server returned ${res.status}`);
+        throw new Error(t("crew.sidebar.serverError", { status: res.status }));
       }
       const body = (await res.json()) as {
         ok?: boolean;
@@ -322,7 +325,7 @@ export function AvailableCrewSidebar({
       };
       if (signal.aborted || myReq !== reqIdRef.current) return;
       if (!body.ok || !Array.isArray(body.freelancers)) {
-        throw new Error(body.error || "Bad response from server");
+        throw new Error(body.error || t("crew.sidebar.badResponse"));
       }
       // Rank logic: available > partial > unknown > pending > booked > unavailable
       const rank: Record<string, number> = { available: 0, partial: 1, tentative: 2, unknown: 3, pending: 4, booked: 5, unavailable: 6 };
@@ -343,7 +346,7 @@ export function AvailableCrewSidebar({
       // Silence the AbortError that comes from the strict-mode double
       // mount — it's not a real failure.
       if (e instanceof DOMException && e.name === "AbortError") return;
-      setError(e instanceof Error ? e.message : "Could not load roster.");
+      setError(e instanceof Error ? e.message : t("crew.sidebar.loadError"));
       setRows([]);
     } finally {
       if (myReq === reqIdRef.current) setLoading(false);
@@ -408,10 +411,10 @@ export function AvailableCrewSidebar({
     return (
       <aside className={`acs${compact ? " acs-compact" : ""}`}>
         <header className="acs-head">
-          <h3>Available crew</h3>
+          <h3>{t("crew.sidebar.title")}</h3>
         </header>
         <div className="acs-empty">
-          Sign in to the Freelance Portal to see your roster.
+          {t("crew.sidebar.signIn")}
         </div>
       </aside>
     );
@@ -432,29 +435,29 @@ export function AvailableCrewSidebar({
     return (
       <aside className="acs acs-compact">
         <header className="acs-compact-head">
-          <h3>Available crew</h3>
+          <h3>{t("crew.sidebar.title")}</h3>
           <span className="acs-compact-count">{available.length}</span>
         </header>
         {loading && rows.length === 0 ? (
-          <div className="acs-compact-empty">Loading…</div>
+          <div className="acs-compact-empty">{t("common.loading")}</div>
         ) : error ? (
           <div className="acs-compact-empty">{error}</div>
         ) : available.length === 0 ? (
           <div className="acs-compact-empty">
-            No free crew for this date.
+            {t("crew.sidebar.noFree")}
           </div>
         ) : (
           <ul className="acs-compact-list">
             {available.map((r) => {
               const already = requestedUserIds.has(r.userId);
-              const short = shortName(r.fullName);
+               const short = shortName(r.fullName, t("crew.sidebar.unnamed"));
               return (
                 <li key={r.userId} className="acs-compact-row">
                   <button
                     type="button"
                     className="acs-compact-row-main"
                     onClick={() => setProfileUserId(r.userId)}
-                    title={`View ${r.fullName || "freelancer"} profile`}
+                     title={t("crew.sidebar.viewProfile", { name: r.fullName || t("crew.sidebar.freelancer") })}
                     style={{
                       border: 0,
                       padding: 0,
@@ -474,7 +477,7 @@ export function AvailableCrewSidebar({
                     ) : null}
                   </button>
                   {already ? (
-                    <span className="acs-compact-tag">Requested</span>
+                    <span className="acs-compact-tag">{t("crew.status.requested")}</span>
                   ) : (
                     <button
                       type="button"
@@ -492,9 +495,9 @@ export function AvailableCrewSidebar({
                           },
                         ])
                       }
-                      title={`Send a brief request to ${r.fullName || "this freelancer"}`}
+                       title={t("crew.sidebar.sendBriefTo", { name: r.fullName || t("crew.sidebar.thisFreelancer") })}
                     >
-                      + Add
+                      {t("common.add")}
                     </button>
                   )}
                 </li>
@@ -519,11 +522,11 @@ export function AvailableCrewSidebar({
   return (
     <aside className="acs">
       <header className="acs-head">
-        <h3>Available Crew</h3>
+        <h3>{t("crew.sidebar.title")}</h3>
         <p className="acs-sub">
           {projectStartDate ? (
             <>
-              Status for{" "}
+               {t("crew.sidebar.statusFor")}{" "}
               <strong>
                 {projectStartDate}
                 {projectEndDate && projectEndDate !== projectStartDate
@@ -532,22 +535,22 @@ export function AvailableCrewSidebar({
               </strong>
             </>
           ) : (
-            <>Set the report date to see who's free that day.</>
+            <>{t("crew.sidebar.setDate")}</>
           )}
         </p>
       </header>
 
 
       <div style={{ padding: "0 14px", marginBottom: "12px", display: "flex", gap: "8px", alignItems: "center" }}>
-        <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--text-muted)" }}>Availability:</label>
+        <label style={{ fontSize: "12px", fontWeight: "bold", color: "var(--text-muted)" }}>{t("crew.sidebar.availability")}:</label>
         <select
           value={availabilityFilter}
           onChange={e => setAvailabilityFilter(e.target.value as any)}
           style={{ flex: 1, padding: "6px", fontSize: "13px", borderRadius: "6px", border: "1px solid var(--border-color)", background: "var(--input-bg)", color: "var(--text-main)" }}
         >
-          <option value="all">Any Status</option>
-          <option value="free">Available Only</option>
-          <option value="free-unknown">Available & Unknown</option>
+          <option value="all">{t("crew.sidebar.anyStatus")}</option>
+          <option value="free">{t("crew.sidebar.availableOnly")}</option>
+          <option value="free-unknown">{t("crew.sidebar.availableUnknown")}</option>
         </select>
       </div>
 
@@ -556,14 +559,14 @@ export function AvailableCrewSidebar({
           className="led-input"
           type="search"
           value={query}
-          placeholder="Search name or city…"
+          placeholder={t("crew.sidebar.search")}
           onChange={(e) => setQuery(e.target.value)}
         />
       </div>
 
       {CHIP_GROUPS.map((group) => (
-        <div key={group.label} className="acs-group">
-          <div className="acs-group-label">{group.label}</div>
+        <div key={group.labelKey} className="acs-group">
+          <div className="acs-group-label">{t(group.labelKey)}</div>
           <div className="acs-chips">
             {group.items.map((s) => {
               const active = selectedSkills.has(s.label);
@@ -589,26 +592,25 @@ export function AvailableCrewSidebar({
           className="btn btn-soft btn-sm acs-clear"
           onClick={clearAll}
         >
-          Clear filters
+          {t("crew.sidebar.clearFilters")}
         </button>
       ) : null}
 
       <div className="acs-summary" style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "14px" }}>
-        <span className="acs-tag acs-tag-ok"><strong>{counts.available}</strong> full</span>
-        <span className="acs-tag acs-tag-warn" style={{ background: "rgba(234,179,8,0.15)", color: "#ca8a04" }}><strong>{counts.partial}</strong> partial</span>
-        <span className="acs-tag" style={{ background: "rgba(148,163,184,0.15)", color: "#64748b" }}><strong>{counts.unknown}</strong> unknown</span>
-        <span className="acs-tag acs-tag-bad"><strong>{counts.booked + counts.unavailable}</strong> busy</span>
+        <span className="acs-tag acs-tag-ok"><strong>{counts.available}</strong> {t("crew.sidebar.summary.full")}</span>
+        <span className="acs-tag acs-tag-warn" style={{ background: "rgba(234,179,8,0.15)", color: "#ca8a04" }}><strong>{counts.partial}</strong> {t("crew.sidebar.summary.partial")}</span>
+        <span className="acs-tag" style={{ background: "rgba(148,163,184,0.15)", color: "#64748b" }}><strong>{counts.unknown}</strong> {t("crew.sidebar.summary.unknown")}</span>
+        <span className="acs-tag acs-tag-bad"><strong>{counts.booked + counts.unavailable}</strong> {t("crew.sidebar.summary.busy")}</span>
       </div>
 
       <div className="acs-results">
         {loading && rows.length === 0 ? (
-          <div className="acs-empty">Loading…</div>
+          <div className="acs-empty">{t("common.loading")}</div>
         ) : error ? (
           <div className="acs-error">{error}</div>
         ) : rows.length === 0 ? (
           <div className="acs-empty">
-            No matches. Try removing a filter or check that freelancers
-            have completed their portal profile.
+            {t("crew.sidebar.noMatches")}
           </div>
         ) : (
           rows.map((r) => (
@@ -630,7 +632,7 @@ export function AvailableCrewSidebar({
       {picks.size > 0 ? (
         <div className="acs-send-bar">
           <span className="acs-send-bar-count">
-            {picks.size} selected
+             {t("crew.sidebar.selected", { count: picks.size })}
             {sendError ? (
               <span className="acs-send-bar-error">· {sendError}</span>
             ) : null}
@@ -640,9 +642,9 @@ export function AvailableCrewSidebar({
             className="btn btn-primary btn-sm"
             onClick={handleSend}
             disabled={sending}
-            title="Send a brief request to every selected freelancer"
+            title={t("crew.sidebar.sendSelectedHint")}
           >
-            {sending ? "Sending…" : `Send requests (${picks.size})`}
+             {sending ? t("crew.sidebar.sending") : t("crew.sidebar.sendRequests", { count: picks.size })}
           </button>
         </div>
       ) : null}
@@ -676,6 +678,7 @@ function FreelancerCard({
   briefId?: string;
   projectStartDate?: string;
 }) {
+  const { t, locale } = useI18n();
   // Pull up to three certifications (in the order the freelancer
   // entered them) so the producer can scan rigging-relevant tickets at
   // a glance: "Forklift G4 (NO)", "IPAF 3a/3b", etc.
@@ -720,16 +723,16 @@ function FreelancerCard({
       onClick={handleCardClick}
       title={
         isAlreadyRequested
-          ? "Already part of an outgoing request for this project."
+          ? t("crew.sidebar.alreadyRequested")
           : isBooked
-            ? "This freelancer is already booked on an overlapping gig — pick someone else or follow up off-platform."
+             ? t("crew.sidebar.bookedHint")
             : isSelected
-              ? "Click to deselect"
-              : "Click to add to the next batch of requests"
+               ? t("crew.sidebar.deselectHint")
+               : t("crew.sidebar.addHint")
       }
     >
       {isAlreadyRequested ? (
-        <span className="acs-card-mark">Requested</span>
+        <span className="acs-card-mark">{t("crew.status.requested")}</span>
       ) : (
         <input
           type="checkbox"
@@ -738,7 +741,7 @@ function FreelancerCard({
           disabled={isBooked}
           onClick={(e) => e.stopPropagation()}
           onChange={onToggle}
-          aria-label={`Select ${row.fullName || "freelancer"}`}
+          aria-label={t("crew.sidebar.select", { name: row.fullName || t("crew.cancel.unnamed") })}
         />
       )}
       <div className="acs-card-head">
@@ -759,31 +762,31 @@ function FreelancerCard({
             cursor: "pointer",
             textAlign: "left",
           }}
-          title={`View ${row.fullName || "freelancer"} profile`}
+          title={t("crew.sidebar.viewProfile", { name: row.fullName || t("crew.cancel.unnamed") })}
         >
           <FreelancerAvatar row={row} size={38} />
-          <div className="acs-card-name">{row.fullName || "Unnamed"}</div>
+          <div className="acs-card-name">{row.fullName || t("crew.sidebar.unnamed")}</div>
         </button>
         <span
           className={`acs-status acs-status-${meta.tone}`}
           style={isUnknown ? { border: "1px dashed #94a3b8", background: "transparent" } : undefined}
-          title={meta.label}
+           title={t(meta.labelKey)}
         >
           <span
             className="acs-status-dot"
             style={{ background: meta.dot }}
             aria-hidden
           />
-          {meta.label}
+           {t(meta.labelKey)}
         </span>
       </div>
       <div className="acs-card-meta">
         {row.primaryRole ? <span>{row.primaryRole}</span> : null}
         {row.city ? <span>· {row.city}</span> : null}
-        {isStale ? <span style={{ color: "#d97706", fontWeight: 700 }}>· Stale info</span> : null}
+        {isStale ? <span style={{ color: "#d97706", fontWeight: 700 }}>· {t("crew.sidebar.stale")}</span> : null}
         {row.conflicts && row.conflicts.length > 0 ? (
           <span style={{ color: "#dc2626", fontWeight: 700 }} title={row.conflicts.join(", ")}>
-            · {row.conflicts.length} conflict(s)
+            · {t("crew.sidebar.conflicts", { count: row.conflicts.length })}
           </span>
         ) : null}
       </div>
@@ -791,12 +794,12 @@ function FreelancerCard({
       {briefId && (
         row.holdId && row.holdExpiresAt ? (
           <div style={{ marginTop: "8px", fontSize: "12px", background: "rgba(234,179,8,0.15)", color: "#ca8a04", padding: "4px 8px", borderRadius: "4px", display: "flex", justifyContent: "space-between" }}>
-            <span>Hold until {new Date(row.holdExpiresAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-            <button type="button" onClick={(e) => { e.stopPropagation(); onToggleHold(false); }} style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontWeight: "bold" }}>Release</button>
+            <span>{t("crew.sidebar.holdUntil", { time: new Date(row.holdExpiresAt).toLocaleTimeString(locale === "no" ? "nb-NO" : "en-US", {hour: '2-digit', minute:'2-digit'}) })}</span>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onToggleHold(false); }} style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontWeight: "bold" }}>{t("crew.sidebar.release")}</button>
           </div>
         ) : row.effectiveStatus === "tentative" ? (
           <div style={{ marginTop: "8px", fontSize: "12px", color: "#ca8a04", textAlign: "right" }}>
-            Tentatively held
+            {t("crew.sidebar.tentativelyHeld")}
           </div>
         ) : (() => {
           const startMs = projectStartDate ? new Date(`${projectStartDate}T00:00:00`).getTime() : 0;
@@ -805,8 +808,8 @@ function FreelancerCard({
           if (hasStarted) {
             return (
               <div style={{ marginTop: "4px", textAlign: "right" }}>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)", border: "1px dashed var(--border-color)", borderRadius: "4px", padding: "2px 6px", cursor: "not-allowed" }} title="Cannot hold: project has already started">
-                  Cannot Hold (Started)
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", border: "1px dashed var(--border-color)", borderRadius: "4px", padding: "2px 6px", cursor: "not-allowed" }} title={t("crew.sidebar.cannotHoldHint")}>
+                  {t("crew.sidebar.cannotHold")}
                 </span>
               </div>
             );
@@ -815,7 +818,7 @@ function FreelancerCard({
           return (
             <div style={{ marginTop: "4px", textAlign: "right" }}>
               <button type="button" onClick={(e) => { e.stopPropagation(); onToggleHold(true); }} style={{ fontSize: "11px", background: "transparent", border: "1px solid #cbd5e1", borderRadius: "4px", padding: "2px 6px", cursor: "pointer", color: "#64748b" }}>
-                Tentative Hold
+                {t("crew.sidebar.tentativeHold")}
               </button>
             </div>
           );

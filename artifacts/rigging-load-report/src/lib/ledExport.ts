@@ -43,6 +43,31 @@ export const MAX_PNG_DIM = 8192;
  *  as-is (or downscaled to MAX_PNG_DIM). */
 export const PNG_TARGET_LONG_EDGE = 4000;
 
+export type LedExportErrorCode =
+  | "invalid-screen-dimensions"
+  | "canvas-context-unavailable"
+  | "png-blob-unavailable"
+  | "svg-image-load-failed"
+  | "render-failed";
+
+/** Stable, non-localized export failure. UI callers map `code` to translated
+ * copy while retaining `cause` for console/telemetry diagnostics. */
+export class LedExportError extends Error {
+  readonly code: LedExportErrorCode;
+  readonly cause?: unknown;
+
+  constructor(code: LedExportErrorCode, cause?: unknown) {
+    super(`[led-export:${code}]`);
+    this.name = "LedExportError";
+    this.code = code;
+    this.cause = cause;
+  }
+}
+
+export function isLedExportError(error: unknown): error is LedExportError {
+  return error instanceof LedExportError;
+}
+
 /** Scale factor to rasterize a source of size (w × h) px: upscales small
  *  sources toward PNG_TARGET_LONG_EDGE for crisp output, and never lets
  *  either edge exceed MAX_PNG_DIM (so huge screens still produce a valid
@@ -585,14 +610,18 @@ export async function rasterizeSvgToPng(
     canvas.width = outW;
     canvas.height = outH;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("2D context not available");
+    if (!ctx) throw new LedExportError("canvas-context-unavailable");
     ctx.drawImage(img, 0, 0, outW, outH);
     return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))),
+        (b) =>
+          b ? resolve(b) : reject(new LedExportError("png-blob-unavailable")),
         "image/png",
       );
     });
+  } catch (error) {
+    if (isLedExportError(error)) throw error;
+    throw new LedExportError("render-failed", error);
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -602,7 +631,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Failed to load SVG image"));
+    img.onerror = (event) =>
+      reject(new LedExportError("svg-image-load-failed", event));
     img.src = src;
   });
 }
@@ -619,7 +649,7 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function safeFilename(name: string, fallback = "screen"): string {
+export function safeFilename(name: string, fallback: string): string {
   const cleaned = name
     .trim()
     .replace(/[^a-zA-Z0-9._-]+/g, "_")
@@ -642,35 +672,39 @@ export async function renderScreenPngBlob(input: {
   panels: LedPanel[];
   settings: LedSettings;
   logoDataUrl: string | null;
+  filenameFallback: string;
 }): Promise<RenderScreenPng> {
-  // Per-screen colour overrides (set via the row colour-pickers in the
-  // LED tab) take precedence over the global Export-options colours, so
-  // the exported PNG matches what the producer sees on the canvas.
-  const mergedSettings: LedSettings = {
-    ...input.settings,
-    panelColorDark:
-      input.screen.panelColorDark ?? input.settings.panelColorDark,
-    panelColorLight:
-      input.screen.panelColorLight ?? input.settings.panelColorLight,
-  };
-  input = { ...input, settings: mergedSettings };
-  const m = computeScreenMetrics(input.screen, input.panels);
-  if (
-    !Number.isFinite(m.pixelsX) ||
-    !Number.isFinite(m.pixelsY) ||
-    m.pixelsX <= 0 ||
-    m.pixelsY <= 0 ||
-    input.screen.panelsWide <= 0 ||
-    input.screen.panelsTall <= 0
-  ) {
-    throw new Error(
-      "Cannot export: this screen has no panels or zero pixel dimensions. Set the panel grid first.",
-    );
+  try {
+    // Per-screen colour overrides (set via the row colour-pickers in the
+    // LED tab) take precedence over the global Export-options colours, so
+    // the exported PNG matches what the producer sees on the canvas.
+    const mergedSettings: LedSettings = {
+      ...input.settings,
+      panelColorDark:
+        input.screen.panelColorDark ?? input.settings.panelColorDark,
+      panelColorLight:
+        input.screen.panelColorLight ?? input.settings.panelColorLight,
+    };
+    input = { ...input, settings: mergedSettings };
+    const m = computeScreenMetrics(input.screen, input.panels);
+    if (
+      !Number.isFinite(m.pixelsX) ||
+      !Number.isFinite(m.pixelsY) ||
+      m.pixelsX <= 0 ||
+      m.pixelsY <= 0 ||
+      input.screen.panelsWide <= 0 ||
+      input.screen.panelsTall <= 0
+    ) {
+      throw new LedExportError("invalid-screen-dimensions");
+    }
+    const svg = buildScreenSvg(input);
+    const blob = await rasterizeSvgToPng(svg, m.pixelsX, m.pixelsY);
+    const fileName = `${safeFilename(input.screen.name, input.filenameFallback)}_${m.pixelsX}x${m.pixelsY}.png`;
+    return { blob, fileName, sizeBytes: blob.size };
+  } catch (error) {
+    if (isLedExportError(error)) throw error;
+    throw new LedExportError("render-failed", error);
   }
-  const svg = buildScreenSvg(input);
-  const blob = await rasterizeSvgToPng(svg, m.pixelsX, m.pixelsY);
-  const fileName = `${safeFilename(input.screen.name)}_${m.pixelsX}x${m.pixelsY}.png`;
-  return { blob, fileName, sizeBytes: blob.size };
 }
 
 /** End-to-end: build SVG, rasterize, download as PNG. */
@@ -679,7 +713,13 @@ export async function exportScreenAsPng(input: {
   panels: LedPanel[];
   settings: LedSettings;
   logoDataUrl: string | null;
+  filenameFallback: string;
 }): Promise<void> {
-  const { blob, fileName } = await renderScreenPngBlob(input);
-  downloadBlob(blob, fileName);
+  try {
+    const { blob, fileName } = await renderScreenPngBlob(input);
+    downloadBlob(blob, fileName);
+  } catch (error) {
+    if (isLedExportError(error)) throw error;
+    throw new LedExportError("render-failed", error);
+  }
 }

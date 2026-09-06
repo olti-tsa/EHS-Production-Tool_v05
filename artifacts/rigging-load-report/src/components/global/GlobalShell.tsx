@@ -120,7 +120,7 @@ export function GlobalShell({
     ? t(activeItem.key)
     : view === "projects"
       ? t("global.nav.projects")
-      : "EHS Hub";
+      : t("global.breadcrumb.operationsHub");
 
   return (
     <div className="ehs-shell">
@@ -280,15 +280,15 @@ export function GlobalShell({
                 <button
                   type="button"
                   className="ehs-mobile-utility ehs-mobile-only-utility ehs-shell-icon-btn h-8 min-w-[32px] px-2 rounded-md border flex items-center justify-center text-xs font-semibold transition-colors bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-800 dark:bg-slate-800/80 dark:hover:bg-slate-700 dark:border-slate-700/60 dark:text-slate-200"
-                  aria-label="Notifications"
-                  title="Notifications"
+                  aria-label={t("shell.notifications")}
+                  title={t("shell.notifications")}
                 >
                   <Bell size={14} />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="z-[60] bg-white dark:bg-slate-900">
                 <div className="px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
-                  No new notifications
+                  {t("shell.notifications.empty")}
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>

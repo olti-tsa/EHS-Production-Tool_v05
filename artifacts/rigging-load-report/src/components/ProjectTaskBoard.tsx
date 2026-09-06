@@ -1,6 +1,7 @@
 import React, { useState, useRef, KeyboardEvent } from "react";
 import { useProjectTasks, TASK_STATUSES, TASK_PRIORITIES, TASK_DEPARTMENTS, type ProjectTask, type ProjectTaskStatus, type ProjectTaskPriority, type ProjectTaskDepartment, type TaskUpdate } from "../hooks/use-project-tasks";
 import { useT } from "../lib/i18n/I18nContext";
+import type { TranslationKey } from "../lib/i18n/types";
 import { Plus, Trash2, Calendar, User, MessageSquare, AlertCircle, RefreshCw, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -38,6 +39,16 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
   const activeSavesRef = useRef(new Set<string>());
 
   const t = useT();
+  const statusKey: Record<ProjectTaskStatus, TranslationKey> = { "Not Started": "projectTasks.status.notStarted", "Working on it": "projectTasks.status.working", Stuck: "projectTasks.status.stuck", Done: "projectTasks.status.done" };
+  const priorityKey: Record<ProjectTaskPriority, TranslationKey> = { Low: "projectTasks.priority.low", Medium: "projectTasks.priority.medium", High: "projectTasks.priority.high", Urgent: "projectTasks.priority.urgent" };
+  const departmentKey: Record<ProjectTaskDepartment, TranslationKey> = { Rigging: "projectTasks.department.rigging", Lights: "projectTasks.department.lights", LED: "projectTasks.department.led", Sound: "projectTasks.department.sound", Stage: "projectTasks.department.stage", Inspection: "projectTasks.department.inspection", Logistics: "projectTasks.department.logistics" };
+  const taskError = error
+    ? t(
+        error === "saveProjectFirst"
+          ? "projectTasks.saveProjectFirst"
+          : "projectTasks.loadError",
+      )
+    : null;
 
   // If the user clicks on a task row, we open the details sidebar
   const handleRowClick = (task: ProjectTask) => {
@@ -55,7 +66,11 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
       // Keep focus to add another
       setTimeout(() => addInputRef.current?.focus(), 0);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to create task");
+      setActionError(
+        err instanceof Error && err.message === "saveProjectFirst"
+          ? t("projectTasks.saveProjectFirst")
+          : t("projectTasks.createError"),
+      );
     } finally {
       setIsAdding(false);
     }
@@ -73,7 +88,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
       );
       return savedTask;
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to update task");
+      setActionError(t("projectTasks.updateError"));
       setSelectedTask((current) =>
         current?.id === id ? confirmedTask ?? null : current,
       );
@@ -85,13 +100,13 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
   };
 
   const safeDeleteTask = async (id: string) => {
-    if (!window.confirm("Delete this task?")) return;
+    if (!window.confirm(t("projectTasks.deleteConfirm"))) return;
     setActionError(null);
     try {
       await deleteTask(id);
       if (selectedTask?.id === id) setSelectedTask(null);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to delete task");
+      setActionError(t("projectTasks.deleteError"));
     }
   };
 
@@ -110,8 +125,8 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
       <div className="task-board-container" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
         <div className="task-board-empty">
           <AlertCircle size={32} style={{ margin: "0 auto 16px", color: "var(--text-muted)" }} />
-          <h3>No Project Active</h3>
-          <p>Please save the project first before adding tasks.</p>
+          <h3>{t("projectTasks.noProject")}</h3>
+          <p>{t("projectTasks.saveProjectFirst")}</p>
         </div>
       </div>
     );
@@ -122,14 +137,14 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
       <div className="task-board-header">
         <div className="task-board-title-row">
           <h2 className="task-board-title">{t("shell.nav.tasks")}</h2>
-          {isLoading && tasks.length === 0 && <span className="task-board-loading-inline">Loading...</span>}
+          {isLoading && tasks.length === 0 && <span className="task-board-loading-inline">{t("common.loading")}</span>}
         </div>
         {(error || actionError) && (
           <div className="task-board-error">
             <AlertCircle size={14} />
-            <span>{error || actionError}</span>
-            {error && <button className="btn-icon" onClick={() => refetch()} title="Retry"><RefreshCw size={12} /></button>}
-            {actionError && <button className="btn-icon" onClick={() => setActionError(null)} title="Dismiss"><X size={12} /></button>}
+            <span>{taskError || actionError}</span>
+            {error && <button className="btn-icon" onClick={() => refetch()} title={t("projectTasks.retry")} aria-label={t("projectTasks.retry")}><RefreshCw size={12} /></button>}
+            {actionError && <button className="btn-icon" onClick={() => setActionError(null)} title={t("projectTasks.dismiss")} aria-label={t("projectTasks.dismiss")}><X size={12} /></button>}
           </div>
         )}
       </div>
@@ -140,11 +155,11 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
             <table className="task-board-table">
               <thead>
                 <tr>
-                  <th style={{ width: "40%" }}>Task Name</th>
-                  <th style={{ width: "15%" }}>Status</th>
-                  <th style={{ width: "15%" }}>Priority</th>
-                  <th style={{ width: "15%" }}>Assignee</th>
-                  <th style={{ width: "15%" }}>Due Date</th>
+                  <th style={{ width: "40%" }}>{t("projectTasks.taskName")}</th>
+                  <th style={{ width: "15%" }}>{t("projectTasks.status")}</th>
+                  <th style={{ width: "15%" }}>{t("projectTasks.priority")}</th>
+                  <th style={{ width: "15%" }}>{t("projectTasks.assignee")}</th>
+                  <th style={{ width: "15%" }}>{t("projectTasks.dueDate")}</th>
                   <th style={{ width: "40px" }}></th>
                 </tr>
               </thead>
@@ -152,7 +167,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                 {tasks.length === 0 && !isLoading && (
                   <tr>
                     <td colSpan={6} className="task-board-empty-row">
-                      No tasks yet. Add one below.
+                       {t("projectTasks.empty")}
                     </td>
                   </tr>
                 )}
@@ -181,7 +196,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                           style={{ color: statusColor(task.status), borderColor: statusColor(task.status) }}
                           disabled={isPending || isViewer}
                         >
-                          {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                          {TASK_STATUSES.map(s => <option key={s} value={s}>{t(statusKey[s])}</option>)}
                         </select>
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
@@ -192,7 +207,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                           style={{ color: priorityColor(task.priority) }}
                           disabled={isPending || isViewer}
                         >
-                          {TASK_PRIORITIES.map(s => <option key={s} value={s}>{s}</option>)}
+                          {TASK_PRIORITIES.map(s => <option key={s} value={s}>{t(priorityKey[s])}</option>)}
                         </select>
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
@@ -202,7 +217,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                           onChange={(e) => safeUpdateTask(task.id, { assignedUserId: e.target.value || null })}
                           disabled={isPending || isViewer}
                         >
-                          <option value="">Unassigned</option>
+                          <option value="">{t("projectTasks.unassigned")}</option>
                           {crew.map((member) => (
                             <option key={member.userId} value={member.userId}>
                               {member.fullName}
@@ -225,7 +240,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                             className="btn-icon task-delete-btn"
                             onClick={() => safeDeleteTask(task.id)}
                             disabled={isPending}
-                            title="Delete task"
+                            title={t("projectTasks.delete")}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -245,14 +260,14 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                           ref={addInputRef}
                           type="text"
                           className="task-add-input"
-                          placeholder="Add a new task..."
+                           placeholder={t("projectTasks.addPlaceholder")}
                           value={newTaskTitle}
                           onChange={e => setNewTaskTitle(e.target.value)}
                           onKeyDown={handleKeyDownAdd}
                           disabled={isAdding || isLoading}
                         />
                         <button type="submit" className="btn btn-primary btn-sm task-add-btn" disabled={!newTaskTitle.trim() || isAdding || isLoading}>
-                          {isAdding ? "Adding..." : "Add"}
+                           {isAdding ? t("projectTasks.adding") : t("common.add")}
                         </button>
                       </form>
                     </td>
@@ -267,19 +282,19 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
           <div className="task-board-sidebar">
             <div className="task-sidebar-header">
               <div className="task-sidebar-heading">
-                <h3 className="task-sidebar-title">Task Details</h3>
+                 <h3 className="task-sidebar-title">{t("projectTasks.details")}</h3>
                 {selectedTaskPending && (
-                  <span className="task-saving-indicator">Saving...</span>
+                   <span className="task-saving-indicator">{t("common.saving")}</span>
                 )}
               </div>
-              <button className="btn-icon task-sidebar-close" onClick={() => setSelectedTask(null)} aria-label="Close details">
+               <button className="btn-icon task-sidebar-close" onClick={() => setSelectedTask(null)} aria-label={t("projectTasks.closeDetails")}>
                 <X size={16} />
               </button>
             </div>
             <div className="task-sidebar-scroll">
               
               <div className="task-form-group">
-                <label>Title</label>
+                 <label>{t("projectTasks.title")}</label>
                 <textarea 
                   value={selectedTask.title} 
                   className="task-sidebar-input task-sidebar-textarea title-textarea"
@@ -303,7 +318,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
 
               <div className="task-form-row">
                 <div className="task-form-group">
-                  <label>Status</label>
+                   <label>{t("projectTasks.status")}</label>
                   <select 
                     className="task-sidebar-select" 
                     value={selectedTask.status}
@@ -314,11 +329,11 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                       safeUpdateTask(selectedTask.id, { status: val });
                     }}
                   >
-                    {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                     {TASK_STATUSES.map(s => <option key={s} value={s}>{t(statusKey[s])}</option>)}
                   </select>
                 </div>
                 <div className="task-form-group">
-                  <label>Priority</label>
+                   <label>{t("projectTasks.priority")}</label>
                   <select 
                     className="task-sidebar-select" 
                     value={selectedTask.priority}
@@ -329,11 +344,11 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                       safeUpdateTask(selectedTask.id, { priority: val });
                     }}
                   >
-                    {TASK_PRIORITIES.map(s => <option key={s} value={s}>{s}</option>)}
+                     {TASK_PRIORITIES.map(s => <option key={s} value={s}>{t(priorityKey[s])}</option>)}
                   </select>
                 </div>
                 <div className="task-form-group">
-                  <label>Department</label>
+                   <label>{t("projectTasks.department")}</label>
                   <select
                     className="task-sidebar-select"
                     value={selectedTask.department}
@@ -346,7 +361,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                   >
                     {TASK_DEPARTMENTS.map((department) => (
                       <option key={department} value={department}>
-                        {department}
+                         {t(departmentKey[department])}
                       </option>
                     ))}
                   </select>
@@ -354,7 +369,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
               </div>
 
               <div className="task-form-group">
-                <label>Assignee</label>
+                 <label>{t("projectTasks.assignee")}</label>
                 <div className="task-input-with-icon">
                   <User size={14} className="input-icon" />
                    <select
@@ -369,7 +384,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
                        safeUpdateTask(selectedTask.id, { assignedUserId });
                      }}
                    >
-                     <option value="">Unassigned</option>
+                      <option value="">{t("projectTasks.unassigned")}</option>
                      {crew.map((member) => (
                        <option key={member.userId} value={member.userId}>
                          {member.fullName} {member.primaryRole ? `— ${member.primaryRole}` : ""}
@@ -380,7 +395,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
               </div>
 
               <div className="task-form-group">
-                <label>Due Date</label>
+                 <label>{t("projectTasks.dueDate")}</label>
                 <div className="task-input-with-icon">
                   <Calendar size={14} className="input-icon" />
                   <input 
@@ -398,11 +413,11 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
               </div>
 
               <div className="task-form-group task-form-group-flex">
-                <label>Description & Notes</label>
+                 <label>{t("projectTasks.descriptionNotes")}</label>
                 <textarea 
                   className="task-sidebar-input task-sidebar-textarea" 
                   value={selectedTask.description || ""}
-                  placeholder="Add details, links, or notes here..."
+                   placeholder={t("projectTasks.descriptionPlaceholder")}
                   disabled={selectedTaskPending || isViewer}
                   onChange={(e) => setSelectedTask({...selectedTask, description: e.target.value})}
                    onBlur={(e) => {
@@ -417,7 +432,7 @@ export function ProjectTaskBoard({ projectId, accessRole = "viewer" }: Props) {
             </div>
             <div className="task-sidebar-footer">
               <span className="task-meta">
-                Created {format(parseISO(selectedTask.createdAt), "MMM d, yyyy, HH:mm")}
+                {t("projectTasks.created")} {format(parseISO(selectedTask.createdAt), "MMM d, yyyy, HH:mm")}
               </span>
             </div>
           </div>

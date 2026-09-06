@@ -47,6 +47,7 @@ import {
   type LedScreen,
   type NovastarProcessorModel,
 } from "../lib/led";
+import { useT } from "../lib/i18n/I18nContext";
 
 // ─── Styling tokens ───────────────────────────────────────────────────
 //
@@ -57,28 +58,59 @@ import {
 
 const NODE_KIND_THEME: Record<
   LedSystemNodeKind,
-  { label: string; emoji: string; accent: string }
+  { emoji: string; accent: string }
 > = {
-  screen: { label: "Screen", emoji: "▦", accent: "#3B82F6" },
-  processor: { label: "Processor", emoji: "⚙︎", accent: "#F88000" },
-  fiberbox: { label: "CVT10 Pro-S", emoji: "✶", accent: "#A855F7" },
-  psu: { label: "Power Supply", emoji: "⚡", accent: "#EF4444" },
+  screen: { emoji: "▦", accent: "#3B82F6" },
+  processor: { emoji: "⚙︎", accent: "#F88000" },
+  fiberbox: { emoji: "✶", accent: "#A855F7" },
+  psu: { emoji: "⚡", accent: "#EF4444" },
   // Phase 4 — touring topology nodes. Same chrome, new accents.
-  "media-server": { label: "Media Server", emoji: "▶", accent: "#10B981" },
-  "network-switch": { label: "Network Switch", emoji: "⇄", accent: "#0EA5E9" },
-  ups: { label: "UPS", emoji: "🔋", accent: "#EAB308" },
-  powerdistro: { label: "Power Distro", emoji: "⌁", accent: "#DC2626" },
-  genlock: { label: "Genlock", emoji: "⊙", accent: "#8B5CF6" },
+  "media-server": { emoji: "▶", accent: "#10B981" },
+  "network-switch": { emoji: "⇄", accent: "#0EA5E9" },
+  ups: { emoji: "🔋", accent: "#EAB308" },
+  powerdistro: { emoji: "⌁", accent: "#DC2626" },
+  genlock: { emoji: "⊙", accent: "#8B5CF6" },
 };
 
 const EDGE_KIND_THEME: Record<
   LedSystemEdgeKind,
-  { label: string; color: string; dash?: string }
+  { color: string; dash?: string }
 > = {
-  signal: { label: "Signal (CAT-6)", color: "#F88000" },
-  fiber: { label: "Fiber", color: "#3B82F6", dash: "6 4" },
-  power: { label: "Power", color: "#EF4444", dash: "2 4" },
+  signal: { color: "#F88000" },
+  fiber: { color: "#3B82F6", dash: "6 4" },
+  power: { color: "#EF4444", dash: "2 4" },
 };
+
+const NODE_KIND_TRANSLATION_KEYS: Record<
+  LedSystemNodeKind,
+  Parameters<ReturnType<typeof useT>>[0]
+> = {
+  screen: "ledSystem.node.screen",
+  processor: "ledSystem.node.processor",
+  fiberbox: "ledSystem.node.fiberbox",
+  psu: "ledSystem.node.psu",
+  "media-server": "ledSystem.node.mediaServer",
+  "network-switch": "ledSystem.node.networkSwitch",
+  ups: "ledSystem.node.ups",
+  powerdistro: "ledSystem.node.powerDistro",
+  genlock: "ledSystem.node.genlock",
+};
+
+const EDGE_KIND_TRANSLATION_KEYS: Record<
+  LedSystemEdgeKind,
+  Parameters<ReturnType<typeof useT>>[0]
+> = {
+  signal: "ledSystem.edge.signal",
+  fiber: "ledSystem.edge.fiber",
+  power: "ledSystem.edge.power",
+};
+
+const DIRECTION_TRANSLATION_KEYS = {
+  left: "ledSystem.direction.left",
+  right: "ledSystem.direction.right",
+  up: "ledSystem.direction.up",
+  down: "ledSystem.direction.down",
+} as const;
 
 // ─── Custom node component ────────────────────────────────────────────
 
@@ -90,26 +122,29 @@ type NodeData = {
 };
 
 function SystemNode({ data, selected }: NodeProps<Node<NodeData>>) {
+  const t = useT();
   const { node, pixels, hasWarning } = data;
   const theme = NODE_KIND_THEME[node.kind];
   const subtitle = (() => {
     if (node.kind === "screen") {
       if (pixels > 0) return `${pixels.toLocaleString()} px`;
-      return "no pixel data";
+      return t("ledSystem.node.noPixelData");
     }
     if (node.kind === "processor") {
       const modelName = node.processorModel
         ? (NOVASTAR_PROCESSOR_OPTIONS.find(
             (o) => o.model === node.processorModel,
-          )?.name ?? "Other")
-        : "Other";
-      return node.isBackup ? `${modelName} · Backup` : modelName;
+          )?.name ?? t("ledSystem.other"))
+        : t("ledSystem.other");
+      return node.isBackup ? `${modelName} · ${t("ledSystem.backup")}` : modelName;
     }
-    if (node.kind === "fiberbox") return "Fiber converter";
+    if (node.kind === "fiberbox") return t("ledSystem.node.fiberConverter");
     if (node.kind === "psu") {
       const a = node.psuAmps ?? 0;
       const ph = node.psuPhases ?? 1;
-      return a > 0 ? `${a} A · ${ph}-phase` : "Sized in inspector";
+      return a > 0
+        ? t("ledSystem.node.phaseSummary", { amps: a, phases: ph })
+        : t("ledSystem.node.sizedInInspector");
     }
     return "";
   })();
@@ -177,7 +212,7 @@ function SystemNode({ data, selected }: NodeProps<Node<NodeData>>) {
         </span>
         {hasWarning && (
           <span
-            title="See warnings"
+            title={t("ledSystem.seeWarnings")}
             style={{
               color: "#EF4444",
               fontSize: 14,
@@ -301,6 +336,7 @@ export function LedSystemDesigner(props: Props) {
 }
 
 function DesignerInner({ system, onChange, screens, screenPixelsById }: Props) {
+  const t = useT();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [pendingEdgeKind, setPendingEdgeKind] =
@@ -579,7 +615,12 @@ function DesignerInner({ system, onChange, screens, screenPixelsById }: Props) {
       // Ordinal label: "Screen 3" etc.
       const ordinal =
         system.nodes.filter((n) => n.kind === kind).length + 1;
-      const label = extra?.label ?? `${NODE_KIND_THEME[kind].label} ${ordinal}`;
+      const label =
+        extra?.label ??
+        t("ledSystem.node.defaultLabel", {
+          kind: t(NODE_KIND_TRANSLATION_KEYS[kind]),
+          ordinal,
+        });
       const node: LedSystemNode = {
         id: newNodeId(),
         kind,
@@ -591,7 +632,7 @@ function DesignerInner({ system, onChange, screens, screenPixelsById }: Props) {
       updateNodes((nodes) => [...nodes, node]);
       setSelectedNodeId(node.id);
     },
-    [system.nodes, updateNodes],
+    [system.nodes, updateNodes, t],
   );
 
   const removeNode = useCallback(
@@ -734,6 +775,39 @@ function DesignerInner({ system, onChange, screens, screenPixelsById }: Props) {
             fitView={!system.viewport}
             fitViewOptions={{ padding: 0.3 }}
             proOptions={{ hideAttribution: true }}
+            ariaLabelConfig={{
+              "node.a11yDescription.default": t(
+                "ledSystem.a11y.nodeDescription",
+              ),
+              "node.a11yDescription.keyboardDisabled": t(
+                "ledSystem.a11y.nodeKeyboardDisabled",
+              ),
+              "node.a11yDescription.ariaLiveMessage": ({ direction, x, y }) =>
+                t("ledSystem.a11y.nodeMoved", {
+                  direction:
+                    direction in DIRECTION_TRANSLATION_KEYS
+                      ? t(
+                          DIRECTION_TRANSLATION_KEYS[
+                            direction as keyof typeof DIRECTION_TRANSLATION_KEYS
+                          ],
+                        )
+                      : direction,
+                  x,
+                  y,
+                }),
+              "edge.a11yDescription.default": t(
+                "ledSystem.a11y.edgeDescription",
+              ),
+              "controls.ariaLabel": t("ledSystem.a11y.controls"),
+              "controls.zoomIn.ariaLabel": t("ledSystem.a11y.zoomIn"),
+              "controls.zoomOut.ariaLabel": t("ledSystem.a11y.zoomOut"),
+              "controls.fitView.ariaLabel": t("ledSystem.a11y.fitView"),
+              "controls.interactive.ariaLabel": t(
+                "ledSystem.a11y.toggleInteractivity",
+              ),
+              "minimap.ariaLabel": t("ledSystem.a11y.minimap"),
+              "handle.ariaLabel": t("ledSystem.a11y.handle"),
+            }}
           >
             <Background
               variant={BackgroundVariant.Dots}
@@ -786,16 +860,13 @@ function DesignerInner({ system, onChange, screens, screenPixelsById }: Props) {
           />
         ) : (
           <div style={panelStyle}>
-            <div style={panelTitleStyle}>Inspector</div>
+            <div style={panelTitleStyle}>{t("ledSystem.inspector")}</div>
             <div style={{ color: "#A1A1AA", fontSize: 12 }}>
-              Click a node or cable on the canvas to edit its properties.
-              Drag from a node's right edge to its left edge to add a
-              cable; pick the cable type with the toolbar buttons before
-              connecting.
+              {t("ledSystem.inspectorHelp")}
             </div>
           </div>
         )}
-        <MetricsPanel metrics={metrics} />
+        <MetricsPanel metrics={metrics} system={system} />
       </div>
     </div>
   );
@@ -860,6 +931,25 @@ function Toolbar({
   pendingEdgeKind: LedSystemEdgeKind;
   onPendingEdgeKindChange: (k: LedSystemEdgeKind) => void;
 }) {
+  const t = useT();
+  const nodeLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        (Object.keys(NODE_KIND_TRANSLATION_KEYS) as LedSystemNodeKind[]).map(
+          (kind) => [kind, t(NODE_KIND_TRANSLATION_KEYS[kind])],
+        ),
+      ) as Record<LedSystemNodeKind, string>,
+    [t],
+  );
+  const edgeLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        (Object.keys(EDGE_KIND_TRANSLATION_KEYS) as LedSystemEdgeKind[]).map(
+          (kind) => [kind, t(EDGE_KIND_TRANSLATION_KEYS[kind])],
+        ),
+      ) as Record<LedSystemEdgeKind, string>,
+    [t],
+  );
   return (
     <div
       style={{
@@ -874,19 +964,19 @@ function Toolbar({
       }}
     >
       <span style={{ color: "#A1A1AA", fontSize: 11, marginRight: 4 }}>
-        Add:
+        {t("ledSystem.add")}:
       </span>
       {(Object.keys(NODE_KIND_THEME) as LedSystemNodeKind[]).map((k) => (
         <button
           key={k}
           style={buttonStyle}
           onClick={() => onAdd(k)}
-          title={`Add a new ${NODE_KIND_THEME[k].label}`}
+          title={t("ledSystem.addNew", { item: nodeLabels[k] })}
         >
           <span style={{ color: NODE_KIND_THEME[k].accent, marginRight: 4 }}>
             {NODE_KIND_THEME[k].emoji}
           </span>
-          {NODE_KIND_THEME[k].label}
+          {nodeLabels[k]}
         </button>
       ))}
       <span
@@ -898,7 +988,7 @@ function Toolbar({
         }}
       />
       <span style={{ color: "#A1A1AA", fontSize: 11, marginRight: 4 }}>
-        New cable:
+        {t("ledSystem.newCable")}:
       </span>
       {(Object.keys(EDGE_KIND_THEME) as LedSystemEdgeKind[]).map((k) => (
         <button
@@ -912,7 +1002,7 @@ function Toolbar({
           }}
           onClick={() => onPendingEdgeKindChange(k)}
         >
-          {EDGE_KIND_THEME[k].label}
+          {edgeLabels[k]}
         </button>
       ))}
       <span style={{ flex: 1 }} />
@@ -930,7 +1020,7 @@ function Toolbar({
           checked={indoor}
           onChange={(e) => onToggleIndoor(e.target.checked)}
         />
-        Indoor install
+        {t("ledSystem.indoorInstall")}
       </label>
     </div>
   );
@@ -947,6 +1037,7 @@ function NodeInspector({
   onChange: (patch: Partial<LedSystemNode>) => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   return (
     <div style={panelStyle}>
       <div
@@ -958,16 +1049,16 @@ function NodeInspector({
         }}
       >
         <div style={{ ...panelTitleStyle, marginBottom: 0, flex: 1 }}>
-          {NODE_KIND_THEME[node.kind].label}
+          {t(NODE_KIND_TRANSLATION_KEYS[node.kind])}
         </div>
         <button
           style={{ ...buttonStyle, color: "#EF4444", borderColor: "#7F1D1D" }}
           onClick={onRemove}
         >
-          Delete
+          {t("ledSystem.delete")}
         </button>
       </div>
-      <Field label="Label">
+      <Field label={t("ledSystem.label")}>
         <input
           style={inputStyle}
           value={node.label}
@@ -976,7 +1067,7 @@ function NodeInspector({
       </Field>
       {node.kind === "screen" && (
         <>
-          <Field label="Link to LED screen (optional)">
+          <Field label={t("ledSystem.linkScreen")}>
             <select
               style={inputStyle}
               value={node.screenRefId ?? ""}
@@ -984,10 +1075,11 @@ function NodeInspector({
                 onChange({ screenRefId: e.target.value || null })
               }
             >
-              <option value="">— Standalone (manual pixels) —</option>
+              <option value="">{t("ledSystem.standalone")}</option>
               {screens.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name || `Screen ${s.id.slice(0, 6)}`}
+                  {s.name ||
+                    t("ledSystem.screenFallback", { id: s.id.slice(0, 6) })}
                 </option>
               ))}
             </select>
@@ -996,7 +1088,7 @@ function NodeInspector({
             <div
               style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
             >
-              <Field label="Pixels W">
+              <Field label={t("ledSystem.pixelsW")}>
                 <input
                   style={inputStyle}
                   type="number"
@@ -1007,7 +1099,7 @@ function NodeInspector({
                   }
                 />
               </Field>
-              <Field label="Pixels H">
+              <Field label={t("ledSystem.pixelsH")}>
                 <input
                   style={inputStyle}
                   type="number"
@@ -1024,7 +1116,7 @@ function NodeInspector({
       )}
       {node.kind === "processor" && (
         <>
-          <Field label="Model">
+          <Field label={t("ledSystem.model")}>
             <select
               style={inputStyle}
               value={node.processorModel ?? ""}
@@ -1035,7 +1127,7 @@ function NodeInspector({
                 })
               }
             >
-              <option value="">Other / generic</option>
+              <option value="">{t("ledSystem.otherGeneric")}</option>
               {NOVASTAR_PROCESSOR_OPTIONS.map((o) => (
                 <option key={o.model} value={o.model}>
                   {o.name}
@@ -1058,13 +1150,13 @@ function NodeInspector({
               checked={!!node.isBackup}
               onChange={(e) => onChange({ isBackup: e.target.checked })}
             />
-            Backup / hot-spare
+            {t("ledSystem.hotSpare")}
           </label>
         </>
       )}
       {node.kind === "psu" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Field label="Amps">
+          <Field label={t("ledSystem.amps")}>
             <input
               style={inputStyle}
               type="number"
@@ -1075,7 +1167,7 @@ function NodeInspector({
               }
             />
           </Field>
-          <Field label="Phases">
+          <Field label={t("ledSystem.phases")}>
             <select
               style={inputStyle}
               value={node.psuPhases ?? 1}
@@ -1085,13 +1177,13 @@ function NodeInspector({
                 })
               }
             >
-              <option value={1}>1-phase</option>
-              <option value={3}>3-phase</option>
+              <option value={1}>{t("ledSystem.onePhase")}</option>
+              <option value={3}>{t("ledSystem.threePhase")}</option>
             </select>
           </Field>
         </div>
       )}
-      <Field label="Notes">
+      <Field label={t("ledSystem.notes")}>
         <textarea
           style={{ ...inputStyle, minHeight: 60, resize: "vertical" }}
           value={node.notes ?? ""}
@@ -1111,6 +1203,7 @@ function EdgeInspector({
   onChange: (patch: Partial<LedSystemEdge>) => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   return (
     <div style={panelStyle}>
       <div
@@ -1122,16 +1215,16 @@ function EdgeInspector({
         }}
       >
         <div style={{ ...panelTitleStyle, marginBottom: 0, flex: 1 }}>
-          Cable · {EDGE_KIND_THEME[edge.kind].label}
+          {t("ledSystem.cable")} · {t(EDGE_KIND_TRANSLATION_KEYS[edge.kind])}
         </div>
         <button
           style={{ ...buttonStyle, color: "#EF4444", borderColor: "#7F1D1D" }}
           onClick={onRemove}
         >
-          Delete
+          {t("ledSystem.delete")}
         </button>
       </div>
-      <Field label="Cable type">
+      <Field label={t("ledSystem.cableType")}>
         <select
           style={inputStyle}
           value={edge.kind}
@@ -1141,12 +1234,12 @@ function EdgeInspector({
         >
           {(Object.keys(EDGE_KIND_THEME) as LedSystemEdgeKind[]).map((k) => (
             <option key={k} value={k}>
-              {EDGE_KIND_THEME[k].label}
+              {t(EDGE_KIND_TRANSLATION_KEYS[k])}
             </option>
           ))}
         </select>
       </Field>
-      <Field label="Distance (m)">
+      <Field label={t("ledSystem.distance")}>
         <input
           style={inputStyle}
           type="number"
@@ -1158,7 +1251,7 @@ function EdgeInspector({
           }
         />
       </Field>
-      <Field label="Label (optional)">
+      <Field label={t("ledSystem.labelOptional")}>
         <input
           style={inputStyle}
           value={edge.label ?? ""}
@@ -1173,25 +1266,116 @@ function EdgeInspector({
 
 function MetricsPanel({
   metrics,
+  system,
 }: {
   metrics: ReturnType<typeof computeLedSystemMetrics>;
+  system: LedSystem;
 }) {
+  const t = useT();
+  const warningMessages = useMemo(
+    () =>
+      metrics.warnings.map((warning) => {
+        const edge = warning.edgeId
+          ? system.edges.find((candidate) => candidate.id === warning.edgeId)
+          : undefined;
+        const node = warning.nodeId
+          ? system.nodes.find((candidate) => candidate.id === warning.nodeId)
+          : undefined;
+        const processor = warning.nodeId
+          ? metrics.processors.find(
+              (candidate) => candidate.nodeId === warning.nodeId,
+            )
+          : undefined;
+        const limits = system.cableLimits ?? {
+          catMaxM: 90,
+          fiberMaxM: 300,
+          cvtPorts: 10,
+        };
+        if (warning.id.endsWith("-cat") && edge) {
+          return t("ledSystem.warning.signalDistance", {
+            distance: edge.distanceM,
+            limit: limits.catMaxM,
+          });
+        }
+        if (warning.id.endsWith("-fiber") && edge) {
+          return t("ledSystem.warning.fiberDistance", {
+            distance: edge.distanceM,
+            limit: limits.fiberMaxM,
+          });
+        }
+        if (warning.id.endsWith("-fanout") && node) {
+          const fanout = system.edges.filter(
+            (candidate) => {
+              if (
+                candidate.kind !== "signal" ||
+                (candidate.source !== node.id && candidate.target !== node.id)
+              ) {
+                return false;
+              }
+              const otherId =
+                candidate.source === node.id
+                  ? candidate.target
+                  : candidate.source;
+              return system.nodes.some(
+                (candidateNode) =>
+                  candidateNode.id === otherId &&
+                  candidateNode.kind === "screen",
+              );
+            },
+          ).length;
+          return t("ledSystem.warning.fanout", {
+            label: node.label,
+            count: fanout,
+            limit: limits.cvtPorts,
+          });
+        }
+        if (warning.id.endsWith("-ports") && processor) {
+          return t("ledSystem.warning.ports", {
+            label: processor.label,
+            used: processor.portsUsed,
+            capacity: processor.portCapacity ?? 0,
+          });
+        }
+        if (warning.id.endsWith("-px") && processor) {
+          return t("ledSystem.warning.pixels", {
+            label: processor.label,
+            used: processor.pixelsUsed.toLocaleString(),
+            capacity: (processor.pixelCapacity ?? 0).toLocaleString(),
+          });
+        }
+        if (warning.id.endsWith("-px-near") && processor) {
+          return t("ledSystem.warning.pixelsNear", {
+            label: processor.label,
+            percent: Math.round(
+              (processor.pixelsUsed / (processor.pixelCapacity ?? 1)) * 100,
+            ),
+          });
+        }
+        if (warning.id.endsWith("-orphan") && node) {
+          return t("ledSystem.warning.noFeed", { label: node.label });
+        }
+        return t("ledSystem.warning.generic");
+      }),
+    [metrics.processors, metrics.warnings, system, t],
+  );
   return (
     <div style={panelStyle}>
-      <div style={panelTitleStyle}>System overview</div>
-      <Stat label="Screens" value={metrics.counts.screens} />
+      <div style={panelTitleStyle}>{t("ledSystem.overview")}</div>
+      <Stat label={t("ledSystem.screens")} value={metrics.counts.screens} />
       <Stat
-        label="Processors"
+        label={t("ledSystem.processors")}
         value={`${metrics.counts.processors}${
           metrics.counts.backupProcessors > 0
-            ? ` (+${metrics.counts.backupProcessors} backup)`
+            ? ` ${t("ledSystem.backupCount", {
+                count: metrics.counts.backupProcessors,
+              })}`
             : ""
         }`}
       />
-      <Stat label="Fiber boxes" value={metrics.counts.fiberBoxes} />
-      <Stat label="Power supplies" value={metrics.counts.psus} />
+      <Stat label={t("ledSystem.fiberBoxes")} value={metrics.counts.fiberBoxes} />
+      <Stat label={t("ledSystem.powerSupplies")} value={metrics.counts.psus} />
       <Stat
-        label="Total pixels"
+        label={t("ledSystem.totalPixels")}
         value={
           metrics.pixelsTotal > 0
             ? metrics.pixelsTotal.toLocaleString()
@@ -1199,40 +1383,45 @@ function MetricsPanel({
         }
       />
       <Stat
-        label="Total power"
+        label={t("ledSystem.totalPower")}
         value={metrics.psuKw > 0 ? `${metrics.psuKw.toFixed(1)} kW` : "—"}
       />
-      <div style={{ ...panelTitleStyle, marginTop: 14 }}>Cabling</div>
+      <div style={{ ...panelTitleStyle, marginTop: 14 }}>
+        {t("ledSystem.cabling")}
+      </div>
       <Stat
-        label={`Signal · ${metrics.cables.signalCount} run${
-          metrics.cables.signalCount === 1 ? "" : "s"
-        }`}
+        label={t("ledSystem.cableRuns", {
+          kind: t("ledSystem.edge.signalShort"),
+          count: metrics.cables.signalCount,
+        })}
         value={`${metrics.cables.signalM} m`}
         accent={EDGE_KIND_THEME.signal.color}
       />
       <Stat
-        label={`Fiber · ${metrics.cables.fiberCount} run${
-          metrics.cables.fiberCount === 1 ? "" : "s"
-        }`}
+        label={t("ledSystem.cableRuns", {
+          kind: t("ledSystem.edge.fiber"),
+          count: metrics.cables.fiberCount,
+        })}
         value={`${metrics.cables.fiberM} m`}
         accent={EDGE_KIND_THEME.fiber.color}
       />
       <Stat
-        label={`Power · ${metrics.cables.powerCount} run${
-          metrics.cables.powerCount === 1 ? "" : "s"
-        }`}
+        label={t("ledSystem.cableRuns", {
+          kind: t("ledSystem.edge.power"),
+          count: metrics.cables.powerCount,
+        })}
         value={`${metrics.cables.powerM} m`}
         accent={EDGE_KIND_THEME.power.color}
       />
       <Stat
-        label="Total cable"
+        label={t("ledSystem.totalCable")}
         value={`${metrics.cables.totalM} m`}
       />
 
       {metrics.processors.length > 0 && (
         <>
           <div style={{ ...panelTitleStyle, marginTop: 14 }}>
-            Processor capacity
+            {t("ledSystem.processorCapacity")}
           </div>
           {metrics.processors.map((p) => (
             <ProcessorRow key={p.nodeId} p={p} />
@@ -1243,10 +1432,10 @@ function MetricsPanel({
       {metrics.warnings.length > 0 && (
         <>
           <div style={{ ...panelTitleStyle, marginTop: 14, color: "#EF4444" }}>
-            Warnings ({metrics.warnings.length})
+            {t("ledSystem.warnings", { count: metrics.warnings.length })}
           </div>
           <ul style={{ margin: 0, paddingLeft: 16, color: "#FCA5A5" }}>
-            {metrics.warnings.map((w) => (
+            {metrics.warnings.map((w, index) => (
               <li
                 key={w.id}
                 style={{
@@ -1255,7 +1444,7 @@ function MetricsPanel({
                   color: w.level === "danger" ? "#FCA5A5" : "#FCD34D",
                 }}
               >
-                {w.message}
+                {warningMessages[index]}
               </li>
             ))}
           </ul>
@@ -1270,6 +1459,7 @@ function ProcessorRow({
 }: {
   p: ReturnType<typeof computeLedSystemMetrics>["processors"][number];
 }) {
+  const t = useT();
   const portPct =
     p.portCapacity && p.portCapacity > 0
       ? Math.min(100, (p.portsUsed / p.portCapacity) * 100)
@@ -1306,28 +1496,34 @@ function ProcessorRow({
                 fontWeight: 400,
               }}
             >
-              backup
+              {t("ledSystem.backupLower")}
             </span>
           )}
         </span>
       </div>
       {p.portCapacity !== null && (
         <Bar
-          label={`Ports ${p.portsUsed} / ${p.portCapacity}`}
+          label={t("ledSystem.portsCapacity", {
+            used: p.portsUsed,
+            capacity: p.portCapacity,
+          })}
           pct={portPct}
           accent="#F88000"
         />
       )}
       {p.pixelCapacity !== null && (
         <Bar
-          label={`Pixels ${p.pixelsUsed.toLocaleString()} / ${p.pixelCapacity.toLocaleString()}`}
+          label={t("ledSystem.pixelsCapacity", {
+            used: p.pixelsUsed.toLocaleString(),
+            capacity: p.pixelCapacity.toLocaleString(),
+          })}
           pct={pxPct}
           accent="#3B82F6"
         />
       )}
       {p.portCapacity === null && p.pixelCapacity === null && (
         <div style={{ color: "#A1A1AA", fontSize: 11 }}>
-          Generic — no capacity check
+          {t("ledSystem.genericNoCapacity")}
         </div>
       )}
     </div>

@@ -5,6 +5,8 @@ import {
   AlertCircle, X, Search, Clock, Calendar, User, 
   Building, MapPin, CheckCircle, RefreshCw, Filter, MessageSquare, Trash2
 } from "lucide-react";
+import { useT } from "../../lib/i18n/I18nContext";
+import type { TranslationKey } from "../../lib/i18n/types";
 
 export type TaskAccessRole = "owner" | "editor" | "viewer";
 
@@ -54,13 +56,17 @@ function authHeaders(token: string | null): Record<string, string> {
 }
 
 const KANBAN_COLUMNS = [
-  { id: "Not Started", label: "To Do", color: "var(--text-muted)" },
-  { id: "Working on it", label: "In Progress", color: "var(--primary)" },
-  { id: "Stuck", label: "Blocked", color: "var(--danger)" },
-  { id: "Done", label: "Done", color: "var(--success)" },
+  { id: "Not Started", labelKey: "globalTasks.kanban.todo", color: "var(--text-muted)" },
+  { id: "Working on it", labelKey: "globalTasks.kanban.inProgress", color: "var(--primary)" },
+  { id: "Stuck", labelKey: "globalTasks.kanban.blocked", color: "var(--danger)" },
+  { id: "Done", labelKey: "globalTasks.status.done", color: "var(--success)" },
 ] as const;
 
 export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
+  const t = useT();
+  const statusKey: Record<GlobalTask["status"], TranslationKey> = { "Not Started": "globalTasks.status.notStarted", "Working on it": "globalTasks.status.working", Stuck: "globalTasks.status.stuck", Done: "globalTasks.status.done" };
+  const priorityKey: Record<GlobalTask["priority"], TranslationKey> = { Low: "globalTasks.priority.low", Medium: "globalTasks.priority.medium", High: "globalTasks.priority.high", Urgent: "globalTasks.priority.urgent" };
+  const departmentKey: Record<GlobalTask["department"], TranslationKey> = { Rigging: "globalTasks.department.rigging", Lights: "globalTasks.department.lights", LED: "globalTasks.department.led", Sound: "globalTasks.department.sound", Stage: "globalTasks.department.stage", Inspection: "globalTasks.department.inspection", Logistics: "globalTasks.department.logistics" };
   const [tasks, setTasks] = useState<GlobalTask[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [crew, setCrew] = useState<Freelancer[]>([]);
@@ -97,7 +103,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
       const token = await getToken();
       const headers = authHeaders(token);
       const res = await fetch(`${API_BASE}/api/tasks`, { headers });
-      if (!res.ok) throw new Error(await responseError(res, "Failed to fetch tasks"));
+      if (!res.ok) throw new Error(await responseError(res, t("globalTasks.error.fetch")));
       const json = await res.json();
       setTasks(json.tasks || []);
       setError(null);
@@ -106,7 +112,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
     } finally {
       if (!isBackground) setLoading(false);
     }
-  }, [getToken]);
+  }, [getToken, t]);
 
   useEffect(() => {
     fetchTasks();
@@ -160,7 +166,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
          headers,
          body: JSON.stringify(updates)
       });
-      if (!res.ok) throw new Error(await responseError(res, "Failed to update task"));
+      if (!res.ok) throw new Error(await responseError(res, t("globalTasks.error.update")));
       fetchTasks(true);
     } catch (err: any) {
        setTasks(prev => prev.map(t => t.id === id ? original : t));
@@ -170,7 +176,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
   };
 
   const handleDeleteTask = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this task?")) return;
+    if (!confirm(t("globalTasks.deleteConfirm"))) return;
     const original = tasks.find(t => t.id === id);
     if (!original || original.accessRole === "viewer") return;
     
@@ -184,7 +190,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
          method: "DELETE",
          headers
       });
-      if (!res.ok) throw new Error(await responseError(res, "Failed to delete task"));
+      if (!res.ok) throw new Error(await responseError(res, t("globalTasks.error.delete")));
       fetchTasks(true);
     } catch (err: any) {
       setTasks(prev => [...prev, original]);
@@ -208,7 +214,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
          headers,
          body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error(await responseError(res, "Failed to create task"));
+      if (!res.ok) throw new Error(await responseError(res, t("globalTasks.error.create")));
       
       await fetchTasks(true);
       setIsCreateModalOpen(false);
@@ -275,24 +281,24 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
     <div className="gt-container">
       <div className="gt-header">
         <div>
-          <h2 className="gt-header-title">Task Management</h2>
-          <p className="gt-header-subtitle">Cross-production control board.</p>
+          <h2 className="gt-header-title">{t("globalTasks.title")}</h2>
+          <p className="gt-header-subtitle">{t("globalTasks.subtitle")}</p>
         </div>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <div className="gt-view-toggle">
             <button 
               className={viewMode === "kanban" ? "is-active" : ""} 
               onClick={() => setViewMode("kanban")}
-              title="Kanban View"
+              title={t("globalTasks.action.kanban")}
             ><LayoutGrid size={16} /></button>
             <button 
               className={viewMode === "list" ? "is-active" : ""} 
               onClick={() => setViewMode("list")}
-              title="List View"
+              title={t("globalTasks.action.list")}
             ><ListIcon size={16} /></button>
           </div>
           <button className="ehs-primary-btn" onClick={() => setIsCreateModalOpen(true)}>
-            <Plus size={16} style={{ marginRight: "6px" }} /> Global Task
+            <Plus size={16} style={{ marginRight: "6px" }} /> {t("globalTasks.action.create")}
           </button>
         </div>
       </div>
@@ -300,45 +306,47 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
       <div className="gt-filters-bar">
         <Filter size={16} color="var(--text-muted)" />
         <select className="gt-filter-select" value={filterProject} onChange={e => setFilterProject(e.target.value)}>
-          <option value="">All Projects</option>
+          <option value="">{t("globalTasks.filter.project")}</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         <select className="gt-filter-select" value={filterDepartment} onChange={e => setFilterDepartment(e.target.value)}>
-          <option value="">All Departments</option>
-          {TASK_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+          <option value="">{t("globalTasks.filter.department")}</option>
+          {TASK_DEPARTMENTS.map(d => <option key={d} value={d}>{t(departmentKey[d])}</option>)}
         </select>
         <select className="gt-filter-select" value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
-          <option value="">All Priorities</option>
-          {TASK_PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+          <option value="">{t("globalTasks.filter.priority")}</option>
+          {TASK_PRIORITIES.map(p => <option key={p} value={p}>{t(priorityKey[p])}</option>)}
         </select>
         <select className="gt-filter-select" value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}>
-          <option value="">All Assignees</option>
-          <option value="UNASSIGNED">Unassigned</option>
+          <option value="">{t("globalTasks.filter.assignee")}</option>
+          <option value="UNASSIGNED">{t("globalTasks.unassigned")}</option>
           {crew.map(c => <option key={c.userId} value={c.userId}>{c.fullName}</option>)}
         </select>
         
         <div style={{ flex: 1 }} />
         <select className="gt-filter-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
-          <option value="created">Sort: Created</option>
-          <option value="dueDate">Sort: Due Date</option>
-          <option value="priority">Sort: Priority</option>
+          <option value="created">{t("globalTasks.sort.created")}</option>
+          <option value="dueDate">{t("globalTasks.sort.dueDate")}</option>
+          <option value="priority">{t("globalTasks.sort.priority")}</option>
         </select>
-        {loading && <RefreshCw size={16} className="gt-spin" color="var(--text-muted)" />}
+        {loading && <RefreshCw size={16} className="gt-spin" color="var(--text-muted)" aria-label={t("globalTasks.loading")} />}
       </div>
 
       {error && (
         <div className="gt-error-banner">
           <AlertCircle size={16} /> {error}
+          <button className="ehs-ghost-btn" onClick={() => fetchTasks()}>{t("globalTasks.action.retry")}</button>
+          <button className="btn-icon" aria-label={t("globalTasks.action.dismiss")} title={t("globalTasks.action.dismiss")} onClick={() => setError(null)}><X size={16} /></button>
         </div>
       )}
 
       {!loading && tasks.length === 0 && !error ? (
         <div className="ehs-empty-state" style={{ marginTop: "40px" }}>
           <div className="ehs-empty-state-icon"><CheckSquare size={32} /></div>
-          <h3>No tasks found</h3>
-          <p>Create a global task or check back later.</p>
+          <h3>{t("globalTasks.empty.title")}</h3>
+          <p>{t("globalTasks.empty.body")}</p>
           <button className="ehs-primary-btn" style={{ marginTop: "16px" }} onClick={() => setIsCreateModalOpen(true)}>
-            Create Global Task
+            {t("globalTasks.empty.action")}
           </button>
         </div>
       ) : (
@@ -352,7 +360,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                 onDrop={e => handleDrop(e, col.id)}
               >
                 <div className="kanban-col-header" style={{ borderTopColor: col.color }}>
-                  <span>{col.label}</span>
+                  <span>{t(col.labelKey)}</span>
                   <span className="kanban-count">{sortedFilteredTasks.filter(t => t.status === col.id).length}</span>
                 </div>
                 <div className="kanban-col-body">
@@ -370,11 +378,11 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                       <div className="gt-card-title">{task.title}</div>
                       <div className="gt-card-meta">
                         <div className="gt-meta-left">
-                          <span className={`gt-priority-badge gt-priority-${task.priority}`}>{task.priority}</span>
-                          <span className="gt-dept-badge">{task.department}</span>
+                          <span className={`gt-priority-badge gt-priority-${task.priority}`}>{t(priorityKey[task.priority])}</span>
+                          <span className="gt-dept-badge">{t(departmentKey[task.department])}</span>
                         </div>
                         <div className="gt-meta-right">
-                          {task.dueDate && <span className="gt-due-badge" title="Due Date"><Calendar size={10} /> {format(parseISO(task.dueDate), "MMM d")}</span>}
+                          {task.dueDate && <span className="gt-due-badge" title={t("globalTasks.dueDate")}><Calendar size={10} /> {format(parseISO(task.dueDate), "MMM d")}</span>}
                           {task.assignedCrewName && (
                             <div className="gt-assignee-badge" title={task.assignedCrewName}>
                               <User size={10} /> {task.assignedCrewName.split(" ")[0]}
@@ -393,13 +401,13 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
             <table className="gt-table">
               <thead>
                 <tr>
-                  <th>Project</th>
-                  <th>Task</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Department</th>
-                  <th>Assignee</th>
-                  <th>Due Date</th>
+                  <th>{t("globalTasks.table.project")}</th>
+                  <th>{t("globalTasks.table.task")}</th>
+                  <th>{t("globalTasks.table.status")}</th>
+                  <th>{t("globalTasks.table.priority")}</th>
+                  <th>{t("globalTasks.table.department")}</th>
+                  <th>{t("globalTasks.table.assignee")}</th>
+                  <th>{t("globalTasks.table.dueDate")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -418,22 +426,22 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                         disabled={task.accessRole === "viewer"}
                         className={`gt-table-select gt-status-${task.status.replace(/\s+/g, "")}`}
                       >
-                        {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                        {TASK_STATUSES.map(s => <option key={s} value={s}>{t(statusKey[s])}</option>)}
                       </select>
                     </td>
                     <td>
-                      <span className={`gt-priority-badge gt-priority-${task.priority}`}>{task.priority}</span>
+                      <span className={`gt-priority-badge gt-priority-${task.priority}`}>{t(priorityKey[task.priority])}</span>
                     </td>
-                    <td><span className="gt-dept-badge">{task.department}</span></td>
+                    <td><span className="gt-dept-badge">{t(departmentKey[task.department])}</span></td>
                     <td>
                       {task.assignedCrewName ? (
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><User size={12} color="var(--text-muted)" /> {task.assignedCrewName}</div>
-                      ) : <span style={{ color: "var(--text-muted)" }}>Unassigned</span>}
+                      ) : <span style={{ color: "var(--text-muted)" }}>{t("globalTasks.unassigned")}</span>}
                     </td>
                     <td>
                       {task.dueDate ? (
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}><Calendar size={12} color="var(--text-muted)" /> {format(parseISO(task.dueDate), "MMM d, yyyy")}</div>
-                      ) : "-"}
+                      ) : t("globalTasks.noDueDate")}
                     </td>
                   </tr>
                 ))}
@@ -448,19 +456,19 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
         <div className="gt-sidebar-overlay" onClick={() => setSelectedTask(null)}>
           <div className="gt-sidebar" onClick={e => e.stopPropagation()}>
             <div className="gt-sidebar-header">
-              <h3 style={{ fontSize: "16px", margin: 0 }}>Task Details</h3>
-              <button className="btn-icon" onClick={() => setSelectedTask(null)}><X size={16} /></button>
+              <h3 style={{ fontSize: "16px", margin: 0 }}>{t("globalTasks.sidebar.title")}</h3>
+              <button className="btn-icon" aria-label={t("common.close")} title={t("common.close")} onClick={() => setSelectedTask(null)}><X size={16} /></button>
             </div>
             <div className="gt-sidebar-body">
               <div className="ehs-form-group">
-                <label>Project</label>
+                <label>{t("globalTasks.sidebar.project")}</label>
                 <div style={{ padding: "8px 12px", background: "var(--input-bg)", borderRadius: "6px", fontSize: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <strong>{selectedTask.projectName}</strong>
-                  <button className="ehs-ghost-btn" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => onOpenProject(selectedTask.projectId)}>Open</button>
+                  <button className="ehs-ghost-btn" style={{ padding: "4px 8px", fontSize: "12px" }} onClick={() => onOpenProject(selectedTask.projectId)}>{t("globalTasks.sidebar.open")}</button>
                 </div>
               </div>
               <div className="ehs-form-group">
-                <label>Title</label>
+                <label>{t("globalTasks.sidebar.taskTitle")}</label>
                 <textarea 
                   className="ehs-input" 
                   rows={2}
@@ -476,7 +484,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <div className="ehs-form-group">
-                  <label>Status</label>
+                  <label>{t("globalTasks.sidebar.status")}</label>
                   <select 
                     className={`ehs-input gt-status-${selectedTask.status.replace(/\s+/g, "")}`} 
                     value={selectedTask.status} 
@@ -487,11 +495,11 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                       safeUpdateTask(selectedTask.id, { status: val });
                     }}
                   >
-                    {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {TASK_STATUSES.map(s => <option key={s} value={s}>{t(statusKey[s])}</option>)}
                   </select>
                 </div>
                 <div className="ehs-form-group">
-                  <label>Priority</label>
+                  <label>{t("globalTasks.sidebar.priority")}</label>
                   <select 
                     className={`ehs-input gt-priority-${selectedTask.priority}`} 
                     value={selectedTask.priority} 
@@ -502,11 +510,11 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                       safeUpdateTask(selectedTask.id, { priority: val });
                     }}
                   >
-                    {TASK_PRIORITIES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {TASK_PRIORITIES.map(s => <option key={s} value={s}>{t(priorityKey[s])}</option>)}
                   </select>
                 </div>
                 <div className="ehs-form-group">
-                  <label>Department</label>
+                  <label>{t("globalTasks.sidebar.department")}</label>
                   <select 
                     className="ehs-input" 
                     value={selectedTask.department} 
@@ -517,11 +525,11 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                       safeUpdateTask(selectedTask.id, { department: val });
                     }}
                   >
-                    {TASK_DEPARTMENTS.map(s => <option key={s} value={s}>{s}</option>)}
+                    {TASK_DEPARTMENTS.map(s => <option key={s} value={s}>{t(departmentKey[s])}</option>)}
                   </select>
                 </div>
                 <div className="ehs-form-group">
-                  <label>Due Date</label>
+                  <label>{t("globalTasks.sidebar.dueDate")}</label>
                   <input 
                     type="date" 
                     className="ehs-input" 
@@ -536,7 +544,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                 </div>
               </div>
               <div className="ehs-form-group">
-                <label>Assignee</label>
+                <label>{t("globalTasks.sidebar.assignee")}</label>
                 <select 
                   className="ehs-input" 
                   value={selectedTask.assignedUserId || ""} 
@@ -548,18 +556,18 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                     safeUpdateTask(selectedTask.id, { assignedUserId: val });
                   }}
                 >
-                  <option value="">Unassigned</option>
+                  <option value="">{t("globalTasks.unassigned")}</option>
                   {crew.map(c => <option key={c.userId} value={c.userId}>{c.fullName}</option>)}
                 </select>
               </div>
               <div className="ehs-form-group">
-                <label>Description & Notes</label>
+                <label>{t("globalTasks.sidebar.description")}</label>
                 <textarea 
                   className="ehs-input" 
                   rows={6}
                   value={selectedTask.description || ""}
                   disabled={selectedTask.accessRole === "viewer"}
-                  placeholder="Add details, links, or notes..."
+                  placeholder={t("globalTasks.sidebar.descriptionPlaceholder")}
                   onChange={e => setSelectedTask({...selectedTask, description: e.target.value})}
                   onBlur={e => {
                     const original = tasks.find(t => t.id === selectedTask.id);
@@ -569,9 +577,9 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
               </div>
             </div>
             <div className="gt-sidebar-footer">
-              <span className="gt-meta-text">Created {format(parseISO(selectedTask.createdAt), "MMM d, yyyy, HH:mm")}</span>
+              <span className="gt-meta-text">{t("globalTasks.sidebar.created", { date: format(parseISO(selectedTask.createdAt), "MMM d, yyyy, HH:mm") })}</span>
               {selectedTask.accessRole !== "viewer" && (
-                <button className="btn-icon" style={{ color: "var(--danger)" }} title="Delete Task" onClick={() => handleDeleteTask(selectedTask.id)}>
+                <button className="btn-icon" style={{ color: "var(--danger)" }} aria-label={t("globalTasks.sidebar.delete")} title={t("globalTasks.sidebar.delete")} onClick={() => handleDeleteTask(selectedTask.id)}>
                   <Trash2 size={16} />
                 </button>
               )}
@@ -585,61 +593,61 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
         <div className="ehs-modal-backdrop" onClick={() => !createSaving && setIsCreateModalOpen(false)}>
           <div className="ehs-modal" onClick={e => e.stopPropagation()}>
             <div className="ehs-modal-header">
-              <h3>Create Global Task</h3>
-              <button className="btn-icon" onClick={() => setIsCreateModalOpen(false)}><X size={16} /></button>
+              <h3>{t("globalTasks.modal.title")}</h3>
+              <button className="btn-icon" aria-label={t("common.close")} title={t("common.close")} onClick={() => setIsCreateModalOpen(false)}><X size={16} /></button>
             </div>
             <form onSubmit={handleCreateSubmit}>
               <div className="ehs-modal-body">
                 <div className="ehs-form-group">
-                  <label>Project</label>
+                  <label>{t("globalTasks.modal.project")}</label>
                   <select required className="ehs-input" value={createDraft.projectId} onChange={e => setCreateDraft({...createDraft, projectId: e.target.value})}>
-                    <option value="">-- Select Active Project --</option>
+                    <option value="">{t("globalTasks.modal.project.none")}</option>
                     {activeProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
                 <div className="ehs-form-group">
-                  <label>Title</label>
-                  <input required className="ehs-input" value={createDraft.title} onChange={e => setCreateDraft({...createDraft, title: e.target.value})} placeholder="What needs to be done?" />
+                  <label>{t("globalTasks.modal.taskTitle")}</label>
+                  <input required className="ehs-input" value={createDraft.title} onChange={e => setCreateDraft({...createDraft, title: e.target.value})} placeholder={t("globalTasks.modal.titlePlaceholder")} />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                   <div className="ehs-form-group">
-                    <label>Status</label>
+                    <label>{t("globalTasks.modal.status")}</label>
                     <select required className="ehs-input" value={createDraft.status} onChange={e => setCreateDraft({...createDraft, status: e.target.value as any})}>
-                      {TASK_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                      {TASK_STATUSES.map(s => <option key={s} value={s}>{t(statusKey[s])}</option>)}
                     </select>
                   </div>
                   <div className="ehs-form-group">
-                    <label>Priority</label>
+                    <label>{t("globalTasks.modal.priority")}</label>
                     <select required className="ehs-input" value={createDraft.priority} onChange={e => setCreateDraft({...createDraft, priority: e.target.value as any})}>
-                      {TASK_PRIORITIES.map(s => <option key={s} value={s}>{s}</option>)}
+                      {TASK_PRIORITIES.map(s => <option key={s} value={s}>{t(priorityKey[s])}</option>)}
                     </select>
                   </div>
                   <div className="ehs-form-group">
-                    <label>Department</label>
+                    <label>{t("globalTasks.modal.department")}</label>
                     <select required className="ehs-input" value={createDraft.department} onChange={e => setCreateDraft({...createDraft, department: e.target.value as any})}>
-                      {TASK_DEPARTMENTS.map(s => <option key={s} value={s}>{s}</option>)}
+                      {TASK_DEPARTMENTS.map(s => <option key={s} value={s}>{t(departmentKey[s])}</option>)}
                     </select>
                   </div>
                   <div className="ehs-form-group">
-                    <label>Due Date</label>
+                    <label>{t("globalTasks.modal.dueDate")}</label>
                     <input type="date" className="ehs-input" value={createDraft.dueDate} onChange={e => setCreateDraft({...createDraft, dueDate: e.target.value})} />
                   </div>
                 </div>
                 <div className="ehs-form-group">
-                  <label>Assignee</label>
+                  <label>{t("globalTasks.modal.assignee")}</label>
                   <select className="ehs-input" value={createDraft.assignedUserId} onChange={e => setCreateDraft({...createDraft, assignedUserId: e.target.value})}>
-                    <option value="">Unassigned</option>
+                    <option value="">{t("globalTasks.unassigned")}</option>
                     {crew.map(c => <option key={c.userId} value={c.userId}>{c.fullName}</option>)}
                   </select>
                 </div>
                 <div className="ehs-form-group">
-                  <label>Description</label>
-                  <textarea className="ehs-input" rows={4} value={createDraft.description} onChange={e => setCreateDraft({...createDraft, description: e.target.value})} placeholder="Optional details..." />
+                  <label>{t("globalTasks.modal.description")}</label>
+                  <textarea className="ehs-input" rows={4} value={createDraft.description} onChange={e => setCreateDraft({...createDraft, description: e.target.value})} placeholder={t("globalTasks.modal.descriptionPlaceholder")} />
                 </div>
               </div>
               <div className="ehs-modal-footer">
-                <button type="button" className="ehs-ghost-btn" onClick={() => setIsCreateModalOpen(false)}>Cancel</button>
-                <button type="submit" className="ehs-primary-btn" disabled={createSaving}>{createSaving ? "Saving..." : "Create Task"}</button>
+                <button type="button" className="ehs-ghost-btn" onClick={() => setIsCreateModalOpen(false)}>{t("globalTasks.modal.cancel")}</button>
+                <button type="submit" className="ehs-primary-btn" disabled={createSaving}>{createSaving ? t("globalTasks.modal.saving") : t("globalTasks.modal.create")}</button>
               </div>
             </form>
           </div>

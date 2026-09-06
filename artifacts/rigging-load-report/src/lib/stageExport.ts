@@ -10,21 +10,25 @@ import {
   type StageDeckKey,
 } from "./stage";
 
-/** Human label for a male-connector compass side (matches the on-screen
- *  dropdown in StageReportView). */
-const CONNECTOR_LABEL: Record<ConnectorSide, string> = {
-  N: "Upstage (back)",
-  E: "Stage right",
-  S: "Downstage (front)",
-  W: "Stage left",
-};
-
-/** Compact compass label used in tables and badges. */
-const CONNECTOR_SHORT: Record<ConnectorSide, string> = {
-  N: "↑ Up",
-  E: "→ SR",
-  S: "↓ Down",
-  W: "← SL",
+export type StageExportCopy = {
+  untitled: string; productionTool: string; buildSheet: string; generated: string;
+  print: string; close: string; venueProject: string; date: string; projectManager: string;
+  layoutMode: string; manualPlacement: string; autoTiled: string; buildDirection: string;
+  rightToLeft: string; leftToRight: string; maleSideFaces: string; overrides: (count: number) => string;
+  layout: string; noDecksManual: string; handrail: string; leg: string;
+  maleEdges: string; maleEdgesDetail: string; connectorGuidance: string;
+  width: string; depth: string; area: string; totalWeight: string; cannotTile: string;
+  decks: string; size: string; quantity: string; unit: string; total: string; noDecks: string;
+  subtotal: string; legs: string; perDeck: string; sharedCorners: string; pieces: string;
+  unitWeight: string; bracingRequired: string; buildSequence: string; deck: string;
+  maleSide: string; legsToInstall: string; sequenceHelp: string; loadCapacity: string;
+  distributedLoad: string; placedAreaOnly: string; ratedSwl: string; capacityHelp: string;
+  handrails: string; side: string; length: string; weight: string; noHandrails: string;
+  notes: string; grandTotal: string; footer: string; popupError: string;
+  connectorLabel: Record<ConnectorSide, string>; connectorShort: Record<ConnectorSide, string>;
+  railSide: Record<"front" | "back" | "left" | "right", string>;
+  legsAdded: (count: number) => string; deckCount: (count: number) => string;
+  legCount: (count: number) => string;
 };
 
 /** EHS orange — male connector edge stripe. Matches StageReportView. */
@@ -46,8 +50,8 @@ const DECK_LABEL: Record<StageDeckKey, string> = {
   "0.5x1": "0.5 × 1",
 };
 
-const fmt = (n: number, d = 1) =>
-  n.toLocaleString("en-US", { maximumFractionDigits: d });
+const fmt = (n: number, locale: string, d = 1) =>
+  n.toLocaleString(locale, { maximumFractionDigits: d });
 
 const escapeHtml = (s: string): string =>
   s
@@ -62,7 +66,7 @@ const escapeHtml = (s: string): string =>
  *  click-catcher cells. Includes deck colour fills, deck labels, leg
  *  dots (shared or per-deck), rails, and dimension labels along the
  *  edges. The SVG is sized to roughly fit on an A4 portrait page. */
-function buildStageSvg(stage: Stage, calc: StageCalc): string {
+function buildStageSvg(stage: Stage, calc: StageCalc, locale: string, copy: StageExportCopy): string {
   const PAD = 32;
   const MAX = 720;
   const HALF_M = 0.5;
@@ -161,7 +165,7 @@ function buildStageSvg(stage: Stage, calc: StageCalc): string {
       );
       if (showCaption) {
         parts.push(
-          `<text x="${cxDeck}" y="${captionY}" text-anchor="middle" dominant-baseline="central" font-size="${captionFont}" font-family="system-ui, sans-serif" fill="#fff" font-weight="600">+${asm.legsAdded} ${asm.legsAdded === 1 ? "leg" : "legs"}</text>`,
+          `<text x="${cxDeck}" y="${captionY}" text-anchor="middle" dominant-baseline="central" font-size="${captionFont}" font-family="system-ui, sans-serif" fill="#fff" font-weight="600">+${asm.legsAdded} ${copy.legsAdded(asm.legsAdded)}</text>`,
         );
       }
     }
@@ -279,10 +283,10 @@ function buildStageSvg(stage: Stage, calc: StageCalc): string {
 
   // Dimension labels: width across the top, depth along the left side.
   parts.push(
-    `<text x="${PAD + LABEL + (canvasW * scale) / 2}" y="${PAD - 8}" text-anchor="middle" font-size="13" font-family="system-ui, sans-serif" fill="#0f172a" font-weight="600">${fmt(canvasW, 2)} m</text>`,
+    `<text x="${PAD + LABEL + (canvasW * scale) / 2}" y="${PAD - 8}" text-anchor="middle" font-size="13" font-family="system-ui, sans-serif" fill="#0f172a" font-weight="600">${fmt(canvasW, locale, 2)} m</text>`,
   );
   parts.push(
-    `<text x="${PAD + LABEL - 8}" y="${PAD + (canvasD * scale) / 2}" text-anchor="middle" font-size="13" font-family="system-ui, sans-serif" fill="#0f172a" font-weight="600" transform="rotate(-90 ${PAD + LABEL - 8} ${PAD + (canvasD * scale) / 2})">${fmt(canvasD, 2)} m</text>`,
+    `<text x="${PAD + LABEL - 8}" y="${PAD + (canvasD * scale) / 2}" text-anchor="middle" font-size="13" font-family="system-ui, sans-serif" fill="#0f172a" font-weight="600" transform="rotate(-90 ${PAD + LABEL - 8} ${PAD + (canvasD * scale) / 2})">${fmt(canvasD, locale, 2)} m</text>`,
   );
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;height:auto;display:block">${parts.join(
@@ -313,14 +317,16 @@ export function buildStageReportHtml(input: {
   calc: StageCalc;
   project: StageExportProject;
   logoDataUrl: string | null;
+  locale: string;
+  copy: StageExportCopy;
 }): string {
-  const { stage, calc, project, logoDataUrl } = input;
+  const { stage, calc, project, logoDataUrl, locale, copy } = input;
   const usedDecks = STAGE_DECKS.filter((d) => calc.deckCounts[d.key] > 0);
   const legSpec = STAGE_LEGS.find((l) => l.heightCm === stage.legHeightCm);
   const bracing = nivtecBracingNote(stage.legHeightCm);
-  const stageName = stage.name.trim() || "Untitled stage";
-  const generatedAt = new Date().toLocaleString();
-  const svg = buildStageSvg(stage, calc);
+  const stageName = stage.name.trim() || copy.untitled;
+  const generatedAt = new Date().toLocaleString(locale);
+  const svg = buildStageSvg(stage, calc, locale, copy);
 
   // Effective stage size: in auto mode it's the entered W × D; in manual
   // mode it's the bounding box of the placed decks.
@@ -337,33 +343,33 @@ export function buildStageReportHtml(input: {
 
   const railsRows =
     calc.railBreakdown.length === 0
-      ? `<tr><td colspan="4" class="muted">— no handrails —</td></tr>`
+      ? `<tr><td colspan="4" class="muted">— ${copy.noHandrails} —</td></tr>`
       : calc.railBreakdown
           .map(
             (r) =>
-              `<tr><td style="text-transform:capitalize">${r.side}</td><td>${fmt(r.lengthM, 1)} m</td><td>${r.count2m}</td><td>${r.count1m}</td></tr>`,
+              `<tr><td>${copy.railSide[r.side]}</td><td>${fmt(r.lengthM, locale, 1)} m</td><td>${r.count2m}</td><td>${r.count1m}</td></tr>`,
           )
           .join("") +
-        `<tr class="row-total"><td>Subtotal</td><td>${fmt(calc.railLengthTotal, 1)} m</td><td>${calc.rails2mTotal}</td><td>${calc.rails1mTotal}</td></tr>` +
-        `<tr><td colspan="3">Weight</td><td>${fmt(calc.railWeight, 1)} kg</td></tr>`;
+        `<tr class="row-total"><td>${copy.subtotal}</td><td>${fmt(calc.railLengthTotal, locale, 1)} m</td><td>${calc.rails2mTotal}</td><td>${calc.rails1mTotal}</td></tr>` +
+        `<tr><td colspan="3">${copy.weight}</td><td>${fmt(calc.railWeight, locale, 1)} kg</td></tr>`;
 
   const decksRows =
     usedDecks.length === 0
-      ? `<tr><td colspan="4" class="muted">— no decks placed —</td></tr>`
+      ? `<tr><td colspan="4" class="muted">— ${copy.noDecks} —</td></tr>`
       : usedDecks
           .map(
             (d) =>
-              `<tr><td>${d.label}</td><td>${calc.deckCounts[d.key]}</td><td>${fmt(d.weight, 1)} kg</td><td>${fmt(d.weight * calc.deckCounts[d.key], 1)} kg</td></tr>`,
+              `<tr><td>${d.label}</td><td>${calc.deckCounts[d.key]}</td><td>${fmt(d.weight, locale, 1)} kg</td><td>${fmt(d.weight * calc.deckCounts[d.key], locale, 1)} kg</td></tr>`,
           )
           .join("") +
-        `<tr class="row-total"><td>Subtotal</td><td></td><td></td><td>${fmt(calc.deckWeight, 1)} kg</td></tr>`;
+        `<tr class="row-total"><td>${copy.subtotal}</td><td></td><td></td><td>${fmt(calc.deckWeight, locale, 1)} kg</td></tr>`;
 
   // Build sequence: numbered, in the order the crew should assemble.
   // Mirrors the on-screen badges (1, 2, 3…) and shows how many legs
   // are added per deck so the build crew can pre-stage hardware.
   const assemblyRows =
     calc.assembly.length === 0
-      ? `<tr><td colspan="4" class="muted">— no decks placed —</td></tr>`
+      ? `<tr><td colspan="4" class="muted">— ${copy.noDecks} —</td></tr>`
       : calc.assembly
           .map((a) => {
             const deck = calc.decks[a.sequence - 1];
@@ -375,22 +381,22 @@ export function buildStageReportHtml(input: {
                 ] !== undefined
               : false;
             const sideCell = side
-              ? `${CONNECTOR_SHORT[side]}${isOverride ? ' <span style="color:#b45309;font-weight:600">●</span>' : ""}`
+              ? `${copy.connectorShort[side]}${isOverride ? ' <span style="color:#b45309;font-weight:600">●</span>' : ""}`
               : "—";
-            return `<tr><td><strong>${a.sequence}</strong></td><td>${sizeLabel}</td><td>${sideCell}</td><td>+${a.legsAdded} ${a.legsAdded === 1 ? "leg" : "legs"}</td></tr>`;
+            return `<tr><td><strong>${a.sequence}</strong></td><td>${sizeLabel}</td><td>${sideCell}</td><td>+${a.legsAdded} ${copy.legsAdded(a.legsAdded)}</td></tr>`;
           })
           .join("") +
-        `<tr class="row-total"><td>Total</td><td>${calc.decks.length} decks</td><td></td><td>${calc.legCount} legs</td></tr>`;
+        `<tr class="row-total"><td>${copy.total}</td><td>${calc.decks.length} ${copy.deckCount(calc.decks.length)}</td><td></td><td>${calc.legCount} ${copy.legCount(calc.legCount)}</td></tr>`;
 
   const railsEnabled = (
     ["front", "back", "left", "right"] as const
   ).filter((side) => stage.rails[side]);
 
   const html = `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(locale)}">
 <head>
 <meta charset="utf-8" />
-<title>Stage Build Sheet — ${escapeHtml(stageName)}</title>
+<title>${copy.buildSheet} — ${escapeHtml(stageName)}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -505,20 +511,20 @@ export function buildStageReportHtml(input: {
 </head>
 <body>
 <div class="print-bar no-print">
-  <button onclick="window.print()" class="primary">Print / Save as PDF</button>
-  <button onclick="window.close()">Close</button>
+   <button onclick="window.print()" class="primary">${copy.print}</button>
+   <button onclick="window.close()">${copy.close}</button>
 </div>
 
 <div class="header">
   <div class="header-left">
     ${logoDataUrl ? `<img src="${logoDataUrl}" alt="EHS" class="logo" />` : ""}
     <div class="brand">
-      <strong>Production Tool</strong>
-      Stage Build Sheet
+       <strong>${copy.productionTool}</strong>
+       ${copy.buildSheet}
     </div>
   </div>
   <div class="header-right">
-    Generated ${escapeHtml(generatedAt)}
+     ${copy.generated} ${escapeHtml(generatedAt)}
   </div>
 </div>
 
@@ -526,11 +532,11 @@ export function buildStageReportHtml(input: {
 
 <div class="meta-grid">
   <div class="meta-item">
-    <div class="label">Venue / Project</div>
+     <div class="label">${copy.venueProject}</div>
     <div class="value">${escapeHtml(project.venue || "—")}</div>
   </div>
   <div class="meta-item">
-    <div class="label">Date</div>
+     <div class="label">${copy.date}</div>
     <div class="value">${
       project.endDate && project.endDate !== project.date
         ? `${escapeHtml(project.date || "—")} → ${escapeHtml(project.endDate)}`
@@ -538,32 +544,32 @@ export function buildStageReportHtml(input: {
     }</div>
   </div>
   <div class="meta-item">
-    <div class="label">Project manager</div>
+     <div class="label">${copy.projectManager}</div>
     <div class="value">${escapeHtml(project.preparedBy || "—")}</div>
   </div>
   <div class="meta-item">
-    <div class="label">Layout mode</div>
-    <div class="value">${stage.editMode === "manual" ? "Manual placement" : "Auto-tiled"}</div>
+     <div class="label">${copy.layoutMode}</div>
+     <div class="value">${stage.editMode === "manual" ? copy.manualPlacement : copy.autoTiled}</div>
   </div>
   <div class="meta-item">
-    <div class="label">Build direction</div>
-    <div class="value">${stage.buildOrder === "rightToLeft" ? "Right → left" : "Left → right"}</div>
+     <div class="label">${copy.buildDirection}</div>
+     <div class="value">${stage.buildOrder === "rightToLeft" ? copy.rightToLeft : copy.leftToRight}</div>
   </div>
   <div class="meta-item">
-    <div class="label">Male side faces</div>
-    <div class="value">${CONNECTOR_LABEL[stage.connectorSide]}${
+     <div class="label">${copy.maleSideFaces}</div>
+     <div class="value">${copy.connectorLabel[stage.connectorSide]}${
       Object.keys(stage.connectorOverrides).length > 0
-        ? ` <span style="color:#b45309;font-weight:600">(+${Object.keys(stage.connectorOverrides).length} override${Object.keys(stage.connectorOverrides).length === 1 ? "" : "s"})</span>`
+        ? ` <span style="color:#b45309;font-weight:600">(${copy.overrides(Object.keys(stage.connectorOverrides).length)})</span>`
         : ""
     }</div>
   </div>
 </div>
 
-<h2>Stage Layout (top-down)</h2>
+<h2>${copy.layout}</h2>
 <div class="stage-visual">
   ${
     stage.editMode === "manual" && calc.decks.length === 0
-      ? `<div style="padding:32px;text-align:center;color:#64748b;font-style:italic">No decks placed yet — switch to Manual mode in the app and add decks before exporting.</div>`
+      ? `<div style="padding:32px;text-align:center;color:#64748b;font-style:italic">${copy.noDecksManual}</div>`
       : svg
   }
   <div class="legend">
@@ -571,110 +577,104 @@ export function buildStageReportHtml(input: {
     <span><i style="background:${DECK_FILL["1x1"]}"></i> 1 × 1</span>
     <span><i style="background:${DECK_FILL["0.5x2"]}"></i> 0.5 × 2</span>
     <span><i style="background:${DECK_FILL["0.5x1"]}"></i> 0.5 × 1</span>
-    <span><i style="background:#dc2626"></i> Handrail</span>
-    <span><i class="leg"></i> Leg</span>
-    <span><i style="background:${MALE_EDGE_COLOR}"></i> Male edges / tongue (${CONNECTOR_SHORT[stage.connectorSide]} + adjacent short side)</span>
+     <span><i style="background:#dc2626"></i> ${copy.handrail}</span>
+     <span><i class="leg"></i> ${copy.leg}</span>
+     <span><i style="background:${MALE_EDGE_COLOR}"></i> ${copy.maleEdges} (${copy.connectorShort[stage.connectorSide]} + ${copy.maleEdgesDetail})</span>
   </div>
   <p class="muted" style="font-size:11px;margin:6px 0 0;line-height:1.4">
-    Tongue (male) hooks into groove (female) — never the other way around.
-    The opposite (female / groove) side is where the stage can be expanded later,
-    so plan future thrusts, B-stages or runways accordingly.
+     ${copy.connectorGuidance}
   </p>
 </div>
 
 <div class="specs-grid">
   <div class="spec-card">
-    <div class="label">Width</div>
-    <div class="value">${fmt(effectiveW, 2)}<span class="unit">m</span></div>
+     <div class="label">${copy.width}</div>
+     <div class="value">${fmt(effectiveW, locale, 2)}<span class="unit">m</span></div>
   </div>
   <div class="spec-card">
-    <div class="label">Depth</div>
-    <div class="value">${fmt(effectiveD, 2)}<span class="unit">m</span></div>
+     <div class="label">${copy.depth}</div>
+     <div class="value">${fmt(effectiveD, locale, 2)}<span class="unit">m</span></div>
   </div>
   <div class="spec-card">
-    <div class="label">Area</div>
-    <div class="value">${fmt(calc.areaM2, 2)}<span class="unit">m²</span></div>
+     <div class="label">${copy.area}</div>
+     <div class="value">${fmt(calc.areaM2, locale, 2)}<span class="unit">m²</span></div>
   </div>
   <div class="spec-card">
-    <div class="label">Total weight</div>
-    <div class="value">${fmt(calc.totalWeight, 0)}<span class="unit">kg</span></div>
+     <div class="label">${copy.totalWeight}</div>
+     <div class="value">${fmt(calc.totalWeight, locale, 0)}<span class="unit">kg</span></div>
   </div>
 </div>
 
 ${
   !calc.fits
-    ? `<div class="warn">⚠ Some cells of this stage cannot be tiled with the available Nivtec deck sizes (only multiples of 0.5 m are supported, and 0.5 m × 0.5 m gaps cannot be filled).</div>`
+    ? `<div class="warn">⚠ ${copy.cannotTile}</div>`
     : ""
 }
 
 <div class="two-col">
   <div>
-    <h2>Decks</h2>
+     <h2>${copy.decks}</h2>
     <table>
-      <thead><tr><th>Size</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead>
+       <thead><tr><th>${copy.size}</th><th>${copy.quantity}</th><th>${copy.unit}</th><th>${copy.total}</th></tr></thead>
       <tbody>${decksRows}</tbody>
     </table>
   </div>
   <div>
-    <h2>Legs (${stage.legHeightCm} cm · ${stage.legMode === "perDeck" ? "4 per deck" : "shared corners"})</h2>
+     <h2>${copy.legs} (${stage.legHeightCm} cm · ${stage.legMode === "perDeck" ? copy.perDeck : copy.sharedCorners})</h2>
     <table>
       <tbody>
-        <tr><td>Quantity</td><td>${calc.legCount} pcs</td></tr>
-        <tr><td>Unit weight</td><td>${fmt(legSpec?.weight ?? 0, 2)} kg</td></tr>
-        <tr class="row-total"><td>Subtotal</td><td>${fmt(calc.legWeight, 1)} kg</td></tr>
+         <tr><td>${copy.quantity}</td><td>${calc.legCount} ${copy.pieces}</td></tr>
+         <tr><td>${copy.unitWeight}</td><td>${fmt(legSpec?.weight ?? 0, locale, 2)} kg</td></tr>
+         <tr class="row-total"><td>${copy.subtotal}</td><td>${fmt(calc.legWeight, locale, 1)} kg</td></tr>
       </tbody>
     </table>
     ${
       bracing.length > 0
-        ? `<div class="warn"><strong>Bracing required:</strong><br />${bracing.map((b) => escapeHtml(b)).join("<br />")}</div>`
+        ? `<div class="warn"><strong>${copy.bracingRequired}:</strong><br />${bracing.map((b) => escapeHtml(b)).join("<br />")}</div>`
         : ""
     }
   </div>
 </div>
 
-<h2>Build sequence (${stage.buildOrder === "rightToLeft" ? "right → left" : "left → right"})</h2>
+<h2>${copy.buildSequence} (${stage.buildOrder === "rightToLeft" ? copy.rightToLeft : copy.leftToRight})</h2>
 <table>
-  <thead><tr><th>#</th><th>Deck</th><th>Male side</th><th>Legs to install</th></tr></thead>
+  <thead><tr><th>#</th><th>${copy.deck}</th><th>${copy.maleSide}</th><th>${copy.legsToInstall}</th></tr></thead>
   <tbody>${assemblyRows}</tbody>
 </table>
 <p class="muted" style="font-size:11px;margin:0 0 12px">
-  Numbers match the badges drawn on each deck above. Each row shows the
-  marginal legs added for that deck (shared corners are only counted once).
+  ${copy.sequenceHelp}
 </p>
 
-<h2>Load capacity</h2>
+<h2>${copy.loadCapacity}</h2>
 <table>
   <tbody>
-    <tr><td>Distributed load</td><td><strong>${fmt(calc.loadCapacityKg, 0)} kg</strong>${!calc.fits ? " (placed area only)" : ""}</td></tr>
-    <tr><td>Rated SWL</td><td>${fmt(calc.effectiveSwlPerM2, 0)} kg/m² @ ${stage.legHeightCm} cm</td></tr>
+    <tr><td>${copy.distributedLoad}</td><td><strong>${fmt(calc.loadCapacityKg, locale, 0)} kg</strong>${!calc.fits ? ` (${copy.placedAreaOnly})` : ""}</td></tr>
+    <tr><td>${copy.ratedSwl}</td><td>${fmt(calc.effectiveSwlPerM2, locale, 0)} kg/m² @ ${stage.legHeightCm} cm</td></tr>
   </tbody>
 </table>
 <p class="muted" style="font-size:11px;margin:0 0 12px">
-  Capacity is derated for leg height (Nivtec aluminium typical: ≤60 cm full
-  rating; 80 cm ~85%; 100 cm ~70%; 120 cm ~55%; 140 cm ~45%). Always confirm
-  against the manufacturer datasheet for your exact configuration.
+  ${copy.capacityHelp}
 </p>
 
-<h2>Handrails ${railsEnabled.length > 0 ? `(${railsEnabled.join(", ")})` : ""}</h2>
+<h2>${copy.handrails} ${railsEnabled.length > 0 ? `(${railsEnabled.map((side) => copy.railSide[side]).join(", ")})` : ""}</h2>
 <table>
-  <thead><tr><th>Side</th><th>Length</th><th>2 m</th><th>1 m</th></tr></thead>
+  <thead><tr><th>${copy.side}</th><th>${copy.length}</th><th>2 m</th><th>1 m</th></tr></thead>
   <tbody>${railsRows}</tbody>
 </table>
 
 ${
   stage.notes && stage.notes.trim().length > 0
-    ? `<h2>Notes</h2><div class="notes-box">${escapeHtml(stage.notes)}</div>`
+    ? `<h2>${copy.notes}</h2><div class="notes-box">${escapeHtml(stage.notes)}</div>`
     : ""
 }
 
 <div class="grand-total">
-  <span>Total weight (decks + legs + rails)</span>
-  <strong>${fmt(calc.totalWeight, 1)} kg</strong>
+  <span>${copy.grandTotal}</span>
+  <strong>${fmt(calc.totalWeight, locale, 1)} kg</strong>
 </div>
 
 <div class="footer">
-  Generated by Production Tool — Nivtec deck calculator. Always cross-check
-  against the manufacturer's official datasheet before building.
+  ${copy.footer}
 </div>
 </body>
 </html>`;
@@ -696,6 +696,8 @@ export function exportStageReport(input: {
   calc: StageCalc;
   project: StageExportProject;
   logoDataUrl: string | null;
+  locale: string;
+  copy: StageExportCopy;
   /** Pre-opened popup window from the click handler. */
   targetWin: Window | null;
 }): void {
@@ -709,7 +711,7 @@ export function exportStageReport(input: {
     const fallback = window.open("", "_blank");
     if (!fallback) {
       alert(
-        "Could not open the export window. Please allow pop-ups for this site and try again.",
+        input.copy.popupError,
       );
       return;
     }

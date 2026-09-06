@@ -9,13 +9,65 @@ import {
 import { encodeBrief, buildShareUrl } from "../lib/briefShare";
 import { crewHours, formatCrewDayRate } from "../lib/crew";
 import { loadActiveFloorPlan, type FloorPlan } from "../lib/floorPlan";
-import { uploadBriefAttachment } from "../lib/briefAttachmentUpload";
-import { renderScreenPngBlob, getLogoDataUrl } from "../lib/ledExport";
+import {
+  BriefAttachmentUploadError,
+  uploadBriefAttachment,
+} from "../lib/briefAttachmentUpload";
+import {
+  renderScreenPngBlob,
+  getLogoDataUrl,
+  isLedExportError,
+} from "../lib/ledExport";
 import { computeScreenMetrics } from "../lib/led";
 import { computeStage } from "../lib/stage";
-import { buildStageReportHtml } from "../lib/stageExport";
-import { htmlToPdfBlob, pdfFilename } from "../lib/htmlToPdf";
+import { buildStageReportHtml, type StageExportCopy } from "../lib/stageExport";
+import {
+  htmlToPdfBlob,
+  isHtmlToPdfError,
+  pdfFilename,
+} from "../lib/htmlToPdf";
 import ehsLogo from "../assets/ehs-logo.png";
+import { useI18n, useT, type Translator } from "../lib/i18n/I18nContext";
+
+function stageExportCopy(t: Translator): StageExportCopy {
+  return {
+    untitled: t("stage.untitled"), productionTool: t("export.stage.productionTool"), buildSheet: t("export.stageBuildSheet"), generated: t("export.stage.generated"),
+    print: t("export.stage.print"), close: t("common.close"), venueProject: t("export.stage.venueProject"), date: t("export.stage.date"), projectManager: t("export.stage.projectManager"),
+    layoutMode: t("export.stage.layoutMode"), manualPlacement: t("export.stage.manualPlacement"), autoTiled: t("export.stage.autoTiled"), buildDirection: t("export.stage.buildDirection"),
+    rightToLeft: t("stage.direction.rightToLeft"), leftToRight: t("stage.direction.leftToRight"), maleSideFaces: t("export.stage.maleSideFaces"), overrides: (count) => t("export.stage.overrides", { count }),
+    layout: t("export.stage.layout"), noDecksManual: t("export.stage.noDecksManual"), handrail: t("export.stage.handrail"), leg: t("export.stage.leg"),
+    maleEdges: t("export.stage.maleEdges"), maleEdgesDetail: t("export.stage.maleEdgesDetail"), connectorGuidance: t("export.stage.connectorGuidance"),
+    width: t("export.stage.width"), depth: t("export.stage.depth"), area: t("export.stage.area"), totalWeight: t("export.stage.totalWeight"), cannotTile: t("export.stage.cannotTile"),
+    decks: t("export.stage.decks"), size: t("export.stage.size"), quantity: t("export.stage.quantity"), unit: t("export.stage.unit"), total: t("export.stage.total"), noDecks: t("export.stage.noDecks"),
+    subtotal: t("export.stage.subtotal"), legs: t("export.stage.legs"), perDeck: t("export.stage.perDeck"), sharedCorners: t("stage.legs.sharedCorners"), pieces: t("stage.unit.pieces"),
+    unitWeight: t("export.stage.unitWeight"), bracingRequired: t("export.stage.bracingRequired"), buildSequence: t("export.stage.buildSequence"), deck: t("export.stage.deck"),
+    maleSide: t("export.stage.maleSide"), legsToInstall: t("export.stage.legsToInstall"), sequenceHelp: t("export.stage.sequenceHelp"), loadCapacity: t("export.stage.loadCapacity"),
+    distributedLoad: t("export.stage.distributedLoad"), placedAreaOnly: t("export.stage.placedAreaOnly"), ratedSwl: t("export.stage.ratedSwl"), capacityHelp: t("export.stage.capacityHelp"),
+    handrails: t("stage.handrails"), side: t("export.stage.side"), length: t("export.stage.length"), weight: t("export.stage.weight"), noHandrails: t("export.stage.noHandrails"),
+    notes: t("stage.notes"), grandTotal: t("export.stage.grandTotal"), footer: t("export.stage.footer"), popupError: t("export.stage.popupError"),
+    connectorLabel: { N: t("stage.side.upstage"), E: t("stage.side.right"), S: t("stage.side.downstage"), W: t("stage.side.left") },
+    connectorShort: { N: t("stage.short.N"), E: t("stage.short.E"), S: t("stage.short.S"), W: t("stage.short.W") },
+    railSide: { front: t("stage.rail.front"), back: t("stage.rail.back"), left: t("stage.rail.left"), right: t("stage.rail.right") },
+    legsAdded: (count) => t(count === 1 ? "export.stage.leg" : "export.stage.legs"),
+    deckCount: (count) => t(count === 1 ? "export.stage.deck" : "export.stage.decks"),
+    legCount: (count) => t(count === 1 ? "export.stage.leg" : "export.stage.legs"),
+  };
+}
+
+function attachmentErrorMessage(error: unknown, t: Translator): string {
+  if (!(error instanceof BriefAttachmentUploadError)) {
+    return t("shareBrief.error.attachment");
+  }
+  if (error.code === "auth_required") {
+    return t("shareBrief.error.attachmentAuth");
+  }
+  return t(
+    error.code === "request_failed"
+      ? "shareBrief.error.attachmentRequest"
+      : "shareBrief.error.attachmentUpload",
+    { status: error.status ?? "" },
+  );
+}
 
 /** "Share with Crew" modal — generates one personalised brief link per
  *  crew member (and one generic link). The producer copies a link and
@@ -40,6 +92,8 @@ type RecipientLink = {
 };
 
 export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
+  const t = useT();
+  const { locale } = useI18n();
   const [links, setLinks] = useState<RecipientLink[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -47,7 +101,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
   /** Producer-facing status while we upload the floor-plan attachment.
    *  `null` once the upload finishes (or there was nothing to upload). */
   const [uploadStatus, setUploadStatus] = useState<string | null>(
-    "Preparing brief…",
+    t("shareBrief.preparing"),
   );
   /** Free-text note the producer types just before sharing — gets
    *  embedded into every generated brief as `project.description`. */
@@ -74,7 +128,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
         const attachments: BriefAttachment[] = [];
         const floorPlan: FloorPlan | null = loadActiveFloorPlan();
         if (floorPlan?.originalDataUrl) {
-          setUploadStatus(`Uploading ${floorPlan.fileName}…`);
+          setUploadStatus(t("shareBrief.uploadingFile", { name: floorPlan.fileName }));
           try {
             const att = await uploadBriefAttachment(
               {
@@ -94,8 +148,10 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
             if (!cancelled) {
               setError(
                 e instanceof Error
-                  ? `Could not attach the drawing: ${e.message}`
-                  : "Could not attach the drawing to the brief.",
+                  ? t("shareBrief.error.drawingDetail", {
+                      message: attachmentErrorMessage(e, t),
+                    })
+                  : t("shareBrief.error.drawing"),
               );
             }
           }
@@ -120,7 +176,11 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
             const screen = printable[i];
             if (cancelled) return;
             setUploadStatus(
-              `Uploading LED diagram ${i + 1} / ${printable.length} (${screen.name || "Screen"})…`,
+              t("shareBrief.uploadingLed", {
+                current: i + 1,
+                total: printable.length,
+                name: screen.name || t("shareBrief.screenFallback"),
+              }),
             );
             try {
               const png = await renderScreenPngBlob({
@@ -128,6 +188,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
                 panels: ledDiagrams.panels,
                 settings: ledDiagrams.settings,
                 logoDataUrl: null,
+                filenameFallback: t("export.ledScreenFilenameFallback"),
               });
               if (cancelled) return;
               const att = await uploadBriefAttachment(
@@ -146,9 +207,14 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
                 // Append, don't replace, so a floor-plan warning is
                 // preserved if it happened first.
                 const msg =
-                  e instanceof Error
-                    ? `Could not attach LED diagram for "${screen.name || "Screen"}": ${e.message}`
-                    : `Could not attach LED diagram for "${screen.name || "Screen"}".`;
+                  e instanceof Error && !isLedExportError(e)
+                    ? t("shareBrief.error.ledDetail", {
+                        name: screen.name || t("shareBrief.screenFallback"),
+                        message: attachmentErrorMessage(e, t),
+                      })
+                    : t("shareBrief.error.led", {
+                        name: screen.name || t("shareBrief.screenFallback"),
+                      });
                 setError((prev) => (prev ? `${prev}\n${msg}` : msg));
               }
             }
@@ -178,9 +244,15 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
           for (let i = 0; i < stages.length; i++) {
             const stage = stages[i];
             if (cancelled) return;
-            const stageName = stage.name.trim() || `Stage ${i + 1}`;
+            const stageName =
+              stage.name.trim() ||
+              t("shareBrief.stageFallback", { number: i + 1 });
             setUploadStatus(
-              `Uploading stage build sheet ${i + 1} / ${stages.length} (${stageName})…`,
+              t("shareBrief.uploadingStage", {
+                current: i + 1,
+                total: stages.length,
+                name: stageName,
+              }),
             );
             try {
               const calc = computeStage(stage);
@@ -194,15 +266,20 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
                   preparedBy: state.engineer,
                 },
                 logoDataUrl: stageLogo,
+                locale: locale === "no" ? "nb-NO" : "en-US",
+                copy: stageExportCopy(t),
               });
               const blob = await htmlToPdfBlob(html);
               if (cancelled) return;
-              const fileName = pdfFilename([
-                "Stage Build Sheet",
-                stageName,
-                state.venue,
-                state.reportDate,
-              ]);
+              const fileName = pdfFilename(
+                [
+                  t("export.stageBuildSheet"),
+                  stageName,
+                  state.venue,
+                  state.reportDate,
+                ],
+                t("export.pdfFilenameFallback"),
+              );
               const att = await uploadBriefAttachment(
                 {
                   name: fileName,
@@ -217,9 +294,12 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
             } catch (e) {
               if (!cancelled) {
                 const msg =
-                  e instanceof Error
-                    ? `Could not attach stage build sheet for "${stageName}": ${e.message}`
-                    : `Could not attach stage build sheet for "${stageName}".`;
+                  e instanceof Error && !isHtmlToPdfError(e)
+                    ? t("shareBrief.error.stageDetail", {
+                        name: stageName,
+                         message: attachmentErrorMessage(e, t),
+                      })
+                    : t("shareBrief.error.stage", { name: stageName });
                 setError((prev) => (prev ? `${prev}\n${msg}` : msg));
               }
             }
@@ -237,7 +317,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
           setError(
             e instanceof Error
               ? e.message
-              : "Could not generate the brief links.",
+              : t("shareBrief.error.generate"),
           );
           setUploadStatus(null);
         }
@@ -280,8 +360,8 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
           const encoded = await encodeBrief(brief);
           generated.push({
             crewId: null,
-            label: "Generic link",
-            sublabel: "No assignment highlighted — for venue / production contacts",
+            label: t("shareBrief.generic"),
+            sublabel: t("shareBrief.genericHint"),
             url: buildShareUrl(encoded, baseUrl),
             payloadBytes: encoded.length,
           });
@@ -297,10 +377,15 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
           const encoded = await encodeBrief(brief);
           generated.push({
             crewId: m.id,
-            label: m.name || "(unnamed)",
-            sublabel: `${m.role} · call ${m.callTime || "—"} → off ${m.offTime || "—"} · ${formatCrewDayRate(m.dayRate)}/day${
+            label: m.name || t("shareBrief.unnamed"),
+            sublabel: `${t("shareBrief.recipientSummary", {
+              role: m.role,
+              call: m.callTime || "—",
+              off: m.offTime || "—",
+              rate: formatCrewDayRate(m.dayRate),
+            })}${
               (m.hotelDates?.length ?? 0) > 0
-                ? ` · 🏨 ${m.hotelDates!.length} night${m.hotelDates!.length === 1 ? "" : "s"}`
+                ? t("shareBrief.nights", { count: m.hotelDates!.length })
                 : ""
             }`,
             url: buildShareUrl(encoded, baseUrl),
@@ -313,7 +398,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
           setError(
             e instanceof Error
               ? e.message
-              : "Could not generate the brief links.",
+              : t("shareBrief.error.generate"),
           );
         }
       }
@@ -324,8 +409,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
     // `state` is captured by reference from the parent and is intended
     // to be stable for the lifetime of the modal — only the description
     // and attachments should drive a rebuild.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readyAttachments, description]);
+  }, [readyAttachments, description, t]);
 
   async function copyLink(key: string, url: string) {
     try {
@@ -345,7 +429,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
       setCopiedKey(key);
       window.setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1800);
     } catch {
-      setError("Could not copy to clipboard. Long-press the link to copy manually.");
+      setError(t("shareBrief.error.copy"));
     }
   }
 
@@ -368,7 +452,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Share project brief with crew"
+      aria-label={t("shareBrief.dialogAria")}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -411,7 +495,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
         >
           <div style={{ minWidth: 0 }}>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>
-              Share with crew
+               {t("shareBrief.title")}
             </h2>
             <p
               style={{
@@ -421,15 +505,13 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
                 lineHeight: 1.45,
               }}
             >
-              Send each freelancer their personal link. They open it in their
-              EHS Portal and see the full project briefing — venue, schedule,
-              their assignment, the rigging plan, lighting, sound and stage.
+               {t("shareBrief.intro")}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+             aria-label={t("common.close")}
             style={{
               border: "1px solid #e2e8f0",
               background: "#f8fafc",
@@ -440,7 +522,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
               cursor: "pointer",
             }}
           >
-            Close
+             {t("common.close")}
           </button>
         </header>
 
@@ -455,18 +537,18 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
               background: "#f8fafc",
             }}
           >
-            <SummaryStat label="Crew" value={`${projectSummary.crew}`} />
-            <SummaryStat label="Rig systems" value={`${projectSummary.systems}`} />
-            <SummaryStat label="Hoists" value={`${projectSummary.hoists}`} />
-            <SummaryStat label="Fixtures" value={`${projectSummary.fixtures}`} />
-            <SummaryStat label="Circuits" value={`${projectSummary.circuits}`} />
-            <SummaryStat label="LED screens" value={`${projectSummary.ledScreens}`} />
+            <SummaryStat label={t("shareBrief.stat.crew")} value={`${projectSummary.crew}`} />
+            <SummaryStat label={t("shareBrief.stat.rigSystems")} value={`${projectSummary.systems}`} />
+            <SummaryStat label={t("shareBrief.stat.hoists")} value={`${projectSummary.hoists}`} />
+            <SummaryStat label={t("shareBrief.stat.fixtures")} value={`${projectSummary.fixtures}`} />
+            <SummaryStat label={t("shareBrief.stat.circuits")} value={`${projectSummary.circuits}`} />
+            <SummaryStat label={t("shareBrief.stat.ledScreens")} value={`${projectSummary.ledScreens}`} />
             <SummaryStat
-              label="Stage"
+               label={t("shareBrief.stat.stage")}
               value={`${projectSummary.stages}`}
               sub={projectSummary.stageArea > 0 ? `${projectSummary.stageArea} m²` : undefined}
             />
-            <SummaryStat label="Sound rows" value={`${projectSummary.soundRows}`} />
+            <SummaryStat label={t("shareBrief.stat.soundRows")} value={`${projectSummary.soundRows}`} />
           </div>
         ) : null}
 
@@ -491,16 +573,16 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
               marginBottom: 6,
             }}
           >
-            Note for the crew{" "}
+             {t("shareBrief.note")}{" "}
             <span style={{ color: "#94a3b8", fontWeight: 500 }}>
-              (optional)
+               {t("shareBrief.optional")}
             </span>
           </label>
           <textarea
             id="share-brief-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="e.g. Wear black. Park behind the venue, gate code 1234. Lunch is provided. Bring your own headset."
+             placeholder={t("shareBrief.notePlaceholder")}
             rows={3}
             style={{
               width: "100%",
@@ -518,7 +600,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
             }}
           />
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-            Shown at the top of every freelancer's brief in the EHS Portal.
+             {t("shareBrief.noteHint")}
           </div>
         </div>
 
@@ -542,7 +624,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
 
           {!links ? (
             <div style={{ padding: 24, textAlign: "center", color: "#64748b" }}>
-              {uploadStatus ?? "Generating links…"}
+               {uploadStatus ?? t("shareBrief.generating")}
             </div>
           ) : links.length === 1 ? (
             // No crew yet — only the generic link is available.
@@ -558,15 +640,14 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
                   marginBottom: 12,
                 }}
               >
-                No crew on the call sheet yet. Add freelancers in the Crew
-                Report tab to generate one personal link per person.
+                 {t("shareBrief.noCrew")}
               </div>
-              {renderLinkRow(links[0], "generic", copiedKey, copyLink)}
+               {renderLinkRow(links[0], "generic", copiedKey, copyLink, t)}
             </>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {links.map((l, i) =>
-                renderLinkRow(l, l.crewId ?? `generic-${i}`, copiedKey, copyLink),
+                 renderLinkRow(l, l.crewId ?? `generic-${i}`, copiedKey, copyLink, t),
               )}
             </div>
           )}
@@ -584,12 +665,11 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
                 lineHeight: 1.5,
               }}
             >
-              <strong>Attached to every link:</strong>{" "}
+               <strong>{t("shareBrief.attachments")}</strong>{" "}
               {previewBrief.attachments
                 .map((a) => a.name)
                 .join(", ")}
-              . Clear the floor plan in the Rigg Plan tab if this is from a
-              different project.
+               . {t("shareBrief.attachmentsHint")}
             </div>
           ) : null}
 
@@ -601,9 +681,7 @@ export function ShareBriefModal({ onClose, state }: ShareBriefModalProps) {
               lineHeight: 1.5,
             }}
           >
-            Links are self-contained — the entire briefing is encoded in the URL,
-            no server is needed. After you edit the project, re-open this dialog
-            to generate fresh links.
+             {t("shareBrief.linksHint")}
           </p>
         </div>
       </div>
@@ -616,6 +694,7 @@ function renderLinkRow(
   key: string,
   copiedKey: string | null,
   copy: (key: string, url: string) => void,
+  t: Translator,
 ) {
   const isCopied = copiedKey === key;
   const tooLarge = l.payloadBytes > 12000;
@@ -674,7 +753,7 @@ function renderLinkRow(
               background: "#f8fafc",
             }}
           >
-            Preview
+             {t("shareBrief.preview")}
           </a>
           <button
             type="button"
@@ -690,7 +769,7 @@ function renderLinkRow(
               color: isCopied ? "#9a3412" : "#0b0b0b",
             }}
           >
-            {isCopied ? "Copied!" : "Copy link"}
+             {isCopied ? t("shareBrief.copied") : t("shareBrief.copy")}
           </button>
         </div>
       </div>
@@ -712,9 +791,9 @@ function renderLinkRow(
       />
       {tooLarge ? (
         <div style={{ fontSize: 11, color: "#9a3412" }}>
-          Heads up: this link is {(l.payloadBytes / 1024).toFixed(1)} KB. It
-          will work, but some chat apps clip very long URLs — paste-test before
-          sending.
+           {t("shareBrief.largeLink", {
+             size: (l.payloadBytes / 1024).toFixed(1),
+           })}
         </div>
       ) : null}
     </div>

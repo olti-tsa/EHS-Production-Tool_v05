@@ -7,6 +7,18 @@
 
 import { normalizeBrief, type ProjectBrief } from "./projectBrief";
 
+export type BriefShareErrorCode =
+  | "decompression_unsupported"
+  | "payload_unreadable"
+  | "payload_invalid";
+
+export class BriefShareError extends Error {
+  constructor(readonly code: BriefShareErrorCode) {
+    super(code);
+    this.name = "BriefShareError";
+  }
+}
+
 /** base64url-encode a Uint8Array (RFC 4648 §5: no padding, +/→-/_). */
 function bufferToBase64Url(buf: Uint8Array): string {
   // chunk to keep call-stack happy on large inputs
@@ -46,7 +58,7 @@ export async function encodeBrief(brief: ProjectBrief): Promise<string> {
   return bufferToBase64Url(buf);
 }
 
-export async function decodeBrief(encoded: string): Promise<ProjectBrief> {
+async function decodeBriefInternal(encoded: string): Promise<ProjectBrief> {
   // Strip the optional "u." prefix used by the uncompressed fallback.
   const isUncompressed = encoded.startsWith("u.");
   const payload = isUncompressed ? encoded.slice(2) : encoded;
@@ -57,15 +69,13 @@ export async function decodeBrief(encoded: string): Promise<ProjectBrief> {
     json = new TextDecoder().decode(buf);
   } else {
     if (typeof DecompressionStream === "undefined") {
-      throw new Error(
-        "This browser cannot decompress the brief. Please use a modern browser.",
-      );
+      throw new BriefShareError("decompression_unsupported");
     }
     // Wrap the Uint8Array in a Blob so the Response constructor accepts
     // it as a BodyInit on TypeScript's stricter DOM lib (Uint8Array
     // alone isn't structurally a BodyInit in modern TS).
     const stream = new Response(new Blob([buf as BlobPart])).body;
-    if (!stream) throw new Error("Could not read brief payload.");
+    if (!stream) throw new BriefShareError("payload_unreadable");
     const decompressed = stream.pipeThrough(new DecompressionStream("gzip"));
     json = await new Response(decompressed).text();
   }
@@ -73,9 +83,18 @@ export async function decodeBrief(encoded: string): Promise<ProjectBrief> {
   const parsed = JSON.parse(json) as unknown;
   const brief = normalizeBrief(parsed);
   if (!brief) {
-    throw new Error("Brief payload was not in the expected shape.");
+    throw new BriefShareError("payload_invalid");
   }
   return brief;
+}
+
+export async function decodeBrief(encoded: string): Promise<ProjectBrief> {
+  try {
+    return await decodeBriefInternal(encoded);
+  } catch (error) {
+    if (error instanceof BriefShareError) throw error;
+    throw new BriefShareError("payload_invalid");
+  }
 }
 
 /** Build the absolute URL the producer should send to the freelancer.

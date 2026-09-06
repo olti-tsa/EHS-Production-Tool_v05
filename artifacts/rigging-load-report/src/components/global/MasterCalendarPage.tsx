@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, MapPin, Users, Briefcase } from "lucide-react";
 import { format, addMonths, subMonths, addWeeks, subWeeks, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, isWithinInterval, startOfDay } from "date-fns";
+import { nb } from "date-fns/locale";
 import * as HoverCard from "@radix-ui/react-hover-card";
+import { useI18n, useT } from "../../lib/i18n/I18nContext";
 
 export type CalendarProject = {
   id: string;
@@ -20,6 +22,8 @@ interface Props {
 }
 
 export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
+  const t = useT();
+  const { locale } = useI18n();
   const [projects, setProjects] = useState<CalendarProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +43,10 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
         const res = await fetch(`${baseUrl}api/projects`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-        if (!res.ok) throw new Error("Could not load projects");
+        if (!res.ok) throw new Error(t("calendar.error.load"));
         const json = await res.json();
         if (mounted) {
-          if (!json.ok) throw new Error(json.error || "Failed to load projects");
+          if (!json.ok) throw new Error(json.error || t("calendar.error.load"));
           setProjects(json.projects || []);
         }
       } catch (err: any) {
@@ -55,7 +59,7 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
     return () => {
       mounted = false;
     };
-  }, [getToken]);
+  }, [getToken, t]);
 
   const handlePrevious = () => {
     setCurrentDate(prev => view === "month" ? subMonths(prev, 1) : subWeeks(prev, 1));
@@ -111,31 +115,31 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)" }}>
-            Master Calendar
+            {t("calendar.title")}
           </h2>
           <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: 0 }}>
-            Operations overview of all projects.
+            {t("calendar.subtitle")}
           </p>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <div className="theme-seg">
-            <button className={`theme-seg-btn ${view === "month" ? "is-selected" : ""}`} style={{ maxWidth: 140, opacity: 1, padding: "6px 12px" }} onClick={() => setView("month")}>Month</button>
-            <button className={`theme-seg-btn ${view === "week" ? "is-selected" : ""}`} style={{ maxWidth: 140, opacity: 1, padding: "6px 12px" }} onClick={() => setView("week")}>Week</button>
+            <button aria-label={t("calendar.action.month")} className={`theme-seg-btn ${view === "month" ? "is-selected" : ""}`} style={{ maxWidth: 140, opacity: 1, padding: "6px 12px" }} onClick={() => setView("month")}>{t("calendar.action.month")}</button>
+            <button aria-label={t("calendar.action.week")} className={`theme-seg-btn ${view === "week" ? "is-selected" : ""}`} style={{ maxWidth: 140, opacity: 1, padding: "6px 12px" }} onClick={() => setView("week")}>{t("calendar.action.week")}</button>
           </div>
           <div style={{ display: "flex", gap: 4 }}>
-            <button type="button" className="ehs-shell-icon-btn" onClick={handlePrevious}><ChevronLeft size={16} /></button>
-            <button type="button" className="btn-pill" style={{ background: "var(--input-bg)", color: "var(--text-main)", border: "1px solid var(--border-color)", padding: "0 12px" }} onClick={handleToday}>Today</button>
-            <button type="button" className="ehs-shell-icon-btn" onClick={handleNext}><ChevronRight size={16} /></button>
+            <button aria-label={t("calendar.action.previous")} type="button" className="ehs-shell-icon-btn" onClick={handlePrevious}><ChevronLeft size={16} /></button>
+            <button type="button" className="btn-pill" style={{ background: "var(--input-bg)", color: "var(--text-main)", border: "1px solid var(--border-color)", padding: "0 12px" }} onClick={handleToday}>{t("calendar.action.today")}</button>
+            <button aria-label={t("calendar.action.next")} type="button" className="ehs-shell-icon-btn" onClick={handleNext}><ChevronRight size={16} /></button>
           </div>
         </div>
       </div>
 
       <h3 style={{ fontSize: 20, fontWeight: 700, margin: "0 0 16px", color: "var(--text-main)" }}>
-        {format(currentDate, view === "month" ? "MMMM yyyy" : "'Week of' MMMM d, yyyy")}
+         {view === "week" ? `${t("calendar.weekOf")} ${format(currentDate, "MMMM d, yyyy", { locale: locale === "no" ? nb : undefined })}` : format(currentDate, "MMMM yyyy", { locale: locale === "no" ? nb : undefined })}
       </h3>
 
       {loading ? (
-        <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>Loading calendar...</div>
+         <div style={{ padding: 40, textAlign: "center", color: "var(--text-muted)", fontSize: 14 }}>{t("calendar.loading")}</div>
       ) : error ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--danger)", fontSize: 14 }}>{error}</div>
       ) : (
@@ -150,9 +154,9 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
             flex: 1
           }}>
             {/* Header Row */}
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => (
+             {(["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const).map((d, i) => (
               <div key={i} style={{ padding: "10px 8px", fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", textAlign: "center", borderBottom: "1px solid var(--border-color)", borderRight: i < 6 ? "1px solid var(--border-color)" : "none", background: "var(--input-bg)" }}>
-                {d}
+                 {t(`calendar.days.${d}`)}
               </div>
             ))}
             {/* Days Grid */}
@@ -190,7 +194,7 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, overflowY: "auto" }}>
                     {dayProjects.map(p => (
-                      <ProjectPopover key={p.id} project={p} onOpenProject={onOpenProject} />
+                       <ProjectPopover key={p.id} project={p} onOpenProject={onOpenProject} t={t} />
                     ))}
                   </div>
                 </div>
@@ -200,10 +204,10 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
 
           {unscheduled.length > 0 && (
             <div style={{ background: "var(--card-bg)", border: "1px solid var(--border-color)", borderRadius: 12, padding: 16 }}>
-              <h4 style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Unscheduled Projects</h4>
+               <h4 style={{ margin: "0 0 12px", fontSize: 14, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>{t("calendar.unscheduledProjects")}</h4>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {unscheduled.map(p => (
-                  <ProjectPopover key={p.id} project={p} onOpenProject={onOpenProject} compact />
+                   <ProjectPopover key={p.id} project={p} onOpenProject={onOpenProject} compact t={t} />
                 ))}
               </div>
             </div>
@@ -214,7 +218,7 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
   );
 }
 
-function ProjectPopover({ project, onOpenProject, compact }: { project: CalendarProject, onOpenProject: (id: string) => void, compact?: boolean }) {
+function ProjectPopover({ project, onOpenProject, compact, t }: { project: CalendarProject, onOpenProject: (id: string) => void, compact?: boolean, t: ReturnType<typeof useT> }) {
   const end = project.endDate || project.startDate;
   const completed = Boolean(end && end < format(new Date(), "yyyy-MM-dd"));
   const displayStatus = completed ? "completed" : project.status || "draft";
@@ -260,7 +264,7 @@ function ProjectPopover({ project, onOpenProject, compact }: { project: Calendar
             transition: "all 0.15s ease"
           }}
         >
-          {project.name || "Unnamed Project"}
+           {project.name || t("calendar.project.unnamed")}
         </button>
       </HoverCard.Trigger>
       <HoverCard.Portal>
@@ -279,12 +283,12 @@ function ProjectPopover({ project, onOpenProject, compact }: { project: Calendar
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-            <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, paddingRight: 16 }}>{project.name || "Unnamed Project"}</h4>
+             <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, paddingRight: 16 }}>{project.name || t("calendar.project.unnamed")}</h4>
             <span style={{ 
               fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, 
               padding: "4px 8px", borderRadius: 999, background: bg, color: color, border: border
             }}>
-               {displayStatus}
+               {t(`calendar.status.${displayStatus as "draft" | "active" | "confirmed" | "completed" | "archived" | "canceled"}`)}
             </span>
           </div>
           
@@ -292,7 +296,7 @@ function ProjectPopover({ project, onOpenProject, compact }: { project: Calendar
             {project.startDate && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)" }}>
                 <CalendarIcon size={14} />
-                 <span>{project.startDate}{project.endDate && project.endDate !== project.startDate ? ` to ${project.endDate}` : ""}{durationDays ? ` · ${durationDays} ${durationDays === 1 ? "day" : "days"}` : ""}</span>
+                 <span>{project.startDate}{project.endDate && project.endDate !== project.startDate ? ` ${t("calendar.project.to")} ${project.endDate}` : ""}{durationDays ? ` · ${durationDays} ${durationDays === 1 ? t("calendar.project.day") : t("calendar.project.days")}` : ""}</span>
               </div>
             )}
             {project.venue && (
@@ -303,11 +307,11 @@ function ProjectPopover({ project, onOpenProject, compact }: { project: Calendar
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)" }}>
               <Briefcase size={14} />
-              <span>{project.easyjob_number ? `EasyJob: ${project.easyjob_number}` : "No EasyJob ID"}</span>
+               <span>{project.easyjob_number ? `${t("calendar.project.easyJob")}: ${project.easyjob_number}` : t("calendar.project.noEasyJob")}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)" }}>
               <Users size={14} />
-              <span>{project.crewCount || 0} crew members</span>
+               <span>{project.crewCount || 0} {t("calendar.project.crewMembers")}</span>
             </div>
           </div>
           

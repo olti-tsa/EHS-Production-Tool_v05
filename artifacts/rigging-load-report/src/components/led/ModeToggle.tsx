@@ -14,6 +14,7 @@
  */
 
 import type { LedSettings } from "../../lib/led";
+import { useT } from "../../lib/i18n/I18nContext";
 
 export function LedModeToggle({
   mode,
@@ -22,12 +23,13 @@ export function LedModeToggle({
   mode: LedSettings["uiMode"];
   onChange: (next: NonNullable<LedSettings["uiMode"]>) => void;
 }) {
+  const t = useT();
   const current = mode === "advanced" ? "advanced" : "basic";
   return (
     <div
       className="led-mode-toggle"
       role="radiogroup"
-      aria-label="LED tab complexity"
+      aria-label={t("led.mode.ariaLabel")}
     >
       <button
         type="button"
@@ -35,9 +37,9 @@ export function LedModeToggle({
         aria-checked={current === "basic"}
         className={`led-mode-btn ${current === "basic" ? "is-active" : ""}`}
         onClick={() => onChange("basic")}
-        title="Standard view — panels, processors, pixel map"
+        title={t("led.mode.basicTooltip")}
       >
-        Basic
+        {t("led.mode.basic")}
       </button>
       <button
         type="button"
@@ -45,9 +47,9 @@ export function LedModeToggle({
         aria-checked={current === "advanced"}
         className={`led-mode-btn ${current === "advanced" ? "is-active" : ""}`}
         onClick={() => onChange("advanced")}
-        title="Touring view — brightness, voltage, port mapping, validation, broadcast"
+        title={t("led.mode.advancedTooltip")}
       >
-        Advanced
+        {t("led.mode.advanced")}
       </button>
     </div>
   );

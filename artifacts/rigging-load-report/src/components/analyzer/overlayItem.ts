@@ -213,7 +213,7 @@ export function fromOverlayItems(
 /** Build a fresh OverlayItem of the given kind, with sensible defaults
  *  the user can edit in the side panel. Used by the "+ Add" buttons
  *  in the overlay editor. */
-export function newOverlayItem(kind: OverlayItemKind): OverlayItem {
+export function newOverlayItem(kind: OverlayItemKind, name: string): OverlayItem {
   const bbox = defaultBbox();
   switch (kind) {
     case "truss":
@@ -221,10 +221,10 @@ export function newOverlayItem(kind: OverlayItemKind): OverlayItem {
         id: makeId("tr"),
         kind,
         bbox,
-        label: "New Truss",
+        label: name,
         confidence: null,
         payload: {
-          name: "New Truss",
+          name,
           lengthM: 8,
           pointCount: 3,
           hoistKg: null,
@@ -239,10 +239,10 @@ export function newOverlayItem(kind: OverlayItemKind): OverlayItem {
         id: makeId("lx"),
         kind,
         bbox,
-        label: "1× New Fixture",
+        label: `1× ${name}`,
         confidence: null,
         payload: {
-          name: "New Fixture",
+          name,
           qty: 1,
           weightKg: null,
           watts: null,
@@ -257,10 +257,10 @@ export function newOverlayItem(kind: OverlayItemKind): OverlayItem {
         id: makeId("led"),
         kind,
         bbox,
-        label: "New LED Screen",
+        label: name,
         confidence: null,
         payload: {
-          name: "New LED Screen",
+          name,
           panelsWide: null,
           panelsTall: null,
           widthM: 4,
@@ -275,10 +275,10 @@ export function newOverlayItem(kind: OverlayItemKind): OverlayItem {
         id: makeId("st"),
         kind,
         bbox,
-        label: "New Stage",
+        label: name,
         confidence: null,
         payload: {
-          name: "New Stage",
+          name,
           widthM: 8,
           depthM: 6,
           notes: "",
@@ -291,10 +291,10 @@ export function newOverlayItem(kind: OverlayItemKind): OverlayItem {
         id: makeId("snd"),
         kind,
         bbox,
-        label: "1× New Sound Item",
+        label: `1× ${name}`,
         confidence: null,
         payload: {
-          name: "New Sound Item",
+          name,
           qty: 1,
           weightKg: null,
           watts: null,

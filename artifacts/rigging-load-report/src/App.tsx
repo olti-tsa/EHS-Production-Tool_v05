@@ -85,6 +85,7 @@ import { useAdminAccess } from "./hooks/use-admin-access";
 import {
   exportScreenAsPng,
   getLogoDataUrl,
+  isLedExportError,
   renderScreenPngBlob,
 } from "./lib/ledExport";
 import { LedScreenReportView } from "./components/LedScreenReportView";
@@ -905,14 +906,14 @@ export type ExtraSchedule = Partial<Record<SchedulePhaseKey, ScheduleSegment[]>>
  *  segments so multi-day projects are first-class. */
 export type ProjectSchedule = Partial<Record<SchedulePhaseKey, ScheduleSegment[]>>;
 
-export const SCHEDULE_PHASE_LABELS: Record<SchedulePhaseKey, string> = {
-  setup: "Setup",
-  rehearsal: "Rehearsal",
-  show: "Show",
+export const SCHEDULE_PHASE_LABEL_KEYS: Record<SchedulePhaseKey, "schedule.phase.setup" | "schedule.phase.rehearsal" | "schedule.phase.show" | "schedule.phase.loadOut"> = {
+  setup: "schedule.phase.setup",
+  rehearsal: "schedule.phase.rehearsal",
+  show: "schedule.phase.show",
   // Internal key stays "downrig" for backwards compatibility with
   // already-persisted localStorage data; the user-facing label is
   // "Load Out".
-  downrig: "Load Out",
+  downrig: "schedule.phase.loadOut",
 };
 
 /** Build a unified schedule from the show dates + the extra phases.
@@ -1179,11 +1180,12 @@ function computeMetrics(sys: System): SystemMetrics {
 function SignOutButton() {
   const { signOut } = useClerk();
   const { user } = useUser();
+  const { t: tr } = useI18n();
   const label =
     user?.primaryEmailAddress?.emailAddress ??
     user?.username ??
     user?.firstName ??
-    "Account";
+    tr("account.default");
   const handleSignOut = () => {
     try {
       sessionStorage.setItem("ehs-skip-dev-auto-signin", "1");
@@ -1201,15 +1203,15 @@ function SignOutButton() {
   };
   return (
     <>
-      <span className="header-user-email" title={`Signed in as ${label}`}>
+      <span className="header-user-email" title={tr("account.signedInAs", { label })}>
         {label}
       </span>
       <button
         type="button"
         className="header-icon-btn header-signout-btn"
         onClick={handleSignOut}
-        title={`Sign out (${label})`}
-        aria-label="Sign out"
+        title={tr("account.signOutWithLabel", { label })}
+        aria-label={tr("global.menu.signOut")}
       >
         {/* Lucide-style "log-out" glyph: door + arrow leaving. */}
         <svg
@@ -1247,15 +1249,16 @@ function ThemeSegmentedControl({
   pref: ThemePref;
   onChange: (next: ThemePref) => void;
 }) {
+  const { t: tr } = useI18n();
   const options = useMemo<
     ReadonlyArray<{ value: ThemePref; label: string; icon: string }>
   >(
     () => [
-      { value: "light", label: "Light", icon: "☀" },
-      { value: "dark", label: "Dark", icon: "☾" },
-      { value: "system", label: "System", icon: "⌬" },
+      { value: "light", label: tr("theme.light"), icon: "☀" },
+      { value: "dark", label: tr("theme.dark"), icon: "☾" },
+      { value: "system", label: tr("theme.system"), icon: "⌬" },
     ],
-    [],
+    [tr],
   );
   const btnRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectedIndex = Math.max(
@@ -1294,9 +1297,9 @@ function ThemeSegmentedControl({
   return (
     <div
       role="radiogroup"
-      aria-label="Theme"
+      aria-label={tr("theme.label")}
       className="theme-seg"
-      title="Choose theme: Light, Dark, or System"
+      title={tr("theme.title")}
       onKeyDown={onKeyDown}
     >
       {options.map((o, i) => {
@@ -1310,7 +1313,7 @@ function ThemeSegmentedControl({
             type="button"
             role="radio"
             aria-checked={selected}
-            aria-label={`${o.label} theme`}
+            aria-label={tr(`theme.${o.value}Aria`)}
             tabIndex={selected ? 0 : -1}
             className={`theme-seg-btn${selected ? " is-selected" : ""}`}
             onClick={() => onChange(o.value)}
@@ -1527,8 +1530,10 @@ function App() {
   const [power, setPower] = useState<PowerPlan>(
     () => normalizePowerPlan(persisted?.power),
   );
-  const [stages, setStages] = useState<Stage[]>(
-    () => (persisted?.stages ?? []).map(normalizeStage),
+  const [stages, setStages] = useState<Stage[]>(() =>
+    (persisted?.stages ?? []).map((stage) =>
+      normalizeStage(stage, tr("stage.defaultName")),
+    ),
   );
   const [riggPlan, setRiggPlan] = useState<RiggPlan>(() =>
     normalizeRiggPlan(persisted?.riggPlan),
@@ -1657,7 +1662,7 @@ function App() {
     if (currentProjectId && isTerminal) return;
     const run = async () => {
       const token = await getToken();
-      if (!token) throw new Error("Sign in to save the project.");
+       if (!token) throw new Error(tr("project.save.authError"));
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
@@ -2134,12 +2139,12 @@ function App() {
     // slate without touching the venue, inventory, or floor plans.
     const isLast = systems.length <= 1;
     const promptMsg = isLast
-      ? `Remove rigging system "${target.name}" and start fresh? Its gear list will be lost and a new empty "System 1" will replace it.`
-      : `Remove rigging system "${target.name}"? Its gear list will be lost.`;
+      ? tr("rigging.confirm.removeLast", { name: target.name })
+      : tr("rigging.confirm.remove", { name: target.name });
     if (!confirm(promptMsg)) return;
 
     if (isLast) {
-      const fresh = makeEmptySystem("System 1");
+      const fresh = makeEmptySystem(tr("rigging.defaultSystemName"));
       setSystems([fresh]);
       setActiveSystemId(fresh.id);
       return;
@@ -2856,12 +2861,11 @@ function App() {
         panels: ledPanels,
         settings: ledSettings,
         logoDataUrl,
+        filenameFallback: tr("export.ledScreenFilenameFallback"),
       });
     } catch (err) {
       console.error("PNG export failed:", err);
-      alert(
-        "Could not generate the PNG. Try a smaller screen or check the console for details.",
-      );
+      alert(tr("export.pngError"));
     }
   };
 
@@ -2921,7 +2925,7 @@ function App() {
   const deleteRiggPlanVenue = () => {
     if (
       !confirm(
-        "Delete the venue? The floor plan and every placed truss will be cleared. The rigging systems themselves stay on the Rigging Report.",
+        tr("riggPlan.confirm.deleteVenue"),
       )
     ) {
       return;
@@ -3362,7 +3366,10 @@ function App() {
       extracted.stages.forEach((st, i) => {
         if (!selection.stageIndexes.has(i)) return;
         const stageName =
-          st.name || `Stage ${stages.length + additions.length + 1}`;
+          st.name ||
+          tr("stage.defaultNumberedName", {
+            number: stages.length + additions.length + 1,
+          });
         const dedupKey = stageNameKey(stageName);
         if (dedupKey && existingStageNames.has(dedupKey)) {
           summary.stages.skipped += 1;
@@ -3435,7 +3442,7 @@ function App() {
       notificationType: "send_request" | "share_brief",
     ) => {
       const token = await getToken();
-      if (!token) throw new Error("Sign in to send requests.");
+      if (!token) throw new Error(tr("crew.dispatch.signIn"));
       const baseUrl =
         (typeof import.meta !== "undefined" &&
           (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL) ||
@@ -3482,15 +3489,17 @@ function App() {
       if (!result.response.ok || !result.json?.ok || !result.json.brief?.id) {
         throw new Error(
           result.json?.error ||
-            `Could not send requests (${result.response.status}).`,
+            tr("crew.dispatch.sendErrorStatus", { status: result.response.status }),
         );
       }
       setActiveBriefId(result.json.brief.id);
       const deliveryToast = briefDeliveryToast(result.json.delivery);
-      toast[deliveryToast.kind](deliveryToast.message);
+      toast[deliveryToast.kind](
+        tr(deliveryToast.messageKey, deliveryToast.params),
+      );
       return result.json;
     },
-    [activeBriefId, currentProjectId, getToken, venueId],
+    [activeBriefId, currentProjectId, getToken, venueId, tr],
   );
 
   /** Send brief requests to a batch of linked freelancers. The flow is:
@@ -3638,7 +3647,7 @@ function App() {
         await dispatchBriefEmails(data, recipients, "send_request");
       } catch (e) {
         const msg =
-          e instanceof Error ? e.message : "Could not send requests";
+          e instanceof Error ? e.message : tr("crew.dispatch.sendError");
         setSendError(msg);
         // Roll back the optimistic rows so the producer can re-tick
         // and try again without ending up with duplicates.
@@ -3701,7 +3710,7 @@ function App() {
         freelancerUserId: member.freelancerUserId,
       }));
     if (recipients.length === 0) {
-      toast.error("No linked freelancers to email.");
+      toast.error(tr("crew.dispatch.noLinkedEmail"));
       return;
     }
     setSendingRequests(true);
@@ -3723,7 +3732,7 @@ function App() {
       );
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Could not email briefs.";
+        error instanceof Error ? error.message : tr("crew.dispatch.emailError");
       setSendError(message);
       toast.error(message);
     } finally {
@@ -3734,6 +3743,7 @@ function App() {
     crew,
     dispatchBriefEmails,
     sendingRequests,
+    tr,
   ]);
 
   /** Producer-side polling. Whenever the producer is on the Crew tab
@@ -4069,7 +4079,7 @@ function App() {
 
     const run = async () => {
       const token = await getToken();
-      if (!token) throw new Error("Sign in to save shifts.");
+       if (!token) throw new Error(tr("crew.shifts.authError"));
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
@@ -4643,7 +4653,9 @@ function App() {
   const addStage = () => {
     setStages((all) => [
       ...all,
-      makeDefaultStage(`Stage ${all.length + 1}`),
+      makeDefaultStage(
+        tr("stage.defaultNumberedName", { number: all.length + 1 }),
+      ),
     ]);
   };
   const updateStage = (id: string, patch: Partial<Stage>) => {
@@ -4712,13 +4724,37 @@ function App() {
         preparedBy: engineer,
       },
       logoDataUrl,
+      locale: i18nLocale === "no" ? "nb-NO" : "en-US",
+      copy: {
+        untitled: tr("stage.untitled"), productionTool: tr("export.stage.productionTool"), buildSheet: tr("export.stageBuildSheet"), generated: tr("export.stage.generated"),
+        print: tr("export.stage.print"), close: tr("common.close"), venueProject: tr("export.stage.venueProject"), date: tr("export.stage.date"), projectManager: tr("export.stage.projectManager"),
+        layoutMode: tr("export.stage.layoutMode"), manualPlacement: tr("export.stage.manualPlacement"), autoTiled: tr("export.stage.autoTiled"), buildDirection: tr("export.stage.buildDirection"),
+        rightToLeft: tr("stage.direction.rightToLeft"), leftToRight: tr("stage.direction.leftToRight"), maleSideFaces: tr("export.stage.maleSideFaces"), overrides: (count) => tr("export.stage.overrides", { count }),
+        layout: tr("export.stage.layout"), noDecksManual: tr("export.stage.noDecksManual"), handrail: tr("export.stage.handrail"), leg: tr("export.stage.leg"),
+        maleEdges: tr("export.stage.maleEdges"), maleEdgesDetail: tr("export.stage.maleEdgesDetail"), connectorGuidance: tr("export.stage.connectorGuidance"),
+        width: tr("export.stage.width"), depth: tr("export.stage.depth"), area: tr("export.stage.area"), totalWeight: tr("export.stage.totalWeight"), cannotTile: tr("export.stage.cannotTile"),
+        decks: tr("export.stage.decks"), size: tr("export.stage.size"), quantity: tr("export.stage.quantity"), unit: tr("export.stage.unit"), total: tr("export.stage.total"), noDecks: tr("export.stage.noDecks"),
+        subtotal: tr("export.stage.subtotal"), legs: tr("export.stage.legs"), perDeck: tr("export.stage.perDeck"), sharedCorners: tr("stage.legs.sharedCorners"), pieces: tr("stage.unit.pieces"),
+        unitWeight: tr("export.stage.unitWeight"), bracingRequired: tr("export.stage.bracingRequired"), buildSequence: tr("export.stage.buildSequence"), deck: tr("export.stage.deck"),
+        maleSide: tr("export.stage.maleSide"), legsToInstall: tr("export.stage.legsToInstall"), sequenceHelp: tr("export.stage.sequenceHelp"), loadCapacity: tr("export.stage.loadCapacity"),
+        distributedLoad: tr("export.stage.distributedLoad"), placedAreaOnly: tr("export.stage.placedAreaOnly"), ratedSwl: tr("export.stage.ratedSwl"), capacityHelp: tr("export.stage.capacityHelp"),
+        handrails: tr("stage.handrails"), side: tr("export.stage.side"), length: tr("export.stage.length"), weight: tr("export.stage.weight"), noHandrails: tr("export.stage.noHandrails"),
+        notes: tr("stage.notes"), grandTotal: tr("export.stage.grandTotal"), footer: tr("export.stage.footer"), popupError: tr("export.stage.popupError"),
+        connectorLabel: { N: tr("stage.side.upstage"), E: tr("stage.side.right"), S: tr("stage.side.downstage"), W: tr("stage.side.left") },
+        connectorShort: { N: tr("stage.short.N"), E: tr("stage.short.E"), S: tr("stage.short.S"), W: tr("stage.short.W") },
+        railSide: { front: tr("stage.rail.front"), back: tr("stage.rail.back"), left: tr("stage.rail.left"), right: tr("stage.rail.right") },
+        legsAdded: (count) => tr(count === 1 ? "export.stage.leg" : "export.stage.legs"), deckCount: (count) => tr(count === 1 ? "export.stage.deck" : "export.stage.decks"), legCount: (count) => tr(count === 1 ? "export.stage.leg" : "export.stage.legs"),
+      },
     });
-    const filename = pdfFilename([
-      "Stage Build Sheet",
-      stage.name.trim() || "Untitled stage",
-      venue,
-      reportDate,
-    ]);
+    const filename = pdfFilename(
+      [
+        tr("export.stageBuildSheet"),
+        stage.name.trim() || tr("export.untitledStage"),
+        venue,
+        reportDate,
+      ],
+      tr("export.pdfFilenameFallback"),
+    );
     try {
       await downloadHtmlAsPdf(html, filename);
     } catch (err) {
@@ -4729,7 +4765,7 @@ function App() {
       // the user retry (which gives us a fresh activation token) or
       // report the issue.
       alert(
-        "Could not generate the PDF. Please try again, or contact support if the problem continues.",
+        tr("export.pdfError"),
       );
     }
   };
@@ -4745,7 +4781,7 @@ function App() {
     const targetWin = window.open("", "_blank");
     if (targetWin) {
       targetWin.document.write(
-        `<!doctype html><meta charset="utf-8"><title>Generating Power Plan…</title><body style="font:14px system-ui;padding:24px;color:#64748b">Generating Power Plan crew manifest…</body>`,
+        `<!doctype html><html lang="${i18nLocale === "no" ? "nb-NO" : "en"}"><meta charset="utf-8"><title>${tr("export.generatingPowerPlanTitle")}</title><body style="font:14px system-ui;padding:24px;color:#64748b">${tr("export.generatingPowerPlanBody")}</body></html>`,
       );
     }
     let logoDataUrl: string | null = null;
@@ -4766,11 +4802,53 @@ function App() {
       },
       logoDataUrl,
       targetWin,
+      locale: i18nLocale,
+      copy: {
+        documentTitle: tr("export.powerPlan.documentTitle"),
+        productionTool: tr("export.powerPlan.productionTool"),
+        manifest: tr("export.powerPlan.manifest"),
+        generated: tr("export.powerPlan.generated"),
+        print: tr("export.powerPlan.print"),
+        downloadJson: tr("export.powerPlan.downloadJson"),
+        close: tr("export.powerPlan.close"),
+        venueProject: tr("export.powerPlan.venueProject"),
+        date: tr("export.powerPlan.date"),
+        projectManager: tr("export.powerPlan.projectManager"),
+        distros: tr("export.powerPlan.distros"),
+        totalLoad: tr("export.powerPlan.totalLoad"),
+        worstLeg: tr("export.powerPlan.worstLeg"),
+        unpowered: tr("export.powerPlan.unpowered"),
+        racks: tr("export.powerPlan.racks"),
+        fixtures: tr("export.powerPlan.fixtures"),
+        breakdown: tr("export.powerPlan.breakdown"),
+        connectedLoad: tr("export.powerPlan.connectedLoad"),
+        feeds: tr("export.powerPlan.feeds"),
+        phases: tr("export.powerPlan.phases"),
+        channels: tr("export.powerPlan.channels"),
+        phase: tr("export.powerPlan.phase"),
+        watts: tr("export.powerPlan.watts"),
+        amps: tr("export.powerPlan.amps"),
+        truss: tr("export.powerPlan.truss"),
+        fixture: tr("export.powerPlan.fixture"),
+        quantity: tr("export.powerPlan.quantity"),
+        cable: tr("export.powerPlan.cable"),
+        channelSubtotal: tr("export.powerPlan.channelSubtotal"),
+        breaker: tr("export.powerPlan.breaker"),
+        noDrops: tr("export.powerPlan.noDrops"),
+        distroFallback: tr("export.powerPlan.distroFallback"),
+        powerPlanFallback: tr("export.powerPlan.powerPlanFallback"),
+        noDistros: tr("export.powerPlan.noDistros"),
+        unpoweredWarning: (count) => tr(count === 1 ? "export.powerPlan.unpoweredWarningOne" : "export.powerPlan.unpoweredWarning", { count: count.toLocaleString(i18nLocale === "no" ? "nb-NO" : "en-US") }),
+        footer: tr("export.powerPlan.footer"),
+        feederUtilization: tr("export.powerPlan.feederUtilization"),
+        imbalance: tr("export.powerPlan.imbalance"),
+        grandTotal: (watts, amps) => tr("export.powerPlan.grandTotal", { watts, amps }),
+      },
     });
     setPowerExportToast(
       result.ok
-        ? "Synced to crew — Technical Plan + Schedule updated. Printable manifest opened in a new tab."
-        : "Couldn't open a new tab — please allow pop-ups and try again.",
+        ? tr("export.powerPlanSuccess")
+        : tr("export.popupError"),
     );
   };
 
@@ -4794,7 +4872,7 @@ function App() {
     const targetWin = window.open("", "_blank");
     if (targetWin) {
       targetWin.document.write(
-        `<!doctype html><meta charset="utf-8"><title>Generating Client Pack…</title><body style="font:14px system-ui;padding:24px;color:#64748b">Generating Client Pack…</body>`,
+        `<!doctype html><meta charset="utf-8"><title>${tr("export.generatingClientPack")}</title><body style="font:14px system-ui;padding:24px;color:#64748b">${tr("export.generatingClientPack")}</body>`,
       );
     }
 
@@ -4805,7 +4883,7 @@ function App() {
       .filter((k) => (schedule[k]?.length ?? 0) > 0)
       .map((k) => ({
         key: k,
-        label: SCHEDULE_PHASE_LABELS[k],
+        label: tr(SCHEDULE_PHASE_LABEL_KEYS[k]),
         segments: schedule[k] ?? [],
       }));
 
@@ -4857,6 +4935,7 @@ function App() {
             panels: ledPanels,
             settings: ledSettings,
             logoDataUrl,
+            filenameFallback: tr("export.ledScreenFilenameFallback"),
           });
           ledPixelMaps[screen.id] = await blobToDataUrl(blob);
         } catch (err) {
@@ -4888,10 +4967,104 @@ function App() {
       ledPixelMaps,
       logoDataUrl,
       targetWin,
+      locale: i18nLocale === "no" ? "nb-NO" : "en-US",
+      copy: {
+        clientPack: tr("header.clientPack"),
+        downloadPdf: tr("export.clientPack.downloadPdf"),
+        print: tr("common.print"),
+        close: tr("common.close"),
+        generatingPdf: tr("export.clientPack.generatingPdf"),
+        pdfError: tr("export.clientPack.pdfError"),
+        footerAdvisory: tr("export.clientPack.footerAdvisory"),
+        notSpecified: tr("export.clientPack.notSpecified"),
+        generated: tr("export.clientPack.generated"),
+        riskSafe: tr("export.clientPack.risk.safe"),
+        riskWarning: tr("export.clientPack.risk.warning"),
+        riskOverload: tr("export.clientPack.risk.overload"),
+        noIssuesDetected: tr("export.clientPack.noIssuesDetected"),
+        noIssuesDetail: tr("export.clientPack.noIssuesDetail"),
+        riskAreaRigging: tr("export.clientPack.risk.areaRigging"),
+        riskAreaPower: tr("export.clientPack.risk.areaPower"),
+        riskAreaCrew: tr("export.clientPack.risk.areaCrew"),
+        riskAreaSchedule: tr("export.clientPack.risk.areaSchedule"),
+        riskPeakOverload: tr("export.clientPack.risk.peakOverload"),
+        riskPeakWarning: tr("export.clientPack.risk.peakWarning"),
+        riskFeederOverload: tr("export.clientPack.risk.feederOverload"),
+        riskFeederWarning: tr("export.clientPack.risk.feederWarning"),
+        riskPhaseImbalance: tr("export.clientPack.risk.phaseImbalance"),
+        riskUnpoweredOne: tr("export.clientPack.risk.unpoweredOne"),
+        riskUnpoweredMany: tr("export.clientPack.risk.unpoweredMany"),
+        riskMissingCallOne: tr("export.clientPack.risk.missingCallOne"),
+        riskMissingCallMany: tr("export.clientPack.risk.missingCallMany"),
+        riskNoCrew: tr("export.clientPack.risk.noCrew"),
+        riskUndatedSegmentOne: tr("export.clientPack.risk.undatedSegmentOne"),
+        riskUndatedSegmentMany: tr("export.clientPack.risk.undatedSegmentMany"),
+        riskNoSchedule: tr("export.clientPack.risk.noSchedule"),
+        unnamed: tr("export.clientPack.unnamed"),
+        distroFallback: tr("export.clientPack.distro"),
+        tbd: tr("export.callSheet.tbd"),
+        processorFallback: tr("export.clientPack.processor"),
+        ledScreenFallback: tr("export.clientPack.ledScreenFallback"),
+        pixelMap: tr("export.clientPack.pixelMap"),
+        filenameFallback: tr("header.clientPack"),
+        labels: {
+          brand: tr("export.clientPack.brand"),
+          client: tr("export.clientPack.client"), venue: tr("export.clientPack.venue"),
+          date: tr("export.clientPack.date"), preparedBy: tr("export.clientPack.preparedBy"),
+          overviewSection: tr("export.clientPack.section.overview"),
+          totalCrew: tr("export.clientPack.totalCrew"), riggingSystems: tr("export.clientPack.riggingSystems"),
+          lightingFixtures: tr("export.clientPack.lightingFixtures"), distros: tr("export.clientPack.distros"),
+          soundItems: tr("export.clientPack.soundItems"), stages: tr("export.clientPack.stages"),
+          ledScreens: tr("export.clientPack.ledScreens"),
+          scheduleSection: tr("export.clientPack.section.schedule"), phase: tr("export.clientPack.phase"),
+          time: tr("export.clientPack.time"), crewSection: tr("export.clientPack.section.crew"),
+          name: tr("export.clientPack.name"), role: tr("export.clientPack.role"),
+          call: tr("export.clientPack.call"), off: tr("export.clientPack.off"),
+          hours: tr("export.clientPack.hours"), hotel: tr("export.clientPack.hotel"),
+          dayRate: tr("export.clientPack.dayRate"), hotelNeeded: tr("export.clientPack.hotelNeeded"),
+          roomsOne: tr("export.clientPack.rooms.one"), roomsMany: tr("export.clientPack.rooms.many"),
+          nightsOne: tr("export.clientPack.nights.one"), nightsMany: tr("export.clientPack.nights.many"),
+          crewTotalOne: tr("export.clientPack.crewTotal.one"), crewTotalMany: tr("export.clientPack.crewTotal.many"),
+          totals: tr("export.clientPack.totals"),
+          riggingSection: tr("export.clientPack.section.rigging"), system: tr("export.clientPack.system"),
+          trusses: tr("export.clientPack.trusses"), pts: tr("export.clientPack.pts"),
+          motor: tr("export.clientPack.motor"), staticLoad: tr("export.clientPack.static"),
+          dynamicLoad: tr("export.clientPack.dynamic"), peakSwl: tr("export.clientPack.peakSwl"),
+          util: tr("export.clientPack.util"), status: tr("export.clientPack.status"),
+          lightingSection: tr("export.clientPack.section.lighting"), fixtures: tr("export.clientPack.fixtures"),
+          totalLoad: tr("export.clientPack.totalLoad"), unpowered: tr("export.clientPack.unpowered"),
+          phaseCount: tr("export.clientPack.phaseCount"),
+          distro: tr("export.clientPack.distro"), feed: tr("export.clientPack.feed"),
+          totalW: tr("export.clientPack.totalW"), worstLeg: tr("export.clientPack.worstLeg"),
+          imbalance: tr("export.clientPack.imbalance"),
+          soundSection: tr("export.clientPack.section.sound"), item: tr("export.clientPack.item"),
+          category: tr("export.clientPack.category"), qty: tr("export.clientPack.qty"),
+          weight: tr("export.clientPack.weight"), power: tr("export.clientPack.power"),
+          placementNotes: tr("export.clientPack.placementNotes"),
+          rowsOne: tr("export.clientPack.rows.one"), rowsMany: tr("export.clientPack.rows.many"),
+          piecesOne: tr("export.clientPack.pieces.one"), piecesMany: tr("export.clientPack.pieces.many"),
+          stageSection: tr("export.clientPack.section.stage"), stage: tr("export.clientPack.stage"),
+          dimensions: tr("export.clientPack.dimensions"), legHeight: tr("export.clientPack.legHeight"),
+          area: tr("export.clientPack.area"), buildWeight: tr("export.clientPack.buildWeight"),
+          loadCapacity: tr("export.clientPack.loadCapacity"),
+          stageOne: tr("export.clientPack.stageCount.one"), stageMany: tr("export.clientPack.stageCount.many"),
+          ledSection: tr("export.clientPack.section.led"), screens: tr("export.clientPack.screens"),
+          cabinets: tr("export.clientPack.cabinets"), pixels: tr("export.clientPack.pixels"),
+          peakPower: tr("export.clientPack.peakPower"), screen: tr("export.clientPack.screen"),
+          panelType: tr("export.clientPack.panelType"), grid: tr("export.clientPack.grid"),
+          resolution: tr("export.clientPack.resolution"), processor: tr("export.clientPack.processor"),
+          portsNeeded: tr("export.clientPack.portsNeeded"), processorLoad: tr("export.clientPack.processorLoad"),
+          riskSection: tr("export.clientPack.section.risk"), riskArea: tr("export.clientPack.area"),
+          detail: tr("export.clientPack.detail"), costSection: tr("export.clientPack.section.cost"),
+          department: tr("export.clientPack.department"), headcount: tr("export.clientPack.headcount"),
+          cost: tr("export.clientPack.cost"), totalCrewCost: tr("export.clientPack.totalCrewCost"),
+          costFootnote: tr("export.clientPack.costFootnote"),
+        },
+      },
     });
     if (!result.ok) {
       alert(
-        "Could not open the Client Pack window. Please allow pop-ups for this site and try again.",
+        tr("export.clientPackPopupError"),
       );
     }
   };
@@ -4905,7 +5078,7 @@ function App() {
     const targetWin = window.open("", "_blank");
     if (targetWin) {
       targetWin.document.write(
-        `<!doctype html><meta charset="utf-8"><title>Running Show Simulation…</title><body style="font:14px system-ui;padding:24px;color:#64748b">Running Show Simulation…</body>`,
+        `<!doctype html><meta charset="utf-8"><title>${tr("export.runningSimulation")}</title><body style="font:14px system-ui;padding:24px;color:#64748b">${tr("export.runningSimulation")}</body>`,
       );
     }
 
@@ -4916,7 +5089,7 @@ function App() {
       .filter((k) => (schedule[k]?.length ?? 0) > 0)
       .map((k) => ({
         key: k,
-        label: SCHEDULE_PHASE_LABELS[k],
+        label: tr(SCHEDULE_PHASE_LABEL_KEYS[k]),
         segments: schedule[k] ?? [],
       }));
 
@@ -4960,6 +5133,8 @@ function App() {
       : null;
 
     const input: ShowSimulationInput = {
+      locale: i18nLocale,
+      copy: tr,
       project: {
         eventName: projectName,
         client,
@@ -4987,7 +5162,7 @@ function App() {
     const result = exportShowSimulation(input);
     if (!result.ok) {
       alert(
-        "Could not open the Show Simulation window. Please allow pop-ups for this site and try again.",
+        tr("export.simulationPopupError"),
       );
     }
   };
@@ -5102,25 +5277,28 @@ function App() {
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const rows: string[] = [];
+    const csvHoistLabel = (hoist: Hoist) =>
+      hoist.swl > 0 ? hoist.label : tr("rigging.print.noMotor");
+    const motorsSection = tr("rigging.print.motorsSupport");
     rows.push(
       [
-        "Project Venue",
-        "Project Date",
-        "Engineer",
-        "System",
-        "Section",
-        "Item",
-        "Qty",
-        "Unit Weight (kg)",
-        "Total Weight (kg)",
-        "Unit Power (W)",
-        "Total Power (W)",
-        "Unit Area (m^2)",
-        "Total Area (m^2)",
-        "System Points",
-        "System Dynamic Factor",
-        "Hoist",
-        "Hoist SWL (kg)",
+        tr("rigging.csv.projectVenue"),
+        tr("rigging.csv.projectDate"),
+        tr("rigging.csv.engineer"),
+        tr("rigging.print.system"),
+        tr("rigging.print.section"),
+        tr("rigging.print.item"),
+        tr("rigging.print.qty"),
+        tr("rigging.csv.unitWeightKg"),
+        tr("rigging.csv.totalWeightKg"),
+        tr("rigging.csv.unitPowerW"),
+        tr("rigging.csv.totalPowerW"),
+        tr("rigging.csv.unitAreaM2"),
+        tr("rigging.csv.totalAreaM2"),
+        tr("rigging.csv.systemPoints"),
+        tr("rigging.csv.systemDynamicFactor"),
+        tr("rigging.print.hoist"),
+        tr("rigging.csv.hoistSwlKg"),
       ]
         .map(esc)
         .join(","),
@@ -5129,9 +5307,9 @@ function App() {
     for (const sys of systems) {
       const hoist = getHoist(sys.hoistIndex);
       const lines: { row: Row; section: string }[] = [
-        ...sys.riggingRows.map((r) => ({ row: r, section: "Motors & Support" })),
-        ...sys.fixtureRows.map((r) => ({ row: r, section: "Lighting Fixtures" })),
-        ...sys.ledRows.map((r) => ({ row: r, section: "LED & Other" })),
+        ...sys.riggingRows.map((r) => ({ row: r, section: motorsSection })),
+        ...sys.fixtureRows.map((r) => ({ row: r, section: tr("rigging.print.lightingFixtures") })),
+        ...sys.ledRows.map((r) => ({ row: r, section: tr("rigging.print.ledOther") })),
       ];
 
       // Hoist row(s) — record the hoist contribution itself
@@ -5141,8 +5319,8 @@ function App() {
           reportDate,
           engineer,
           sys.name,
-          "Motors & Support",
-          hoist.label,
+          motorsSection,
+          csvHoistLabel(hoist),
           sys.pointCount,
           hoist.weight,
           (hoist.weight * sys.pointCount).toFixed(2),
@@ -5152,7 +5330,7 @@ function App() {
           0,
           sys.pointCount,
           sys.dynamicFactor,
-          hoist.label,
+          csvHoistLabel(hoist),
           hoist.swl,
         ]
           .map(esc)
@@ -5179,7 +5357,7 @@ function App() {
             (it.area * row.qty).toFixed(2),
             sys.pointCount,
             sys.dynamicFactor,
-            hoist.label,
+            csvHoistLabel(hoist),
             hoist.swl,
           ]
             .map(esc)
@@ -5192,16 +5370,16 @@ function App() {
     rows.push("");
     rows.push(
       [
-        "System",
-        "Hoist",
-        "Points",
-        "Dynamic Factor",
-        "Static Total (kg)",
-        "Dynamic Total (kg)",
-        "Peak Point (kg)",
-        "SWL (kg)",
-        "Headroom (kg)",
-        "Status",
+        tr("rigging.print.system"),
+        tr("rigging.print.hoist"),
+        tr("rigging.points"),
+        tr("rigging.dynamicFactor"),
+        tr("rigging.csv.staticTotalKg"),
+        tr("rigging.csv.dynamicTotalKg"),
+        tr("rigging.csv.peakPointKg"),
+        tr("rigging.csv.swlKg"),
+        tr("rigging.csv.headroomKg"),
+        tr("rigging.print.status"),
       ]
         .map(esc)
         .join(","),
@@ -5212,16 +5390,16 @@ function App() {
       const hasHoist = metrics.swl > 0;
       const over = hasHoist && metrics.peak > metrics.swl;
       const status = !hasHoist
-        ? "No motor"
+        ? tr("rigging.print.noMotor")
         : over
-          ? "OVERLOAD"
+          ? tr("rigging.status.overload")
           : metrics.peak / metrics.swl > 0.85
-            ? "Caution"
-            : "OK";
+            ? tr("rigging.status.caution")
+            : tr("common.ok");
       rows.push(
         [
           system.name,
-          getHoist(system.hoistIndex).label,
+          csvHoistLabel(getHoist(system.hoistIndex)),
           system.pointCount,
           system.dynamicFactor,
           metrics.static.toFixed(2),
@@ -5238,7 +5416,15 @@ function App() {
 
     rows.push("");
     rows.push(
-      ["System", "Point", "Distribution %", "Static (kg)", "Dynamic (kg)", "SWL Util %", "Status"]
+      [
+        tr("rigging.print.system"),
+        tr("rigging.print.point"),
+        tr("rigging.csv.distributionPct"),
+        tr("rigging.print.staticKg"),
+        tr("rigging.print.dynamicKg"),
+        tr("rigging.csv.swlUtilPct"),
+        tr("rigging.print.status"),
+      ]
         .map(esc)
         .join(","),
     );
@@ -5250,12 +5436,12 @@ function App() {
         const util = hasHoist ? (dLoad / metrics.swl) * 100 : 0;
         const over = hasHoist && dLoad > metrics.swl;
         const status = !hasHoist
-          ? "No motor"
+          ? tr("rigging.print.noMotor")
           : over
-            ? "OVERLOAD"
+            ? tr("rigging.status.overload")
             : util > 85
-              ? "Caution"
-              : "OK";
+              ? tr("rigging.status.caution")
+              : tr("common.ok");
         rows.push(
           [
             system.name,
@@ -5396,7 +5582,11 @@ function App() {
     setLedSystemState(
       d.ledSystem ? normalizeLedSystem(d.ledSystem) : { ...EMPTY_LED_SYSTEM },
     );
-    setStages((d.stages ?? []).map(normalizeStage));
+    setStages(
+      (d.stages ?? []).map((stage) =>
+        normalizeStage(stage, tr("stage.defaultName")),
+      ),
+    );
     setCrew((d.crew ?? []).map(normalizeCrewMember));
     setSoundItems((d.soundItems ?? []).map(normalizeSoundItem));
     setPower(normalizePowerPlan(d.power));
@@ -5794,7 +5984,7 @@ function App() {
             )
           }
         />
-        <div className="row-subtotal" title="Row total weight">
+        <div className="row-subtotal" title={tr("rigging.rowTotalWeight")}>
           {subtotal.toFixed(1)}
           <span>kg</span>
         </div>
@@ -5803,7 +5993,7 @@ function App() {
           onClick={() =>
             updateRowsKey(listKey, (rows) => rows.filter((r) => r.id !== row.id))
           }
-          aria-label="Remove"
+          aria-label={tr("common.remove")}
         >
           ×
         </button>
@@ -6282,12 +6472,20 @@ function App() {
               client,
               reportDate,
               logoSrc: ehsLogo,
+              locale: i18nLocale === "no" ? "nb-NO" : "en-GB",
+              copy: {
+                projectPack: tr("export.ledPdf.projectPack"), powerDrawing: tr("export.ledPdf.powerDrawing"), signalDrawing: tr("export.ledPdf.signalDrawing"),
+                technicalSummary: tr("export.ledPdf.technicalSummary"), cableSummary: tr("export.ledPdf.cableSummary"), project: tr("export.ledPdf.project"), venue: tr("export.ledPdf.venue"), client: tr("export.ledPdf.client"), date: tr("export.ledPdf.date"),
+                screens: tr("export.ledPdf.screens"), panels: tr("export.ledPdf.panels"), totalPixels: tr("export.ledPdf.totalPixels"), area: tr("export.ledPdf.area"), weight: tr("export.ledPdf.weight"), maxOutput: tr("export.ledPdf.maxOutput"), averageOutput: tr("export.ledPdf.averageOutput"), outputsNeeded: tr("export.ledPdf.outputsNeeded"), peakWhite: tr("export.ledPdf.peakWhite"), oneThirdMax: tr("export.ledPdf.oneThirdMax"),
+                screen: tr("export.ledPdf.screen"), panel: tr("export.ledPdf.panel"), grid: tr("export.ledPdf.grid"), pixels: tr("export.ledPdf.pixels"), maxWatts: tr("export.ledPdf.maxWatts"), averageWatts: tr("export.ledPdf.averageWatts"), amps: tr("export.ledPdf.amps"), total: tr("export.ledPdf.total"), signalJumpers: tr("export.ledPdf.signalJumpers"), signalLength: tr("export.ledPdf.signalLength"), powerJumpers: tr("export.ledPdf.powerJumpers"), powerLength: tr("export.ledPdf.powerLength"), brackets: tr("export.ledPdf.brackets"), unnamed: tr("export.ledPdf.unnamed"), continued: tr("export.ledPdf.continued"), noCanvas: tr("export.ledPdf.noCanvas"), noScreens: tr("export.ledPdf.noScreens"), cableFootnote: tr("export.ledPdf.cableFootnote"), filenameFallback: tr("export.ledPdf.filenameFallback"), productTitle: tr("global.workspace.productionTool"),
+              },
             });
           } catch (err) {
+            console.error("[LED project PDF] export failed:", err);
             const msg =
-              err instanceof Error
+              err instanceof Error && !isLedExportError(err)
                 ? err.message
-                : "Could not generate the LED project PDF.";
+                : tr("export.ledPdf.error");
             alert(msg);
           }
         },
@@ -6374,12 +6572,12 @@ function App() {
   const projectMetaSlot = (
     <>
       <div className="meta-field">
-        <label>Easyjob ID</label>
+        <label>{tr("project.easyjobId")}</label>
         <input
           type="text"
           value={easyjobNumber}
           onChange={(e) => setEasyjobNumber(e.target.value)}
-          placeholder="e.g. EJ-2026-001"
+          placeholder={tr("project.easyjobPlaceholder")}
           maxLength={100}
         />
       </div>
@@ -6421,7 +6619,7 @@ function App() {
               style={{ padding: "0 8px", minHeight: 44, fontSize: 13 }}
               onClick={() => setShowVenueSpecs(true)}
             >
-              Specs
+              {tr("project.specs")}
             </button>
           )}
         </div>
@@ -6614,7 +6812,7 @@ function App() {
       <AppShell
         view={mainView as ShellView}
         onChangeView={(v) => setMainView(v as MainView)}
-        workspaceLabel="Production Tool"
+        workspaceLabel={tr("global.workspace.productionTool")}
         workspaceLogoSrc={ehsLogo}
         projectTitle={projectName || tr("shell.breadcrumb.untitled")}
         projectStatus={projectStatus}
@@ -6711,8 +6909,8 @@ function App() {
         }
         readOnlyLabel={
           projectIsTerminal
-            ? "Completed or archived project · changes are disabled"
-            : "View-only project · changes are disabled"
+            ? tr("shell.readOnly.terminal")
+            : tr("shell.readOnly.viewer")
         }
       >
       {mainView === "oversikt" && (
@@ -6769,7 +6967,7 @@ function App() {
             />
             <Link
               href="/portal"
-              title="Go to your Freelance Portal"
+              title={tr("shell.freelancePortalTitle")}
               className="btn btn-pill header-portal-link"
             >
               {/* Lucide-style "users" glyph for Portal. */}
@@ -6790,7 +6988,7 @@ function App() {
                 <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
                 <path d="M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
-              <span>Freelance Portal</span>
+              <span>{tr("shell.freelancePortal")}</span>
             </Link>
             <SignOutButton />
           </div>
@@ -6801,8 +6999,8 @@ function App() {
               secondary action is a small outlined ghost pill, only "Share
               with Crew" is filled in EHS orange as the primary CTA. */}
           <div className="header-doc-actions">
-            <span className="autosave-pill" title="Saved locally in your browser">
-              ● Saved {savedAt}
+            <span className="autosave-pill" title={tr("shell.savedLocally")}>
+              ● {tr("shell.savedAt", { time: savedAt })}
             </span>
             {!projectIsTerminal ? <button
               className="btn btn-pill"
@@ -6815,7 +7013,7 @@ function App() {
             <button
               className="btn btn-pill"
               onClick={downloadCsv}
-              title="Download CSV"
+              title={tr("shell.action.downloadCsv")}
             >
               <span className="btn-pill-icon" aria-hidden>⬇</span>
               <span>CSV</span>
@@ -6839,7 +7037,7 @@ function App() {
             <button
               className="btn btn-pill"
               onClick={exportClientPackPdf}
-              title="Open a printable, client-facing pack covering schedule, crew, rigging, lighting, sound, stage, LED, risks and cost"
+              title={tr("shell.action.clientPackTitle")}
             >
               <span className="btn-pill-icon" aria-hidden>▤</span>
               <span>{tr("header.clientPack")}</span>
@@ -6847,7 +7045,7 @@ function App() {
             <button
               className="btn btn-pill"
               onClick={simulateShow}
-              title="Step through 10 production phases (load-in → show → load-out) with discipline status, risks and a final readiness verdict"
+              title={tr("shell.action.simulateShowTitle")}
             >
               <span className="btn-pill-icon" aria-hidden>▶</span>
               <span>{tr("header.simulateShow")}</span>
@@ -6855,7 +7053,7 @@ function App() {
             {!projectIsTerminal ? <button
               className="btn btn-pill btn-pill-primary"
               onClick={() => void emailAssignedCrewBriefs()}
-              title="Email the project brief to assigned freelancers"
+              title={tr("crew.dispatch.emailAssignedHint")}
             >
               <span className="btn-pill-icon" aria-hidden>↗</span>
               <span>{tr("header.shareWithCrew")}</span>
@@ -6982,7 +7180,7 @@ function App() {
             className={`view-tab ${mainView === "catering" ? "is-active" : ""}`}
             onClick={() => setMainView("catering")}
           >
-            Catering
+            {tr("view.catering")}
           </button>
         )}
         {/* Hotel tab gates on activeBriefId for the same reason as
@@ -6994,7 +7192,7 @@ function App() {
             className={`view-tab ${mainView === "hotel" ? "is-active" : ""}`}
             onClick={() => setMainView("hotel")}
           >
-            Hotel
+            {tr("view.hotel")}
           </button>
         )}
         <button
@@ -7013,37 +7211,37 @@ function App() {
       {/* PROJECT-WIDE SUMMARY */}
       <div className="dashboard project-summary">
         <div className="dash-item">
-          <span>Systems</span>
+            <span>{tr("rigging.summary.systems")}</span>
           <strong>{systems.length}</strong>
-          <small>total</small>
+          <small>{tr("rigging.summary.total")}</small>
         </div>
         <div className="dash-item">
-          <span>Hoists</span>
+          <span>{tr("rigging.summary.hoists")}</span>
           <strong>{projectTotals.totalPoints}</strong>
-          <small>points</small>
+          <small>{tr("rigging.summary.points")}</small>
         </div>
         <div className="dash-item">
-          <span>Project Static</span>
+          <span>{tr("rigging.summary.projectStatic")}</span>
           <strong>{projectTotals.totalStatic.toFixed(1)}</strong>
           <small>kg</small>
         </div>
         <div className="dash-item">
-          <span>Project Dynamic</span>
+          <span>{tr("rigging.summary.projectDynamic")}</span>
           <strong>{projectTotals.totalDynamic.toFixed(1)}</strong>
           <small>kg</small>
         </div>
         <div className="dash-item">
-          <span>Project Power</span>
+          <span>{tr("rigging.summary.projectPower")}</span>
           <strong>{projectTotals.totalPower.toLocaleString()}</strong>
           <small>W</small>
         </div>
         <div className="dash-item">
-          <span>Motor Power</span>
+          <span>{tr("rigging.summary.motorPower")}</span>
           <strong>{projectTotals.totalMotorPower.toLocaleString()}</strong>
           <small>W</small>
         </div>
         <div className="dash-item">
-          <span>Overloads</span>
+          <span>{tr("rigging.summary.overloads")}</span>
           <strong
             style={{
               color:
@@ -7054,7 +7252,7 @@ function App() {
           >
             {projectTotals.overloadedPoints}
           </strong>
-          <small>{projectTotals.overloadedPoints === 1 ? "point" : "points"}</small>
+          <small>{tr(projectTotals.overloadedPoints === 1 ? "rigging.summary.point" : "rigging.summary.points")}</small>
         </div>
       </div>
 
@@ -7072,15 +7270,15 @@ function App() {
                 className={`system-mini ${isActive ? "is-active" : ""} ${over ? "is-over" : ""}`}
                 onClick={() => setActiveSystemId(system.id)}
               >
-                <div className="mini-name">{system.name || "Unnamed"}</div>
+                <div className="mini-name">{system.name || tr("common.unnamed")}</div>
                 <div className="mini-stats">
                   <span>
                     <strong>{metrics.peak.toFixed(0)}</strong>
-                    <small>kg peak</small>
+                    <small>{tr("rigging.summary.kgPeak")}</small>
                   </span>
                   <span>
                     <strong>{system.pointCount}</strong>
-                    <small>pts</small>
+                    <small>{tr("rigging.summary.pts")}</small>
                   </span>
                   <span>
                     <strong>{hasHoist ? metrics.swl : "—"}</strong>
@@ -7100,7 +7298,7 @@ function App() {
                     }}
                   />
                 </div>
-                {over && <span className="mini-over-tag">OVERLOAD</span>}
+                {over && <span className="mini-over-tag">{tr("rigging.status.overload")}</span>}
               </button>
             );
           })}
@@ -7121,7 +7319,7 @@ function App() {
                 onClick={() => setActiveSystemId(s.id)}
                 role="tab"
               >
-                <span className="tab-name">{s.name || "Unnamed"}</span>
+                <span className="tab-name">{s.name || tr("common.unnamed")}</span>
                 {over && <span className="tab-over">⚠</span>}
                 <span
                   className="tab-close"
@@ -7129,11 +7327,11 @@ function App() {
                     e.stopPropagation();
                     removeSystem(s.id);
                   }}
-                  aria-label="Remove system"
+                  aria-label={tr("rigging.action.removeSystem")}
                   title={
                     systems.length > 1
-                      ? "Remove this system"
-                      : "Clear this system and start fresh"
+                      ? tr("rigging.action.removeSystem")
+                      : tr("rigging.action.clearSystem")
                   }
                 >
                   ×
@@ -7144,10 +7342,10 @@ function App() {
         </div>
         <div className="tabs-actions">
           <button className="btn btn-tab-action" onClick={duplicateActiveSystem}>
-            Duplicate
+            {tr("common.duplicate")}
           </button>
           <button className="btn btn-tab-action btn-tab-add" onClick={addSystem}>
-            + New System
+            {tr("rigging.action.newSystem")}
           </button>
         </div>
       </div>
@@ -7155,12 +7353,12 @@ function App() {
       {/* ACTIVE SYSTEM IDENTITY */}
       <div className="system-identity active-system-card">
         <div className="sys-id-main">
-          <label>Rigging Reference ID:</label>
+          <label>{tr("rigging.referenceId")}</label>
           <input
             type="text"
             value={activeSystem.name}
             onChange={(e) => updateActiveSystem({ name: e.target.value })}
-            placeholder="e.g. LX1, LX2, VX1"
+            placeholder={tr("rigging.referencePlaceholder")}
           />
         </div>
       </div>
@@ -7168,19 +7366,19 @@ function App() {
       {/* ACTIVE SYSTEM DASHBOARD */}
       <div className="dashboard">
         <div className="dash-item">
-          <span>Static Load</span>
+          <span>{tr("rigging.summary.staticLoad")}</span>
           <strong>{metricsByActive.static.toFixed(1)}</strong>
           <small>kg</small>
         </div>
         <div className="dash-item">
-          <span>Peak Load</span>
+          <span>{tr("rigging.summary.peakLoad")}</span>
           <strong style={{ color: peakColor }}>
             {metricsByActive.peak.toFixed(1)}
           </strong>
           <small>kg</small>
         </div>
         <div className="dash-item">
-          <span>SWL Headroom</span>
+          <span>{tr("rigging.summary.swlHeadroom")}</span>
           <strong
             style={{
               color:
@@ -7198,17 +7396,17 @@ function App() {
           <small>kg</small>
         </div>
         <div className="dash-item">
-          <span>Total Area</span>
+          <span>{tr("rigging.summary.totalArea")}</span>
           <strong>{metricsByActive.area.toFixed(1)}</strong>
           <small>m²</small>
         </div>
         <div className="dash-item">
-          <span>Eq. Power</span>
+          <span>{tr("rigging.summary.equipmentPower")}</span>
           <strong>{metricsByActive.power.toLocaleString()}</strong>
           <small>W</small>
         </div>
         <div className="dash-item">
-          <span>Motor Power</span>
+          <span>{tr("rigging.summary.motorPower")}</span>
           <strong>{metricsByActive.motorPower.toLocaleString()}</strong>
           <small>W</small>
         </div>
@@ -7216,7 +7414,7 @@ function App() {
 
       <div className="util-bar-wrap">
         <div className="util-bar-label">
-          <span>Peak SWL Utilization — {activeSystem.name}</span>
+          <span>{tr("rigging.peakUtilization", { name: activeSystem.name })}</span>
           <strong style={{ color: utilBarColor }}>
             {(peakUtil * 100).toFixed(1)}%
           </strong>
@@ -7229,17 +7427,17 @@ function App() {
           <div
             className="util-bar-marker"
             style={{ left: "85%" }}
-            title="85% caution"
+            title={tr("rigging.caution85")}
           />
           <div
             className="util-bar-marker util-marker-danger"
             style={{ left: "100%" }}
-            title="100% SWL"
+            title={tr("rigging.swl100")}
           />
         </div>
         <div className="util-bar-legend">
           <span>0 kg</span>
-          <span>Caution 85%</span>
+          <span>{tr("rigging.caution85")}</span>
           <span>
             SWL {metricsByActive.swl > 0 ? `${metricsByActive.swl} kg` : "—"}
           </span>
@@ -7249,7 +7447,7 @@ function App() {
       <div className="main-grid">
         <div className="card">
           <h2>
-            1. Motors &amp; Hoists
+            {tr("rigging.section.motors")}
             <span className="card-total">
               {(
                 activeSystem.pointCount *
@@ -7261,7 +7459,7 @@ function App() {
           <div className="motor-config">
             <div className="motor-config-grid">
               <div>
-                <label className="field-label">Points</label>
+                <label className="field-label">{tr("rigging.points")}</label>
                 <select
                   value={activeSystem.pointCount}
                   onChange={(e) =>
@@ -7270,28 +7468,28 @@ function App() {
                 >
                   {[2, 3, 4, 5, 6, 7, 8].map((n) => (
                     <option key={n} value={n}>
-                      {n} Points
+                      {tr("rigging.pointCount", { count: n })}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="field-label">Dynamic Factor</label>
+                <label className="field-label">{tr("rigging.dynamicFactor")}</label>
                 <select
                   value={activeSystem.dynamicFactor}
                   onChange={(e) =>
                     updateActiveSystem({ dynamicFactor: Number(e.target.value) })
                   }
                 >
-                  <option value={1.0}>1.0x (Static)</option>
-                  <option value={1.25}>1.25x (Standard)</option>
-                  <option value={1.5}>1.5x (Heavy)</option>
-                  <option value={2.0}>2.0x (Critical)</option>
+                  <option value={1.0}>{tr("rigging.factor.static")}</option>
+                  <option value={1.25}>{tr("rigging.factor.standard")}</option>
+                  <option value={1.5}>{tr("rigging.factor.heavy")}</option>
+                  <option value={2.0}>{tr("rigging.factor.critical")}</option>
                 </select>
               </div>
             </div>
             <label className="field-label" style={{ marginTop: 10 }}>
-              Motor Type
+              {tr("rigging.motorType")}
             </label>
             <select
               value={activeSystem.hoistIndex}
@@ -7303,7 +7501,7 @@ function App() {
                   pre-rigged from venue infrastructure — the motor row
                   contributes 0 kg / 0 W and the per-point SWL warning
                   stops firing for this system. */}
-              <option value={-1}>None</option>
+              <option value={-1}>{tr("common.none")}</option>
               {hoistModels.map((h, i) => (
                 <option key={i} value={i}>
                   {h.label}
@@ -7315,7 +7513,7 @@ function App() {
 
         <div className="card">
           <h2>
-            2. Truss
+            {tr("rigging.section.truss")}
             <span className="card-total">
               {sectionTotal(activeSystem.riggingRows).toFixed(1)} kg
             </span>
@@ -7326,7 +7524,7 @@ function App() {
             )}
           </div>
           {activeSystem.riggingRows.length === 0 && (
-            <div className="empty-row">No truss added yet</div>
+            <div className="empty-row">{tr("rigging.empty.truss")}</div>
           )}
           <button
             className="btn btn-add"
@@ -7337,19 +7535,19 @@ function App() {
               ])
             }
           >
-            + Add Truss
+            {tr("rigging.action.addTruss")}
           </button>
           <button
             className="btn btn-add btn-custom"
             onClick={() => openModal("Truss")}
           >
-            + Manual Item
+            {tr("rigging.action.manualItem")}
           </button>
         </div>
 
         <div className="card">
           <h2>
-            3. Lighting Fixtures
+            {tr("rigging.section.fixtures")}
             <span className="card-total">
               {sectionTotal(activeSystem.fixtureRows).toFixed(1)} kg
             </span>
@@ -7360,7 +7558,7 @@ function App() {
             )}
           </div>
           {activeSystem.fixtureRows.length === 0 && (
-            <div className="empty-row">No fixtures added yet</div>
+            <div className="empty-row">{tr("rigging.empty.fixtures")}</div>
           )}
           <button
             className="btn btn-add"
@@ -7371,19 +7569,19 @@ function App() {
               ])
             }
           >
-            + Add Fixture
+            {tr("rigging.action.addFixture")}
           </button>
           <button
             className="btn btn-add btn-custom"
             onClick={() => openModal("Fixtures")}
           >
-            + Manual Item
+            {tr("rigging.action.manualItem")}
           </button>
         </div>
 
         <div className="card">
           <h2>
-            4. LED &amp; Other Equipment
+            {tr("rigging.section.led")}
             <span className="card-total">
               {sectionTotal(activeSystem.ledRows).toFixed(1)} kg
             </span>
@@ -7392,7 +7590,7 @@ function App() {
             {activeSystem.ledRows.map((r) => renderItemRow(r, "ledRows"))}
           </div>
           {activeSystem.ledRows.length === 0 && (
-            <div className="empty-row">No LED or other equipment added yet</div>
+            <div className="empty-row">{tr("rigging.empty.led")}</div>
           )}
           <button
             className="btn btn-add"
@@ -7403,18 +7601,18 @@ function App() {
               ])
             }
           >
-            + Add Item
+            {tr("rigging.action.addItem")}
           </button>
           <button
             className="btn btn-add btn-custom"
             onClick={() => openModal("LED Screen")}
           >
-            + Manual Item
+            {tr("rigging.action.manualItem")}
           </button>
         </div>
 
         <div className="card full-width">
-          <h2>5. Rigging Point Calculations — {activeSystem.name}</h2>
+          <h2>{tr("rigging.section.calculations", { name: activeSystem.name })}</h2>
           <div className="analysis-container">
             <div className="points-summary">
               {metricsByActive.factors.map((f, i) => {
@@ -7433,22 +7631,22 @@ function App() {
                   >
                     {isDanger && (
                       <div className="overload-badge">
-                        <span>⚠</span> OVERLOAD
+                        <span>⚠</span> {tr("rigging.status.overload")}
                       </div>
                     )}
                     {isWarning && (
                       <div className="overload-badge warning-badge">
-                        <span>⚠</span> CAUTION
+                        <span>⚠</span> {tr("rigging.status.caution")}
                       </div>
                     )}
                     <span className="point-label">
-                      POINT 0{i + 1} ({pct}%)
+                      {tr("rigging.pointLabel", { point: i + 1, pct })}
                     </span>
                     <span className="p-val">
                       {dLoad.toFixed(1)}
                       <small>kg</small>
                     </span>
-                    <span className="p-dyn">Static: {sLoad.toFixed(0)}kg</span>
+                    <span className="p-dyn">{tr("rigging.staticLoadValue", { value: sLoad.toFixed(0) })}</span>
                     <div className="point-util-bar">
                       <div
                         className="point-util-fill"
@@ -7463,7 +7661,7 @@ function App() {
                       />
                     </div>
                     <span className="p-util-text">
-                      {(util * 100).toFixed(0)}% of SWL
+                      {tr("rigging.swlUtilization", { pct: (util * 100).toFixed(0) })}
                     </span>
                   </div>
                 );
@@ -7472,13 +7670,13 @@ function App() {
             <div className="chart-section">
               <div className="chart-legend">
                 <span>
-                  <i style={{ background: "var(--static-bar)" }} /> Static
+                  <i style={{ background: "var(--static-bar)" }} /> {tr("rigging.static")}
                 </span>
                 <span>
-                  <i style={{ background: "var(--secondary)" }} /> Dynamic ({activeSystem.dynamicFactor}x)
+                  <i style={{ background: "var(--secondary)" }} /> {tr("rigging.dynamicValue", { factor: activeSystem.dynamicFactor })}
                 </span>
                 <span>
-                  <i style={{ background: "var(--danger)" }} /> Over SWL
+                  <i style={{ background: "var(--danger)" }} /> {tr("rigging.overSwl")}
                 </span>
               </div>
               <div className="bar-chart">
@@ -7553,14 +7751,14 @@ function App() {
                 </h3>
                 <div className="print-system-stats">
                   <span>
-                    Static: <strong>{metrics.static.toFixed(1)} kg</strong>
+                    {tr("rigging.print.static")}: <strong>{metrics.static.toFixed(1)} kg</strong>
                   </span>
                   <span>
-                    Dynamic ({system.dynamicFactor}x):{" "}
+                    {tr("rigging.print.dynamic", { factor: system.dynamicFactor })}:{" "}
                     <strong>{metrics.dynamic.toFixed(1)} kg</strong>
                   </span>
                   <span>
-                    Peak point:{" "}
+                    {tr("rigging.print.peakPoint")}:{" "}
                     <strong
                       style={{
                         color:
@@ -7573,13 +7771,13 @@ function App() {
                     </strong>
                   </span>
                   <span>
-                    SWL:{" "}
+                    {tr("rigging.print.swl")}:{" "}
                     <strong>
                       {metrics.swl > 0 ? `${metrics.swl} kg` : "—"}
                     </strong>
                   </span>
                   <span>
-                    Headroom:{" "}
+                    {tr("rigging.print.headroom")}:{" "}
                     <strong
                       style={{
                         color:
@@ -7597,12 +7795,12 @@ function App() {
                 <table className="print-table print-points-table">
                   <thead>
                     <tr>
-                      <th>Point</th>
+                      <th>{tr("rigging.print.point")}</th>
                       <th>%</th>
-                      <th>Static (kg)</th>
-                      <th>Dynamic (kg)</th>
-                      <th>SWL Util</th>
-                      <th>Status</th>
+                      <th>{tr("rigging.print.staticKg")}</th>
+                      <th>{tr("rigging.print.dynamicKg")}</th>
+                      <th>{tr("rigging.print.swlUtil")}</th>
+                      <th>{tr("rigging.print.status")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -7615,10 +7813,10 @@ function App() {
                       const status = !hasHoist
                         ? "—"
                         : over
-                          ? "OVERLOAD"
+                           ? tr("rigging.status.overload")
                           : util > 0.85
-                            ? "Caution"
-                            : "OK";
+                             ? tr("rigging.status.caution")
+                             : tr("common.ok");
                       return (
                         <tr key={i} className={over ? "print-over-row" : ""}>
                           <td>P{i + 1}</td>
@@ -7635,27 +7833,27 @@ function App() {
                 <table className="print-table print-manifest-table">
                   <thead>
                     <tr>
-                      <th>Section</th>
-                      <th>Item</th>
-                      <th>Qty</th>
-                      <th>Unit Wt</th>
-                      <th>Total Wt</th>
-                      <th>Power</th>
+                      <th>{tr("rigging.print.section")}</th>
+                      <th>{tr("rigging.print.item")}</th>
+                      <th>{tr("rigging.print.qty")}</th>
+                      <th>{tr("rigging.print.unitWeight")}</th>
+                      <th>{tr("rigging.print.totalWeight")}</th>
+                      <th>{tr("rigging.print.power")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[
                       ...system.riggingRows.map((r) => ({
                         row: r,
-                        section: "Motors & Support",
+                        section: tr("rigging.print.motorsSupport"),
                       })),
                       ...system.fixtureRows.map((r) => ({
                         row: r,
-                        section: "Lighting Fixtures",
+                        section: tr("rigging.print.lightingFixtures"),
                       })),
                       ...system.ledRows.map((r) => ({
                         row: r,
-                        section: "LED & Other",
+                        section: tr("rigging.print.ledOther"),
                       })),
                     ].map(({ row, section }) => {
                       const it = getRowItem(row);
@@ -7672,15 +7870,15 @@ function App() {
                       );
                     })}
                     <tr className="print-table-total">
-                      <td colSpan={4}>Payload total</td>
+                      <td colSpan={4}>{tr("rigging.print.payloadTotal")}</td>
                       <td>{metrics.payload.toFixed(2)} kg</td>
                       <td>{metrics.power.toLocaleString()} W</td>
                     </tr>
                     <tr className="print-table-grand">
                       <td colSpan={4}>
                         {system.hoistIndex < 0
-                          ? "Static (no motor)"
-                          : `Static (incl. ${system.pointCount} hoists)`}
+                          ? tr("rigging.print.staticNoMotor")
+                          : tr("rigging.print.staticIncludingHoists", { count: system.pointCount })}
                       </td>
                       <td>{metrics.static.toFixed(2)} kg</td>
                       <td>{metrics.motorPower.toLocaleString()} W</td>
@@ -7691,18 +7889,18 @@ function App() {
             ))}
 
             <div className="print-system-page">
-              <h3 className="print-system-title">Project Totals</h3>
+              <h3 className="print-system-title">{tr("rigging.print.projectTotals")}</h3>
               <table className="print-table">
                 <thead>
                   <tr>
-                    <th>System</th>
-                    <th>Hoist</th>
-                    <th>Pts</th>
-                    <th>Static (kg)</th>
-                    <th>Dynamic (kg)</th>
-                    <th>Peak (kg)</th>
-                    <th>SWL</th>
-                    <th>Status</th>
+                    <th>{tr("rigging.print.system")}</th>
+                    <th>{tr("rigging.print.hoist")}</th>
+                    <th>{tr("rigging.print.pts")}</th>
+                    <th>{tr("rigging.print.staticKg")}</th>
+                    <th>{tr("rigging.print.dynamicKg")}</th>
+                    <th>{tr("rigging.print.peakKg")}</th>
+                    <th>{tr("rigging.print.swl")}</th>
+                    <th>{tr("rigging.print.status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -7710,10 +7908,10 @@ function App() {
                     const hasHoist = metrics.swl > 0;
                     const over = hasHoist && metrics.peak > metrics.swl;
                     const status = !hasHoist
-                      ? "No motor"
+                      ? tr("rigging.print.noMotor")
                       : over
-                        ? "OVERLOAD"
-                        : "OK";
+                        ? tr("rigging.status.overload")
+                        : tr("common.ok");
                     return (
                       <tr key={system.id} className={over ? "print-over-row" : ""}>
                         <td>{system.name}</td>
@@ -7728,12 +7926,12 @@ function App() {
                     );
                   })}
                   <tr className="print-table-grand">
-                    <td colSpan={2}>Project total</td>
+                    <td colSpan={2}>{tr("rigging.print.projectTotal")}</td>
                     <td>{projectTotals.totalPoints}</td>
                     <td>{projectTotals.totalStatic.toFixed(1)}</td>
                     <td>{projectTotals.totalDynamic.toFixed(1)}</td>
                     <td colSpan={3}>
-                      {projectTotals.totalMotorPower.toLocaleString()} W motor power
+                      {tr("rigging.print.motorPowerValue", { value: projectTotals.totalMotorPower.toLocaleString() })}
                     </td>
                   </tr>
                 </tbody>
@@ -7968,36 +8166,36 @@ function App() {
           <div className="modal-backdrop" onClick={() => setShowVenueSpecs(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 700 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-                <h2>Venue Specs: {v.name}</h2>
+                <h2>{tr("venueSpecs.title", { name: v.name })}</h2>
                 <button className="btn-close" onClick={() => setShowVenueSpecs(false)}>×</button>
               </div>
               <div style={{ display: "grid", gap: 16 }}>
                 {v.riggingSpecs && Object.values(v.riggingSpecs).some(Boolean) && (
                   <div>
-                    <strong>Rigging & Stage</strong>
+                    <strong>{tr("venueSpecs.riggingStage")}</strong>
                     {renderObj(v.riggingSpecs)}
                   </div>
                 )}
                 {v.powerInfrastructure && Object.values(v.powerInfrastructure).some(Boolean) && (
                   <div>
-                    <strong>Power Infrastructure</strong>
+                    <strong>{tr("venueSpecs.powerInfrastructure")}</strong>
                     {renderObj(v.powerInfrastructure)}
                   </div>
                 )}
                 {v.logisticsAccess && Object.values(v.logisticsAccess).some(Boolean) && (
                   <div>
-                    <strong>Logistics & Access</strong>
+                    <strong>{tr("venueSpecs.logisticsAccess")}</strong>
                     {renderObj(v.logisticsAccess)}
                   </div>
                 )}
                 {v.siteFacilities && Object.values(v.siteFacilities).some(Boolean) && (
                   <div>
-                    <strong>Site Facilities</strong>
+                    <strong>{tr("venueSpecs.siteFacilities")}</strong>
                     {renderObj(v.siteFacilities)}
                   </div>
                 )}
                 {(!v.riggingSpecs && !v.powerInfrastructure && !v.logisticsAccess && !v.siteFacilities) && (
-                  <div style={{ color: "var(--text-muted)" }}>No technical specs provided.</div>
+                  <div style={{ color: "var(--text-muted)" }}>{tr("venueSpecs.empty")}</div>
                 )}
               </div>
             </div>
@@ -8036,28 +8234,28 @@ function App() {
       {modalTarget && (
         <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>Add Custom Item</h3>
+            <h3>{tr("customItem.title")}</h3>
             <input
               type="text"
-              placeholder="Item Name"
+              placeholder={tr("customItem.name")}
               value={custName}
               onChange={(e) => setCustName(e.target.value)}
             />
             <input
               type="number"
-              placeholder="Weight (kg)"
+              placeholder={tr("customItem.weight")}
               value={custWeight}
               onChange={(e) => setCustWeight(e.target.value)}
             />
             <input
               type="number"
-              placeholder="Power (W)"
+              placeholder={tr("customItem.power")}
               value={custWatt}
               onChange={(e) => setCustWatt(e.target.value)}
             />
             <input
               type="number"
-              placeholder="Area per unit (m²)"
+              placeholder={tr("customItem.area")}
               step="0.01"
               value={custArea}
               onChange={(e) => setCustArea(e.target.value)}
@@ -8065,17 +8263,17 @@ function App() {
             {modalTarget === "LED Screen" && (
               <input
                 type="text"
-                placeholder="Bracket / hang-bar name (optional)"
+                placeholder={tr("customItem.bracket")}
                 value={custBracket}
                 onChange={(e) => setCustBracket(e.target.value)}
               />
             )}
             <div className="modal-actions">
               <button className="btn btn-export" onClick={submitCustom}>
-                Add
+                {tr("common.add")}
               </button>
               <button className="btn btn-custom" onClick={closeModal}>
-                Cancel
+                {tr("common.cancel")}
               </button>
             </div>
           </div>
@@ -8221,6 +8419,7 @@ function LightingPlanView({
   onApplyDistroSuggestion,
   onApplyPowerLayoutSuggestion,
 }: LightingPlanViewProps) {
+  const { t: tr } = useI18n();
   const systemNameById = new Map(systems.map((s) => [s.id, s.name]));
 
   // Group the fixture list by the rigging system (LX) each fixture is
@@ -8281,7 +8480,7 @@ function LightingPlanView({
     if (unassigned && unassigned.length > 0) {
       ordered.push({
         id: UNASSIGNED_ID,
-        name: "Unassigned",
+        name: tr("lighting.unassigned"),
         fixtures: unassigned,
       });
     }
@@ -8311,7 +8510,7 @@ function LightingPlanView({
             <div className="fx-linked-cell">
               <span
                 className="fx-link-badge"
-                title={`From rigging system ${linkedSysName}`}
+                title={tr("lighting.fromRiggingSystem", { name: linkedSysName })}
               >
                 {linkedSysName}
               </span>
@@ -8324,9 +8523,9 @@ function LightingPlanView({
               type="text"
               value={f.name}
               onChange={(e) => onUpdate(f.id, { name: e.target.value })}
-              placeholder="e.g. Martin MAC Aura PXL"
+              placeholder={tr("lighting.fixturePlaceholder")}
               className="fx-input fx-input-name"
-              aria-label="Fixture name"
+              aria-label={tr("lighting.fixtureName")}
             />
           )}
         </td>
@@ -8342,7 +8541,7 @@ function LightingPlanView({
               emptyValue={1}
               onCommit={(qty) => onUpdate(f.id, { qty })}
               className="fx-input fx-input-num"
-              aria-label="Quantity"
+              aria-label={tr("lighting.quantity")}
             />
           )}
         </td>
@@ -8360,7 +8559,7 @@ function LightingPlanView({
               emptyValue={0}
               onCommit={(weight) => onUpdate(f.id, { weight })}
               className="fx-input fx-input-num"
-              aria-label="Weight per fixture in kilograms"
+              aria-label={tr("lighting.weightPerFixture")}
             />
           )}
         </td>
@@ -8375,7 +8574,7 @@ function LightingPlanView({
               emptyValue={0}
               onCommit={(watts) => onUpdate(f.id, { watts })}
               className="fx-input fx-input-num"
-              aria-label="Power per fixture in watts"
+              aria-label={tr("lighting.powerPerFixture")}
             />
           )}
         </td>
@@ -8400,14 +8599,14 @@ function LightingPlanView({
                   }
                 }}
                 className="fx-input fx-input-select fx-mode-select"
-                aria-label="DMX mode"
+                aria-label={tr("lighting.dmxMode")}
               >
                 {f.availableDmxModes.map((m, i) => (
                   <option key={i} value={i}>
                     {m.name} ({m.channels}ch)
                   </option>
                 ))}
-                <option value={-1}>Custom…</option>
+                <option value={-1}>{tr("lighting.custom")}</option>
               </select>
               {f.dmxModeIndex === null ? (
                 <NumberField
@@ -8420,12 +8619,12 @@ function LightingPlanView({
                     onUpdate(f.id, { dmxChannels })
                   }
                   className="fx-input fx-input-num fx-mode-custom"
-                  aria-label="DMX channels per fixture (custom)"
+                  aria-label={tr("lighting.customDmxChannels")}
                 />
               ) : (
                 <span
                   className="fx-mode-channels"
-                  aria-label="DMX channels per fixture"
+                  aria-label={tr("lighting.dmxChannels")}
                 >
                   {f.dmxChannels}
                 </span>
@@ -8442,7 +8641,7 @@ function LightingPlanView({
                 onUpdate(f.id, { dmxChannels })
               }
               className="fx-input fx-input-num"
-              aria-label="DMX channels per fixture"
+              aria-label={tr("lighting.dmxChannels")}
             />
           )}
         </td>
@@ -8454,7 +8653,7 @@ function LightingPlanView({
               value={f.systemId}
               onChange={(e) => onUpdate(f.id, { systemId: e.target.value })}
               className="fx-input fx-input-select"
-              aria-label="Truss assignment"
+              aria-label={tr("lighting.trussAssignment")}
             >
               <option value="">—</option>
               {systems.map((s) => (
@@ -8473,7 +8672,7 @@ function LightingPlanView({
             emptyValue={0}
             onCommit={(position) => onUpdate(f.id, { position })}
             className="fx-input fx-input-num"
-            aria-label="Position on truss in meters"
+            aria-label={tr("lighting.positionOnTruss")}
           />
         </td>
         <td>
@@ -8483,7 +8682,7 @@ function LightingPlanView({
             onChange={(e) => onUpdate(f.id, { circuit: e.target.value })}
             placeholder="—"
             className="fx-input fx-input-circuit"
-            aria-label="Power circuit"
+            aria-label={tr("lighting.powerCircuit")}
           />
         </td>
         <td>
@@ -8495,7 +8694,7 @@ function LightingPlanView({
             emptyValue={1}
             onCommit={(universe) => onUpdate(f.id, { universe })}
             className="fx-input fx-input-num"
-            aria-label="DMX universe"
+            aria-label={tr("lighting.dmxUniverse")}
           />
         </td>
         <td>
@@ -8512,14 +8711,14 @@ function LightingPlanView({
               onUpdate(f.id, { startAddress })
             }
             className="fx-input fx-input-num"
-            aria-label="DMX start address"
+            aria-label={tr("lighting.dmxStartAddress")}
           />
         </td>
         <td
           className={`fx-end ${overflow ? "fx-end-over" : ""}`}
           title={
             overflow
-              ? "Exceeds 512 channels — bump start address or universe"
+              ? tr("lighting.overflow")
               : ""
           }
         >
@@ -8534,11 +8733,11 @@ function LightingPlanView({
             onClick={() => onDuplicate(f.id)}
             title={
               f.linked
-                ? "Copy as a standalone editable row"
-                : "Duplicate row"
+                ? tr("lighting.copyStandalone")
+                : tr("lighting.duplicateRow")
             }
             aria-label={
-              f.linked ? "Copy as standalone row" : "Duplicate row"
+              f.linked ? tr("lighting.copyStandalone") : tr("lighting.duplicateRow")
             }
           >
             ⎘
@@ -8547,8 +8746,8 @@ function LightingPlanView({
             <button
               className="fx-row-btn fx-row-btn-jump"
               onClick={onJumpToRigging}
-              title="Edit qty/weight on the Rigging Report"
-              aria-label="Edit on Rigging Report"
+              title={tr("lighting.editOnRigging")}
+              aria-label={tr("lighting.editOnRigging")}
             >
               ↗
             </button>
@@ -8556,8 +8755,8 @@ function LightingPlanView({
             <button
               className="fx-row-btn fx-row-btn-del"
               onClick={() => onRemove(f.id)}
-              title="Delete row"
-              aria-label="Delete row"
+              title={tr("lighting.deleteRow")}
+              aria-label={tr("lighting.deleteRow")}
             >
               ×
             </button>
@@ -8571,34 +8770,34 @@ function LightingPlanView({
     <>
       <div className="dashboard project-summary">
         <div className="dash-item">
-          <span>Fixtures</span>
+          <span>{tr("lighting.summary.fixtures")}</span>
           <strong>{totals.qty}</strong>
-          <small>units</small>
+          <small>{tr("lighting.summary.units")}</small>
         </div>
         <div className="dash-item">
-          <span>Weight</span>
+          <span>{tr("lighting.summary.weight")}</span>
           <strong>{totals.weight.toFixed(1)}</strong>
           <small>kg</small>
         </div>
         <div className="dash-item">
-          <span>Power</span>
+          <span>{tr("lighting.summary.power")}</span>
           <strong>{totals.watts.toLocaleString()}</strong>
           <small>W</small>
         </div>
         <div className="dash-item">
-          <span>DMX Channels</span>
+          <span>{tr("lighting.summary.dmxChannels")}</span>
           <strong>{totals.channels.toLocaleString()}</strong>
-          <small>used</small>
+          <small>{tr("lighting.summary.used")}</small>
         </div>
         <div className="dash-item">
-          <span>Universes</span>
+          <span>{tr("lighting.summary.universes")}</span>
           <strong>{totals.universesUsed}</strong>
-          <small>active</small>
+          <small>{tr("lighting.summary.active")}</small>
         </div>
         <div className="dash-item">
-          <span>Lines</span>
+          <span>{tr("lighting.summary.lines")}</span>
           <strong>{fixtures.length}</strong>
-          <small>entries</small>
+          <small>{tr("lighting.summary.entries")}</small>
         </div>
       </div>
 
@@ -8633,60 +8832,58 @@ function LightingPlanView({
 
       <div className="card">
         <h2>
-          Show Fixture List
+          {tr("lighting.fixtureList")}
           <span className="card-total">
-            {fixtures.length} {fixtures.length === 1 ? "line" : "lines"}
+            {tr(fixtures.length === 1 ? "lighting.lineCount" : "lighting.lineCountPlural", { count: fixtures.length })}
             {linkedCount > 0 && (
               <span className="fx-source-tally">
                 {" "}
-                · {linkedCount} from rigging · {standaloneCount} extra
+                {tr("lighting.sourceTally", { linked: linkedCount, standalone: standaloneCount })}
               </span>
             )}
           </span>
         </h2>
         <div className="lighting-help">
-          Fixtures you add to the rigging report appear here automatically.
-          Add DMX address, position and circuit on this view; everything else
-          stays in sync with rigging.{" "}
+          {tr("lighting.help")}{" "}
           <button
             type="button"
             className="link-btn"
             onClick={onJumpToRigging}
           >
-            Open Rigging Report
+            {tr("lighting.openRigging")}
           </button>
         </div>
         {fixtures.length === 0 ? (
           <div className="lighting-empty">
-            No fixtures yet. Add some on the{" "}
+            {tr("lighting.empty.prefix")}{" "}
             <button
               type="button"
               className="link-btn"
               onClick={onJumpToRigging}
             >
-              Rigging Report
+              {tr("lighting.riggingReport")}
             </button>{" "}
-            (they will sync here automatically), or click{" "}
-            <strong>+ Add Extra Fixture</strong> below for one-off entries.
+            {tr("lighting.empty.middle")}{" "}
+            <strong>{tr("lighting.addExtra")}</strong>{tr("lighting.empty.suffix")}
           </div>
         ) : (
           <div className="fx-table-wrap">
             <table className="fx-table">
               <thead>
                 <tr>
-                  <th style={{ minWidth: 200 }}>Fixture</th>
-                  <th>Qty</th>
-                  <th>Weight (kg)</th>
-                  <th>Power (W)</th>
-                  <th>DMX Ch</th>
-                  <th>Truss</th>
-                  <th>Pos (m)</th>
-                  <th>Circuit</th>
-                  <th>Univ.</th>
-                  <th>Address</th>
-                  <th>End</th>
-                  <th>Total Wt</th>
-                  <th>Total W</th>
+                  <th style={{ minWidth: 200 }}>{tr("lighting.table.fixture")}</th>
+                  <th>{tr("lighting.table.quantity")}</th>
+                  <th>{tr("lighting.table.weight")}</th>
+                  <th>{tr("lighting.table.power")}</th>
+                  <th>{tr("lighting.table.dmx")}</th>
+                  <th>{tr("lighting.table.truss")}</th>
+                  <th>{tr("lighting.table.position")}</th>
+                  <th>{tr("lighting.table.circuit")}</th>
+                  <th>{tr("lighting.table.universe")}</th>
+                  <th>{tr("lighting.table.address")}</th>
+                  <th>{tr("lighting.table.end")}</th>
+                  <th>{tr("lighting.table.totalWeight")}</th>
+                  <th>{tr("lighting.table.totalPower")}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -8722,11 +8919,11 @@ function LightingPlanView({
                           <strong className="fx-group-name">{g.name}</strong>
                           <span className="fx-group-meta">
                             {g.fixtures.length}{" "}
-                            {g.fixtures.length === 1 ? "line" : "lines"} ·{" "}
-                            {gQty} fixtures · {gWt.toFixed(1)} kg ·{" "}
+                            {tr(g.fixtures.length === 1 ? "lighting.line" : "lighting.lines")} ·{" "}
+                            {tr("lighting.groupMeta", { qty: gQty, weight: gWt.toFixed(1), power: gW.toLocaleString() })}
                             {gW.toLocaleString()} W
                             {gChans > 0 ? (
-                              <> · {gChans.toLocaleString()} ch</>
+                              <> · {tr("lighting.channelsValue", { count: gChans.toLocaleString() })}</>
                             ) : null}
                           </span>
                         </div>
@@ -8740,7 +8937,7 @@ function LightingPlanView({
                 <tfoot>
                   <tr>
                     <td colSpan={12} style={{ textAlign: "right" }}>
-                      <strong>Totals</strong>
+                      <strong>{tr("lighting.totals")}</strong>
                     </td>
                     <td className="fx-total">{totals.weight.toFixed(1)}</td>
                     <td className="fx-total">
@@ -8755,13 +8952,13 @@ function LightingPlanView({
         )}
         <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <button className="btn btn-soft" onClick={onAddFromLibrary}>
-            + From EHS Library
+            {tr("lighting.fromLibrary")}
           </button>
           <button className="btn btn-export" onClick={onAdd}>
-            + Add Extra Fixture
+            {tr("lighting.addExtra")}
           </button>
           <span className="lighting-help" style={{ marginLeft: 4 }}>
-            Use these for one-off fixtures that aren't on the rigging report.
+            {tr("lighting.oneOffHint")}
           </span>
         </div>
       </div>
@@ -8813,6 +9010,7 @@ function summariseSchedule(
   reportDate: string,
   reportEndDate: string,
   extra: ExtraSchedule,
+  addDatesLabel: string,
 ): { label: string; phaseCount: number; hasTbdTime: boolean } {
   // Flatten every phase's segments into a single (from, to) list and
   // pick the global min / max so the trigger pill always shows the
@@ -8849,7 +9047,7 @@ function summariseSchedule(
     }
   }
   if (segs.length === 0) {
-    return { label: "Add dates", phaseCount: 0, hasTbdTime: false };
+    return { label: addDatesLabel, phaseCount: 0, hasTbdTime: false };
   }
   const fromIso = segs
     .map((p) => p.from || p.to)
@@ -8884,6 +9082,7 @@ function ScheduleField({
     updater: (prev: ExtraSchedule) => ExtraSchedule,
   ) => void;
 }) {
+  const { t: tr } = useI18n();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -8898,7 +9097,12 @@ function ScheduleField({
     };
   }, [open]);
 
-  const summary = summariseSchedule(reportDate, reportEndDate, extraSchedule);
+  const summary = summariseSchedule(
+    reportDate,
+    reportEndDate,
+    extraSchedule,
+    tr("schedule.addDates"),
+  );
 
   type PhaseSide = "from" | "to" | "fromTime" | "toTime";
 
@@ -9245,7 +9449,7 @@ function ScheduleField({
                 color: "var(--text-muted)",
               }}
             >
-              · {summary.phaseCount} phases
+              · {tr("schedule.phaseCount", { count: summary.phaseCount })}
             </span>
           ) : null}
           {summary.hasTbdTime ? (
@@ -9257,7 +9461,7 @@ function ScheduleField({
                 color: "var(--text-muted)",
               }}
             >
-              · Time TBD
+              · {tr("schedule.timeTbd")}
             </span>
           ) : null}
         </span>
@@ -9289,7 +9493,7 @@ function ScheduleField({
           />
           <div
             role="dialog"
-            aria-label="Project schedule"
+            aria-label={tr("schedule.projectSchedule")}
             onMouseDown={(e) => e.stopPropagation()}
             style={{
               position: "absolute",
@@ -9369,13 +9573,13 @@ function ScheduleField({
                       color: "var(--text-muted)",
                     }}
                   >
-                    {SCHEDULE_PHASE_LABELS[key]}
+                    {tr(SCHEDULE_PHASE_LABEL_KEYS[key])}
                   </span>
                   <button
                     type="button"
                     onClick={() => clearPhase(key)}
                     disabled={!phaseActive}
-                    aria-label={`Clear ${SCHEDULE_PHASE_LABELS[key]} phase`}
+                    aria-label={tr("schedule.clearPhase", { phase: tr(SCHEDULE_PHASE_LABEL_KEYS[key]) })}
                     style={{
                       justifySelf: "start",
                       background: "transparent",
@@ -9390,7 +9594,7 @@ function ScheduleField({
                       opacity: phaseActive ? 0.85 : 0.35,
                     }}
                   >
-                    Clear
+                    {tr("schedule.clear")}
                   </button>
                 </div>
                 <div style={{ display: "grid", gap: 10 }}>
@@ -9424,12 +9628,12 @@ function ScheduleField({
                             }}
                           >
                             <span style={subLabelStyle}>
-                              Day {idx + 1}
+                              {tr("schedule.dayCount", { count: idx + 1 })}
                             </span>
                             {removable ? (
                               <button
                                 type="button"
-                                aria-label={`Remove ${SCHEDULE_PHASE_LABELS[key]} day ${idx + 1}`}
+                                aria-label={tr("schedule.removePhaseDay", { phase: tr(SCHEDULE_PHASE_LABEL_KEYS[key]), count: idx + 1 })}
                                 onClick={() => removeDay(key, idx)}
                                 style={{
                                   background: "transparent",
@@ -9456,11 +9660,11 @@ function ScheduleField({
                             gap: 6,
                           }}
                         >
-                          <span style={subLabelStyle}>Day</span>
+                          <span style={subLabelStyle}>{tr("schedule.day")}</span>
                           <input
                             type="date"
                             value={ph.from}
-                            aria-label={`${SCHEDULE_PHASE_LABELS[key]} day ${idx + 1} from`}
+                            aria-label={tr("schedule.phaseDayFrom", { phase: tr(SCHEDULE_PHASE_LABEL_KEYS[key]), count: idx + 1 })}
                             onChange={(e) =>
                               setSegment(key, idx, "from", e.target.value)
                             }
@@ -9473,7 +9677,7 @@ function ScheduleField({
                             type="date"
                             value={ph.to}
                             min={ph.from || undefined}
-                            aria-label={`${SCHEDULE_PHASE_LABELS[key]} day ${idx + 1} to`}
+                            aria-label={tr("schedule.phaseDayTo", { phase: tr(SCHEDULE_PHASE_LABEL_KEYS[key]), count: idx + 1 })}
                             onChange={(e) =>
                               setSegment(key, idx, "to", e.target.value)
                             }
@@ -9490,7 +9694,7 @@ function ScheduleField({
                             gap: 6,
                           }}
                         >
-                          <span style={subLabelStyle}>Time</span>
+                          <span style={subLabelStyle}>{tr("schedule.time")}</span>
                           {ph.timeTbd ? (
                             <span
                               style={{
@@ -9515,7 +9719,7 @@ function ScheduleField({
                               <input
                                 type="time"
                                 value={ph.fromTime ?? ""}
-                                aria-label={`${SCHEDULE_PHASE_LABELS[key]} day ${idx + 1} start time`}
+                                aria-label={tr("schedule.phaseDayStartTime", { phase: tr(SCHEDULE_PHASE_LABEL_KEYS[key]), count: idx + 1 })}
                                 onChange={(e) =>
                                   setSegment(
                                     key,
@@ -9532,7 +9736,7 @@ function ScheduleField({
                               <input
                                 type="time"
                                 value={ph.toTime ?? ""}
-                                aria-label={`${SCHEDULE_PHASE_LABELS[key]} day ${idx + 1} end time`}
+                                aria-label={tr("schedule.phaseDayEndTime", { phase: tr(SCHEDULE_PHASE_LABEL_KEYS[key]), count: idx + 1 })}
                                 onChange={(e) =>
                                   setSegment(
                                     key,
@@ -9569,7 +9773,7 @@ function ScheduleField({
                               onChange={(event) =>
                                 setTimeTbd(key, idx, event.target.checked)
                               }
-                              aria-label={`${SCHEDULE_PHASE_LABELS[key]} day ${idx + 1} time TBD`}
+                              aria-label={tr("schedule.phaseDayTimeTbd", { phase: tr(SCHEDULE_PHASE_LABEL_KEYS[key]), count: idx + 1 })}
                               style={{
                                 width: 15,
                                 height: 15,
@@ -9601,7 +9805,7 @@ function ScheduleField({
                       cursor: "pointer",
                     }}
                   >
-                    + Add Day
+                    {tr("schedule.addDay")}
                   </button>
                 </div>
               </div>
@@ -9629,7 +9833,7 @@ function ScheduleField({
                 padding: "4px 6px",
               }}
             >
-              Reset schedule
+              {tr("schedule.reset")}
             </button>
             <button
               type="button"
@@ -9645,7 +9849,7 @@ function ScheduleField({
                 cursor: "pointer",
               }}
             >
-              Done
+              {tr("schedule.done")}
             </button>
           </div>
           </div>

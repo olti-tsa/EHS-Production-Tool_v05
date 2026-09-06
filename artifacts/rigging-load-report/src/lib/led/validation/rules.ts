@@ -22,6 +22,7 @@ import {
   DEFAULT_MAX_CABINETS_PER_DATA_CHAIN,
 } from "../engine/signal";
 import { findDoubleAssigned, findOrphanCells } from "../engine/routing";
+import type { TranslationKey } from "../../i18n/types";
 
 export type LedRuleLevel = "info" | "warn" | "error";
 export type LedRuleScope = "screen" | "processor" | "system" | "show";
@@ -32,9 +33,11 @@ export type LedViolation = {
   scope: LedRuleScope;
   /** Optional id of the entity the violation pins to (screen.id, etc.). */
   entityId?: string;
-  message: string;
+  messageKey: TranslationKey;
+  messageParams?: Record<string, string | number>;
   /** Optional hint surfaced as a "Fix it" suggestion. */
-  hint?: string;
+  hintKey?: TranslationKey;
+  hintParams?: Record<string, string | number>;
 };
 
 export type LedValidationCtx = {
@@ -71,10 +74,11 @@ export type LedRule = {
   evaluate: (ctx: LedValidationCtx, out: LedViolation[]) => void;
 };
 
-/** Format a power-chain over-load message — extracted so EN/NO can
- *  be wired in later via i18n without touching every rule. */
-function powerChainMsg(screen: LedScreen, ap: number, cap: number): string {
-  return `${screen.name || "Screen"} — chain pulls ${ap.toFixed(1)} A; breaker safe limit is ${(cap * 0.8).toFixed(1)} A (80% of ${cap} A).`;
+function screenParams(
+  screen: LedScreen,
+  params: Record<string, string | number> = {},
+): Record<string, string | number> {
+  return { screen: screen.name, ...params };
 }
 
 export const LED_RULES: LedRule[] = [
@@ -103,8 +107,13 @@ export const LED_RULES: LedRule[] = [
             level: "error",
             scope: "screen",
             entityId: s.id,
-            message: powerChainMsg(s, ampsPerChain(est), breakerAmps),
-            hint: "Split this screen onto more power chains or move to a higher-amp circuit.",
+            messageKey: "led.validation.rule.powerChainOverload",
+            messageParams: screenParams(s, {
+              amps: ampsPerChain(est).toFixed(1),
+              safeLimit: (breakerAmps * 0.8).toFixed(1),
+              breaker: breakerAmps,
+            }),
+            hintKey: "led.validation.hint.powerChainOverload",
           });
         }
       }
@@ -121,8 +130,7 @@ export const LED_RULES: LedRule[] = [
           ruleId: "POWER_MISSING_REGION",
           level: "info",
           scope: "show",
-          message:
-            "No voltage region set. Power calculations assume EU 230 V — set the show region in LED Settings if you're not in Europe.",
+          messageKey: "led.validation.rule.powerMissingRegion",
         });
       }
     },
@@ -147,8 +155,9 @@ export const LED_RULES: LedRule[] = [
             level: "error",
             scope: "screen",
             entityId: s.id,
-            message: `${s.name || "Screen"} — ${r.overCap} CAT chain(s) over cabinet cap.`,
-            hint: "Add another processor port or lower cabinets-per-chain.",
+            messageKey: "led.validation.rule.dataChainTooLong",
+            messageParams: screenParams(s, { count: r.overCap }),
+            hintKey: "led.validation.hint.dataChainTooLong",
           });
         }
       }
@@ -169,8 +178,9 @@ export const LED_RULES: LedRule[] = [
             level: "warn",
             scope: "screen",
             entityId: s.id,
-            message: `${s.name || "Screen"} — ${orphans.length} cabinet(s) not assigned to any port.`,
-            hint: "Run Auto-balance, or assign them manually in Port Mapping.",
+            messageKey: "led.validation.rule.orphanCabinet",
+            messageParams: screenParams(s, { count: orphans.length }),
+            hintKey: "led.validation.hint.orphanCabinet",
           });
         }
       }
@@ -191,8 +201,9 @@ export const LED_RULES: LedRule[] = [
             level: "error",
             scope: "screen",
             entityId: s.id,
-            message: `${s.name || "Screen"} — ${dupes.length} cabinet(s) assigned to multiple ports.`,
-            hint: "Each cabinet must belong to exactly one port.",
+            messageKey: "led.validation.rule.doubleAssignedCabinet",
+            messageParams: screenParams(s, { count: dupes.length }),
+            hintKey: "led.validation.hint.doubleAssignedCabinet",
           });
         }
       }
@@ -216,7 +227,8 @@ export const LED_RULES: LedRule[] = [
             level: "warn",
             scope: "screen",
             entityId: s.id,
-            message: `${s.name || "Screen"} — backup signal is enabled but ${missing.length} port(s) have no backup assigned.`,
+            messageKey: "led.validation.rule.missingBackup",
+            messageParams: screenParams(s, { count: missing.length }),
           });
         }
       }
@@ -236,8 +248,11 @@ export const LED_RULES: LedRule[] = [
             level: "warn",
             scope: "screen",
             entityId: s.id,
-            message: `${s.name || "Screen"} — camera-safe mode is on but refresh rate ${s.refreshRateHz ?? "(unset)"} Hz is below the recommended 3840 Hz.`,
-            hint: "Set refresh to 3840 Hz or higher for camera-safe operation.",
+            messageKey: "led.validation.rule.broadcastScanMismatch",
+            messageParams: screenParams(s, {
+              refreshRate: s.refreshRateHz ?? 0,
+            }),
+            hintKey: "led.validation.hint.broadcastScanMismatch",
           });
         }
       }

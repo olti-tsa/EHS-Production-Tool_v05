@@ -15,6 +15,7 @@
 import { useMemo, useState } from "react";
 import type { LedPanel, LedRigAccessory, LedScreen } from "../../lib/led";
 import { newRigAccessoryId, suggestAutoBeams } from "../../lib/led";
+import { useT } from "../../lib/i18n/I18nContext";
 
 export type LedRigAccessoryCatalogItem = {
   name: string;
@@ -38,6 +39,7 @@ export function RigAccessoriesPanel({
   onChange: (next: LedRigAccessory[]) => void;
   onToggleAutoFit: (autoFit: boolean) => void;
 }) {
+  const t = useT();
   const items = screen.rigAccessories ?? [];
   const autoFit = !!screen.autoFitBeams;
   const [picker, setPicker] = useState<string>(catalog[0]?.name ?? "");
@@ -89,7 +91,7 @@ export function RigAccessoriesPanel({
   if (catalog.length === 0) {
     return (
       <div className="led-rig-accessories led-rig-accessories-empty">
-        No beams found in the LED Screen inventory category.
+        {t("led.rigAccessories.emptyCatalog")}
       </div>
     );
   }
@@ -97,20 +99,25 @@ export function RigAccessoriesPanel({
   return (
     <div className="led-rig-accessories">
       <div className="led-rig-accessories-head">
-        <strong>Rigging accessories</strong>
+        <strong>{t("led.rigAccessories.title")}</strong>
         <label
           className="led-rig-accessories-autofit"
-          title="Auto-fit beams to the screen width, longest pieces first"
+          title={t("led.rigAccessories.autoFitTooltip")}
         >
           <input
             type="checkbox"
             checked={autoFit}
             onChange={(e) => onToggleAutoFit(e.target.checked)}
           />
-          <span>Auto-fit beams to width</span>
+          <span>{t("led.rigAccessories.autoFit")}</span>
         </label>
         <span className="led-rig-accessories-total">
-          {effective.length} item{effective.length === 1 ? "" : "s"} ·{" "}
+          {t(
+            effective.length === 1
+              ? "led.rigAccessories.itemCountOne"
+              : "led.rigAccessories.itemCountMany",
+            { count: effective.length },
+          )} ·{" "}
           {totalWeight.toFixed(1)} kg
         </span>
       </div>
@@ -150,7 +157,7 @@ export function RigAccessoriesPanel({
                     fontStyle: "italic",
                   }}
                 >
-                  auto-fit
+                  {t("led.rigAccessories.autoFitLabel")}
                 </span>
               </li>
             );
@@ -162,7 +169,7 @@ export function RigAccessoriesPanel({
           className="led-rig-accessories-empty"
           style={{ fontSize: 12, opacity: 0.7, padding: "4px 0" }}
         >
-          No straight beams in the catalog matched the screen width.
+          {t("led.rigAccessories.noMatchingBeams")}
         </div>
       )}
 
@@ -208,7 +215,7 @@ export function RigAccessoriesPanel({
                 <input
                   className="led-input led-rig-accessories-note"
                   type="text"
-                  placeholder="Note (optional)"
+                  placeholder={t("led.rigAccessories.notePlaceholder")}
                   value={a.note ?? ""}
                   onChange={(e) =>
                     update(a.id, { note: e.target.value || undefined })
@@ -218,7 +225,8 @@ export function RigAccessoriesPanel({
                   type="button"
                   className="btn btn-soft btn-sm"
                   onClick={() => remove(a.id)}
-                  title="Remove this accessory"
+                  title={t("led.rigAccessories.removeTooltip")}
+                  aria-label={t("led.rigAccessories.removeTooltip")}
                 >
                   ✕
                 </button>
@@ -255,11 +263,13 @@ export function RigAccessoriesPanel({
           onClick={add}
           title={
             autoFit
-              ? "Add manual extra on top of the auto-fitted beams"
-              : "Add accessory to this screen"
+              ? t("led.rigAccessories.addManualTooltip")
+              : t("led.rigAccessories.addTooltip")
           }
         >
-          + Add{autoFit ? " manual extra" : ""}
+          {autoFit
+            ? t("led.rigAccessories.addManual")
+            : t("led.rigAccessories.add")}
         </button>
       </div>
     </div>

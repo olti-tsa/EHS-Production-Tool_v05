@@ -13,6 +13,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { NumberField } from "./NumberField";
+import { useT } from "../lib/i18n/I18nContext";
+import type { TranslationKey } from "../lib/i18n/types";
 import {
   applyPresetToDistro,
   computeCircuitLoad,
@@ -23,7 +25,6 @@ import {
   computeTrussPowerSummary,
   computeUnpoweredFixtures,
   DEFAULT_CHANNEL_MAPPING,
-  DISTRO_PRESETS,
   DISTRO_PRESET_ORDER,
   DROP_CABLE_KINDS,
   makeFixtureWattsLookup,
@@ -53,6 +54,20 @@ import {
 } from "../lib/power";
 
 type SystemLite = { id: string; name: string };
+
+const PRESET_LABEL_KEYS = {
+  "schuko-16-1ph": "powerPlan.preset.schuko16",
+  "cee-32-1ph": "powerPlan.preset.cee32Single",
+  "cee-16-3ph-6x10": "powerPlan.preset.cee16Three",
+  "cee-32-3ph-6x16": "powerPlan.preset.cee32Three",
+  "cee-63-3ph-6x32": "powerPlan.preset.cee63Three",
+  "cee-125-3ph-6x63": "powerPlan.preset.cee125Three",
+  custom: "powerPlan.preset.custom",
+} as const satisfies Record<DistroPresetId, TranslationKey>;
+
+const SUGGESTION_MESSAGE_KEYS = {
+  rebalance: "powerPlan.suggestion.rebalance",
+} as const satisfies Record<DistroSuggestion["type"], TranslationKey>;
 
 type Props = {
   plan: PowerPlan;
@@ -122,6 +137,7 @@ function severityClass(sev: LoadSeverity, base: string): string {
 
 export function PowerPlanView(props: Props) {
   const { plan, fixtures, systems } = props;
+  const t = useT();
 
   const wattsLookup = useMemo(
     () => makeFixtureWattsLookup(fixtures),
@@ -154,52 +170,49 @@ export function PowerPlanView(props: Props) {
     <section className="power-plan">
       <div className="power-plan-head">
         <div>
-          <h2>Power Plan</h2>
+          <h2>{t("powerPlan.title")}</h2>
           <p className="power-plan-sub">
-            Add a distro for each physical power source (e.g. HOT 1 = CEE 32 A
-            3-phase). Pick which truss(es) it feeds, then drop fixtures from
-            the Lighting list onto its channels. Per-channel and per-phase
-            amps update live, with 80 % derate and phase-imbalance warnings.
+            {t("powerPlan.subtitle")}
           </p>
         </div>
         <div className="power-plan-meta">
           <span className="badge">
             <strong>{totals.distroCount}</strong>{" "}
-            {totals.distroCount === 1 ? "distro" : "distros"}
+            {t(totals.distroCount === 1 ? "powerPlan.distro.one" : "powerPlan.distro.many")}
           </span>
           <span className="badge">
-            <strong>{fmtInt(totals.totalWatts)}</strong> W planned
+            <strong>{fmtInt(totals.totalWatts)}</strong> {t("powerPlan.planned")}
           </span>
           {totals.distroCount > 0 && (
             <>
               <span className="badge">
-                worst feeder <strong>{fmtPct(totals.worstFeederUtilization)}</strong>{" "}
+                {t("powerPlan.worstFeeder")} <strong>{fmtPct(totals.worstFeederUtilization)}</strong>{" "}
                 <span className="badge-sub">{totals.worstFeederLabel}</span>
               </span>
               <span className="badge">
-                worst channel <strong>{fmtPct(totals.worstChannelUtilization)}</strong>{" "}
+                {t("powerPlan.worstChannel")} <strong>{fmtPct(totals.worstChannelUtilization)}</strong>{" "}
                 <span className="badge-sub">{totals.worstChannelLabel}</span>
               </span>
             </>
           )}
           {totals.overloadedDistros > 0 && (
             <span className="badge badge-danger">
-              <strong>{totals.overloadedDistros}</strong> over capacity
+              <strong>{totals.overloadedDistros}</strong> {t("powerPlan.overCapacity")}
             </span>
           )}
           {totals.warningDistros > 0 && (
             <span className="badge badge-warn">
-              <strong>{totals.warningDistros}</strong> near limit
+              <strong>{totals.warningDistros}</strong> {t("powerPlan.nearLimit")}
             </span>
           )}
           {totals.imbalancedDistros > 0 && (
             <span className="badge badge-warn">
-              <strong>{totals.imbalancedDistros}</strong> imbalanced
+              <strong>{totals.imbalancedDistros}</strong> {t("powerPlan.imbalanced")}
             </span>
           )}
           {totals.unpoweredFixtureCount > 0 && (
             <span className="badge badge-warn">
-              <strong>{totals.unpoweredFixtureCount}</strong> fixtures not powered
+              <strong>{totals.unpoweredFixtureCount}</strong> {t("powerPlan.fixturesNotPowered")}
             </span>
           )}
           <button
@@ -209,11 +222,11 @@ export function PowerPlanView(props: Props) {
             disabled={unpowered.length === 0}
             title={
               unpowered.length === 0
-                ? "No unpowered fixtures — nothing to auto-suggest"
-                : "Propose distros for the trusses with unpowered fixtures"
+                ? t("powerPlan.autoSuggest.disabledTitle")
+                : t("powerPlan.autoSuggest.title")
             }
           >
-            ⚡ Auto-suggest layout
+            ⚡ {t("powerPlan.autoSuggest.action")}
           </button>
           {/* Mirrors the "Export" button on Stage Report cards. Opens a
               new tab with a printable / JSON crew manifest. */}
@@ -224,11 +237,11 @@ export function PowerPlanView(props: Props) {
             disabled={plan.distros.length === 0}
             title={
               plan.distros.length === 0
-                ? "Add at least one distro before exporting"
-                : "Open a printable Power Plan crew manifest (PDF + JSON)"
+                ? t("powerPlan.export.disabledTitle")
+                : t("powerPlan.export.title")
             }
           >
-            Export
+            {t("powerPlan.export.action")}
           </button>
         </div>
       </div>
@@ -262,15 +275,13 @@ export function PowerPlanView(props: Props) {
 
       {plan.distros.length === 0 ? (
         <div className="led-empty">
-          No distros yet — add your first power source. The default preset is
-          a CEE 32 A 3-phase rack with six 16 A breakers (Ch1+Ch4&nbsp;→&nbsp;L1,
-          Ch2+Ch5&nbsp;→&nbsp;L2, Ch3+Ch6&nbsp;→&nbsp;L3).
+          {t("powerPlan.empty")}
           <div style={{ marginTop: 12 }}>
             <button
               className="btn btn-primary"
               onClick={() => props.onAddDistro()}
             >
-              + Add distro
+              + {t("powerPlan.addDistro")}
             </button>
           </div>
         </div>
@@ -317,7 +328,7 @@ export function PowerPlanView(props: Props) {
               className="btn btn-primary"
               onClick={() => props.onAddDistro()}
             >
-              + Add distro
+              + {t("powerPlan.addDistro")}
             </button>
             <PresetQuickAdd onPick={(id) => props.onAddDistro(id)} />
           </div>
@@ -358,6 +369,7 @@ function PresetQuickAdd({
 }: {
   onPick: (id: DistroPresetId) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <div className="power-preset-menu">
@@ -367,7 +379,7 @@ function PresetQuickAdd({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        + Add… ▾
+        + {t("powerPlan.add")}… ▾
       </button>
       {open && (
         <div className="power-preset-menu-list" role="menu">
@@ -382,7 +394,7 @@ function PresetQuickAdd({
               }}
               role="menuitem"
             >
-              {DISTRO_PRESETS[id].label}
+              {t(PRESET_LABEL_KEYS[id])}
             </button>
           ))}
         </div>
@@ -425,6 +437,7 @@ type DistroCardProps = {
 };
 
 function DistroCard(props: DistroCardProps) {
+  const t = useT();
   const { load, systems } = props;
   const distro = load.distro;
   const sevForCard = load.feederStatus === "over"
@@ -463,9 +476,11 @@ function DistroCard(props: DistroCardProps) {
           onClick={() => setCollapsed((v) => !v)}
           aria-expanded={!collapsed}
           aria-label={
-            collapsed ? `Expand ${distro.name || "distro"}` : `Collapse ${distro.name || "distro"}`
+            collapsed
+              ? t("powerPlan.expandNamed", { name: distro.name || t("powerPlan.distro.one") })
+              : t("powerPlan.collapseNamed", { name: distro.name || t("powerPlan.distro.one") })
           }
-          title={collapsed ? "Expand distro" : "Collapse distro"}
+          title={collapsed ? t("powerPlan.expandDistro") : t("powerPlan.collapseDistro")}
         >
           <span aria-hidden="true">{collapsed ? "▸" : "▾"}</span>
         </button>
@@ -475,16 +490,16 @@ function DistroCard(props: DistroCardProps) {
             type="text"
             value={distro.name}
             onChange={(e) => props.onUpdate({ name: e.target.value })}
-            placeholder="HOT 1"
-            aria-label="Distro name"
+            placeholder={t("powerPlan.distroNamePlaceholder")}
+            aria-label={t("powerPlan.distroName")}
           />
           <input
             className="led-input"
             type="text"
             value={distro.source}
             onChange={(e) => props.onUpdate({ source: e.target.value })}
-            placeholder="Source / label (e.g. PD11 — Stage Left Bay)"
-            aria-label={`Source label for ${distro.name || "distro"}`}
+            placeholder={t("powerPlan.sourcePlaceholder")}
+            aria-label={t("powerPlan.sourceFor", { name: distro.name || t("powerPlan.distro.one") })}
           />
         </div>
         <div className="power-distro-rating">
@@ -493,24 +508,28 @@ function DistroCard(props: DistroCardProps) {
           {collapsed && (
             <span
               className="power-distro-summary-chip"
-              title={`${fmtInt(load.totalWatts)} W on ${distro.feedAmps} A · ${distro.feedPhases}ph`}
+              title={t("powerPlan.collapsedSummary", {
+                watts: fmtInt(load.totalWatts),
+                amps: distro.feedAmps,
+                phases: distro.feedPhases,
+              })}
             >
               {fmtInt(load.totalWatts)} W
             </span>
           )}
           <label className="power-preset-label">
-            <span>Preset</span>
+            <span>{t("powerPlan.preset")}</span>
             <select
               className="led-input"
               value={distro.preset}
               onChange={(e) =>
                 props.onApplyPreset(e.target.value as DistroPresetId)
               }
-              aria-label={`Preset for ${distro.name}`}
+              aria-label={t("powerPlan.presetFor", { name: distro.name })}
             >
               {DISTRO_PRESET_ORDER.map((id) => (
                 <option key={id} value={id}>
-                  {DISTRO_PRESETS[id].label}
+                  {t(PRESET_LABEL_KEYS[id])}
                 </option>
               ))}
             </select>
@@ -524,22 +543,22 @@ function DistroCard(props: DistroCardProps) {
                 return;
               }
               const ok = window.confirm(
-                `Reset ${distro.name || "this distro"}? This empties every channel but keeps the distro shell, preset and mapping.`,
+                t("powerPlan.resetConfirm", { name: distro.name || t("powerPlan.thisDistro") }),
               );
               if (ok) props.onReset();
             }}
-            title="Empty every channel on this distro (keeps the distro shell)"
+            title={t("powerPlan.resetTitle")}
             disabled={load.totalWatts === 0}
           >
-            Reset
+            {t("powerPlan.reset")}
           </button>
           <button
             type="button"
             className="btn btn-danger btn-sm"
             onClick={props.onRemove}
-            title="Remove distro"
+            title={t("powerPlan.removeDistro")}
           >
-            Remove
+            {t("common.remove")}
           </button>
         </div>
       </div>
@@ -555,12 +574,12 @@ function DistroCard(props: DistroCardProps) {
           {distro.feedVoltage} V · {distro.feedAmps} A · {distro.feedPhases}ph
         </span>
         <span className="power-feed-derate">
-          derate {fmtNum(load.feederDerateAmps, 1)} A
+          {t("powerPlan.derate")} {fmtNum(load.feederDerateAmps, 1)} A
         </span>
         <span className="power-feed-divider" aria-hidden="true">
           •
         </span>
-        <span className="power-feeds-label">Feeds:</span>
+        <span className="power-feeds-label">{t("powerPlan.feeds")}:</span>
         <FeedsTrussesEditor
           systems={systems}
           selected={distro.feedsTrusses}
@@ -571,9 +590,9 @@ function DistroCard(props: DistroCardProps) {
           className="btn btn-soft btn-sm"
           onClick={() => setMappingOpen((v) => !v)}
           aria-expanded={mappingOpen}
-          title="Edit channel → phase mapping"
+          title={t("powerPlan.mappingTitle")}
         >
-          Mapping
+          {t("powerPlan.mapping")}
         </button>
       </div>
 
@@ -588,7 +607,7 @@ function DistroCard(props: DistroCardProps) {
       {/* 2. "HOT1 → LX1 60% · LX2 40%" feed graph */}
       {trussSplit.length > 0 && (
         <FeedGraph
-          distroName={distro.name || "Distro"}
+          distroName={distro.name || t("powerPlan.distro.one")}
           split={trussSplit}
           systems={systems}
         />
@@ -667,6 +686,7 @@ function PowerExportToast({
   message: string | null;
   onDismiss: () => void;
 }) {
+  const t = useT();
   useEffect(() => {
     if (!message) return;
     const t = window.setTimeout(onDismiss, 4000);
@@ -685,7 +705,7 @@ function PowerExportToast({
         type="button"
         className="power-export-toast-close"
         onClick={onDismiss}
-        aria-label="Dismiss notification"
+        aria-label={t("powerPlan.dismissNotification")}
       >
         ×
       </button>
@@ -706,6 +726,7 @@ function FeedsTrussesEditor({
   selected: string[];
   onChange: (next: string[]) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const selectedSet = new Set(selected);
   const toggle = (id: string) => {
@@ -719,7 +740,7 @@ function FeedsTrussesEditor({
   return (
     <div className="power-feeds-editor">
       {labels.length === 0 ? (
-        <span className="power-feeds-empty">none</span>
+        <span className="power-feeds-empty">{t("powerPlan.none")}</span>
       ) : (
         labels.map((name, i) => (
           <span key={`${name}-${i}`} className="power-truss-chip">
@@ -733,13 +754,13 @@ function FeedsTrussesEditor({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        {selected.length === 0 ? "Pick truss…" : "Edit"}
+        {selected.length === 0 ? t("powerPlan.pickTruss") : t("common.edit")}
       </button>
       {open && (
         <div className="power-feeds-menu" role="menu">
           {systems.length === 0 ? (
             <div className="power-feeds-empty-row">
-              No systems on the Rigging Report yet.
+              {t("powerPlan.noSystems")}
             </div>
           ) : (
             systems.map((s) => (
@@ -776,6 +797,7 @@ function ChannelMappingEditor({
   onChange: (m: ChannelMapping) => void;
   onResetDefault: () => void;
 }) {
+  const t = useT();
   const phaseFor = (idx: number): PowerPhase | "" => {
     if (mapping.L1.includes(idx)) return "L1";
     if (mapping.L2.includes(idx)) return "L2";
@@ -813,12 +835,12 @@ function ChannelMappingEditor({
       </div>
       <div className="power-mapping-actions">
         <button type="button" className="btn btn-soft btn-sm" onClick={onResetDefault}>
-          Reset to default
+          {t("powerPlan.resetDefault")}
         </button>
         <span className="power-mapping-help">
           {feedPhases === 3
-            ? "Default: Ch1+Ch4 → L1, Ch2+Ch5 → L2, Ch3+Ch6 → L3."
-            : "1-phase distro — every channel sits on L1."}
+            ? t("powerPlan.mappingDefaultHelp")
+            : t("powerPlan.mappingSingleHelp")}
         </span>
       </div>
     </div>
@@ -830,6 +852,7 @@ function ChannelMappingEditor({
 // ──────────────────────────────────────────────────────────────────────
 
 function FeederSummary({ load }: { load: DistroLoad }) {
+  const t = useT();
   return (
     <div className="power-feeder-summary">
       {load.distro.feedPhases === 3 ? (
@@ -908,15 +931,15 @@ function FeederSummary({ load }: { load: DistroLoad }) {
 
       <div className="power-feeder-totals">
         <span>
-          Total <strong>{fmtInt(load.totalWatts)}</strong> W
+          {t("powerPlan.total")} <strong>{fmtInt(load.totalWatts)}</strong> W
         </span>
         <span>
-          Worst leg <strong>{fmtNum(load.feederWorstAmps, 1)}</strong> A /{" "}
+          {t("powerPlan.worstLeg")} <strong>{fmtNum(load.feederWorstAmps, 1)}</strong> A /{" "}
           {load.distro.feedAmps} A ({fmtPct(load.feederUtilization)})
         </span>
         {load.distro.feedPhases === 3 && (
           <span>
-            Imbalance <strong>{fmtPct(load.imbalance)}</strong>
+            {t("powerPlan.imbalance")} <strong>{fmtPct(load.imbalance)}</strong>
           </span>
         )}
       </div>
@@ -935,17 +958,24 @@ function WarningsPanel({
   load: DistroLoad;
   suggestions: ReturnType<typeof computeDistroSuggestions>;
 }) {
+  const t = useT();
   const messages: { kind: "danger" | "warn" | "info"; text: string }[] = [];
 
   if (load.feederStatus === "over") {
     messages.push({
       kind: "danger",
-      text: `Feeder over capacity — worst leg ${fmtNum(load.feederWorstAmps, 1)} A exceeds ${load.distro.feedAmps} A breaker.`,
+      text: t("powerPlan.warning.feederOver", {
+        amps: fmtNum(load.feederWorstAmps, 1),
+        limit: load.distro.feedAmps,
+      }),
     });
   } else if (load.feederStatus === "warn") {
     messages.push({
       kind: "warn",
-      text: `Feeder above 80 % derate (${fmtNum(load.feederWorstAmps, 1)} A / ${load.distro.feedAmps} A).`,
+      text: t("powerPlan.warning.feederDerate", {
+        amps: fmtNum(load.feederWorstAmps, 1),
+        limit: load.distro.feedAmps,
+      }),
     });
   }
 
@@ -953,12 +983,20 @@ function WarningsPanel({
     if (ch.status === "over") {
       messages.push({
         kind: "danger",
-        text: `Ch${ch.channel.index} over capacity — ${fmtNum(ch.amps, 1)} A exceeds ${ch.channel.breakerAmps} A breaker.`,
+        text: t("powerPlan.warning.channelOver", {
+          channel: ch.channel.index,
+          amps: fmtNum(ch.amps, 1),
+          limit: ch.channel.breakerAmps,
+        }),
       });
     } else if (ch.status === "warn") {
       messages.push({
         kind: "warn",
-        text: `Ch${ch.channel.index} above 80 % derate (${fmtNum(ch.amps, 1)} A / ${ch.channel.breakerAmps} A).`,
+        text: t("powerPlan.warning.channelDerate", {
+          channel: ch.channel.index,
+          amps: fmtNum(ch.amps, 1),
+          limit: ch.channel.breakerAmps,
+        }),
       });
     }
   }
@@ -966,7 +1004,7 @@ function WarningsPanel({
   if (load.imbalanceWarn) {
     messages.push({
       kind: "warn",
-      text: `Phase imbalance ${fmtPct(load.imbalance)} > 20 % threshold.`,
+      text: t("powerPlan.warning.imbalance", { percent: fmtPct(load.imbalance) }),
     });
   }
 
@@ -990,9 +1028,15 @@ function WarningsPanel({
       ))}
       {suggestions.map((s, i) => (
         <div key={`s${i}`} className="power-warning power-warning--info">
-          <strong>Suggestion:</strong> {s.message}{" "}
+          <strong>{t("powerPlan.suggestion")}:</strong>{" "}
+          {t(SUGGESTION_MESSAGE_KEYS[s.type], {
+            qty: s.qty,
+            fixture: s.fixtureRef,
+            from: s.fromChannelIndex,
+            to: s.toChannelIndex,
+          })}{" "}
           <span className="power-warning-hint">
-            (advisory only — apply manually)
+            ({t("powerPlan.suggestion.advisory")})
           </span>
         </div>
       ))}
@@ -1013,9 +1057,10 @@ function FeedGraph({
   split: DistroTrussShare[];
   systems: SystemLite[];
 }) {
+  const t = useT();
   const trussNameById = new Map(systems.map((s) => [s.id, s.name]));
   return (
-    <div className="power-feed-graph" aria-label="Soca split — distro to truss feed shares">
+    <div className="power-feed-graph" aria-label={t("powerPlan.feedGraphAria")}>
       <div className="power-feed-graph-head">
         <span className="power-feed-graph-from">{distroName}</span>
         <span className="power-feed-graph-arrow" aria-hidden="true">→</span>
@@ -1028,7 +1073,7 @@ function FeedGraph({
             .join(" · ")}
         </span>
       </div>
-      <div className="power-feed-graph-bar" role="img" aria-label="Feed share bar">
+      <div className="power-feed-graph-bar" role="img" aria-label={t("powerPlan.feedShareBarAria")}>
         {split.map((s, i) => (
           <div
             key={s.trussId}
@@ -1061,6 +1106,7 @@ function SuggestionBanner({
   systems: SystemLite[];
   onApply: () => void;
 }) {
+  const t = useT();
   const trussName =
     systems.find((s) => s.id === suggestion.trussId)?.name ?? suggestion.trussId;
   // Severity colour follows the distro's worst state so the banner
@@ -1077,16 +1123,24 @@ function SuggestionBanner({
     <div className={severityClass(sev, "power-suggestion-banner")}>
       <div className="power-suggestion-banner-icon" aria-hidden="true">💡</div>
       <div className="power-suggestion-banner-text">
-        <strong>Suggested fix:</strong> {suggestion.message}{" "}
-        <span className="power-suggestion-banner-truss">on {trussName}</span>
+        <strong>{t("powerPlan.suggestedFix")}:</strong>{" "}
+        {t(SUGGESTION_MESSAGE_KEYS[suggestion.type], {
+          qty: suggestion.qty,
+          fixture: suggestion.fixtureRef,
+          from: suggestion.fromChannelIndex,
+          to: suggestion.toChannelIndex,
+        })}{" "}
+        <span className="power-suggestion-banner-truss">
+          {t("powerPlan.onTruss", { truss: trussName })}
+        </span>
       </div>
       <button
         type="button"
         className="btn btn-primary btn-sm"
         onClick={onApply}
-        title="Apply this rebalance now"
+        title={t("powerPlan.applyRebalanceTitle")}
       >
-        Apply
+        {t("powerPlan.apply")}
       </button>
     </div>
   );
@@ -1105,6 +1159,7 @@ function TrussPowerPanel({
   unpowered: ReturnType<typeof computeUnpoweredFixtures>;
   onAutoAssignTruss: (trussId: string) => void;
 }) {
+  const t = useT();
   const unpoweredByTruss = useMemo(() => {
     const m = new Map<string, number>();
     for (const u of unpowered) {
@@ -1116,9 +1171,9 @@ function TrussPowerPanel({
   return (
     <section className="power-truss-panel led-card">
       <header className="power-truss-panel-head">
-        <h3>Trusses</h3>
+        <h3>{t("powerPlan.trusses")}</h3>
         <span className="power-truss-panel-hint">
-          Each row is a rig position. Power is what the fixtures on it need.
+          {t("powerPlan.trussesHint")}
         </span>
       </header>
       <div className="power-truss-panel-rows">
@@ -1139,7 +1194,7 @@ function TrussPowerPanel({
                   {fmtInt(row.totalWatts)} W
                   <span className="power-truss-row-cap">
                     {" "}
-                    · {fmtInt(row.assignedWatts)} W fed ({fmtPct(ratioFed)})
+                    · {fmtInt(row.assignedWatts)} W {t("powerPlan.fed")} ({fmtPct(ratioFed)})
                   </span>
                 </span>
                 {unpoweredOnRow > 0 ? (
@@ -1147,13 +1202,16 @@ function TrussPowerPanel({
                     type="button"
                     className="btn btn-soft btn-sm"
                     onClick={() => onAutoAssignTruss(row.trussId)}
-                    title={`Add a distro for the ${unpoweredOnRow} unpowered fixtures on ${row.trussName}`}
+                    title={t("powerPlan.autoAssignTitle", {
+                      count: unpoweredOnRow,
+                      truss: row.trussName,
+                    })}
                   >
-                    ⚡ Auto-assign
+                    ⚡ {t("powerPlan.autoAssign")}
                   </button>
                 ) : (
-                  <span className="power-truss-row-ok-badge" title="All fixtures on this truss are powered">
-                    ✓ powered
+                  <span className="power-truss-row-ok-badge" title={t("powerPlan.allPoweredTitle")}>
+                    ✓ {t("powerPlan.powered")}
                   </span>
                 )}
               </div>
@@ -1174,11 +1232,11 @@ function TrussPowerPanel({
                   ))}
                 </ul>
               ) : (
-                <div className="power-truss-row-empty">No fixtures on this truss.</div>
+                <div className="power-truss-row-empty">{t("powerPlan.noFixturesOnTruss")}</div>
               )}
               {row.feedingDistros.length > 0 ? (
                 <div className="power-truss-row-feeders">
-                  <span className="power-truss-row-feeders-label">Fed by:</span>
+                  <span className="power-truss-row-feeders-label">{t("powerPlan.fedBy")}:</span>
                   {row.feedingDistros.map((fd) => (
                     <span key={fd.distroId} className="power-truss-feeder-chip">
                       {fd.distroName}
@@ -1193,15 +1251,20 @@ function TrussPowerPanel({
                 </div>
               ) : row.totalQty > 0 ? (
                 <div className="power-truss-row-feeders power-truss-row-feeders--empty">
-                  <span className="power-truss-row-feeders-label">Fed by:</span>
+                  <span className="power-truss-row-feeders-label">{t("powerPlan.fedBy")}:</span>
                   <span className="power-truss-feeder-chip power-truss-feeder-chip--missing">
-                    nothing yet
+                    {t("powerPlan.nothingYet")}
                   </span>
                 </div>
               ) : null}
               {unpoweredOnRow > 0 && (
                 <div className="power-truss-row-unpowered">
-                  {unpoweredOnRow} fixture{unpoweredOnRow === 1 ? "" : "s"} not powered
+                  {t(
+                    unpoweredOnRow === 1
+                      ? "powerPlan.fixtureNotPowered.one"
+                      : "powerPlan.fixtureNotPowered.many",
+                    { count: unpoweredOnRow },
+                  )}
                 </div>
               )}
             </div>
@@ -1225,6 +1288,7 @@ function AutoSuggestModal({
   onApply: (picks: SuggestedDistro[]) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const totalWatts = suggested.reduce((s, x) => s + x.totalWatts, 0);
   const totalUnits = suggested.reduce((s, x) => s + x.fixtureUnits, 0);
   return (
@@ -1239,29 +1303,27 @@ function AutoSuggestModal({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="power-modal-head">
-          <h3>Auto-suggest power layout</h3>
+          <h3>{t("powerPlan.autoSuggest.modalTitle")}</h3>
           <button
             type="button"
             className="btn btn-soft btn-sm"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
           >
             ✕
           </button>
         </header>
         {suggested.length === 0 ? (
           <p className="power-modal-intro">
-            No proposal could be generated. The unpowered fixtures don't
-            have wattage on file yet — set a non-zero watts value on each
-            fixture row in the Lighting Report and try again.
+            {t("powerPlan.autoSuggest.empty")}
           </p>
         ) : (
           <p className="power-modal-intro">
-            Proposed <strong>{suggested.length}</strong> new distro
-            {suggested.length === 1 ? "" : "s"} to power{" "}
-            <strong>{totalUnits}</strong> currently-unpowered fixture
-            {totalUnits === 1 ? "" : "s"} (<strong>{fmtInt(totalWatts)}</strong> W
-            total). Existing distros are left untouched.
+            {t("powerPlan.autoSuggest.proposed", {
+              distros: suggested.length,
+              fixtures: totalUnits,
+              watts: fmtInt(totalWatts),
+            })}
           </p>
         )}
         <ul className="power-auto-suggest-list">
@@ -1270,13 +1332,13 @@ function AutoSuggestModal({
               <div className="power-auto-suggest-item-head">
                 <strong>{s.trussName}</strong>{" "}
                 <span className="power-auto-suggest-item-preset">
-                  → {s.presetLabel}
+                  → {t(PRESET_LABEL_KEYS[s.presetId])}
                 </span>
               </div>
               <div className="power-auto-suggest-item-stats">
-                {fmtInt(s.totalWatts)} W · {s.fixtureUnits} fixture
-                {s.fixtureUnits === 1 ? "" : "s"} · {s.drops.length} drop
-                {s.drops.length === 1 ? "" : "s"}
+                 {fmtInt(s.totalWatts)} W ·{" "}
+                 {t(s.fixtureUnits === 1 ? "powerPlan.fixtureCount.one" : "powerPlan.fixtureCount.many", { count: s.fixtureUnits })} ·{" "}
+                 {t(s.drops.length === 1 ? "powerPlan.dropCount.one" : "powerPlan.dropCount.many", { count: s.drops.length })}
               </div>
               <ul className="power-auto-suggest-item-drops">
                 {s.drops.map((d, i) => (
@@ -1290,7 +1352,7 @@ function AutoSuggestModal({
         </ul>
         <footer className="power-modal-foot">
           <button type="button" className="btn btn-soft" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -1298,7 +1360,7 @@ function AutoSuggestModal({
             onClick={() => onApply(suggested)}
             disabled={suggested.length === 0}
           >
-            Apply all ({suggested.length})
+            {t("powerPlan.applyAll", { count: suggested.length })}
           </button>
         </footer>
       </div>
@@ -1330,6 +1392,7 @@ type ChannelRowProps = {
 };
 
 function ChannelRow(props: ChannelRowProps) {
+  const t = useT();
   const { channelLoad: cl, distro, systems, systemNameById, fixtures } = props;
   const channel = cl.channel;
   const sev = cl.status;
@@ -1360,8 +1423,8 @@ function ChannelRow(props: ChannelRowProps) {
         aria-expanded={open}
         aria-label={
           open
-            ? `Collapse Ch${channel.index} details`
-            : `Expand Ch${channel.index} details`
+            ? t("powerPlan.collapseChannel", { channel: channel.index })
+            : t("powerPlan.expandChannel", { channel: channel.index })
         }
       >
         <span className="power-channel-chevron" aria-hidden="true">
@@ -1380,8 +1443,13 @@ function ChannelRow(props: ChannelRowProps) {
           <span>{fmtPct(cl.utilization)}</span>
           <span className="power-channel-fixtures">
             {fixtureCount === 0
-              ? "no fixtures"
-              : `${fixtureCount} fixture${fixtureCount === 1 ? "" : "s"}`}
+              ? t("powerPlan.noFixtures")
+              : t(
+                  fixtureCount === 1
+                    ? "powerPlan.fixtureCount.one"
+                    : "powerPlan.fixtureCount.many",
+                  { count: fixtureCount },
+                )}
           </span>
         </span>
       </button>
@@ -1402,7 +1470,7 @@ function ChannelRow(props: ChannelRowProps) {
         <>
           <div className="power-drops">
             {cl.drops.length === 0 ? (
-              <div className="power-drops-empty">No drops on this channel.</div>
+              <div className="power-drops-empty">{t("powerPlan.noDrops")}</div>
             ) : (
               cl.drops.map((dl) => (
                 <DropChip
@@ -1454,6 +1522,7 @@ function DropChip({
   onChangeCable: (cable: DropCableKind | undefined) => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   // Condensed by default — show only Fixture name, Qty, Total Load.
   // Click reveals secondary metadata (source truss, per-unit amps,
   // cable type) and editor controls. The remove (×) button always
@@ -1470,8 +1539,8 @@ function DropChip({
         aria-expanded={expanded}
         title={
           expanded
-            ? "Collapse drop details"
-            : "Click to edit qty, cable, source truss"
+            ? t("powerPlan.collapseDrop")
+            : t("powerPlan.editDropTitle")
         }
       >
         <span className="power-drop-chevron" aria-hidden="true">
@@ -1487,11 +1556,11 @@ function DropChip({
       {expanded && (
         <div className="power-drop-chip-detail">
           <label className="power-drop-detail-field">
-            <span>Truss</span>
+            <span>{t("powerPlan.truss")}</span>
             <span className="power-drop-truss">{trussName}</span>
           </label>
           <label className="power-drop-detail-field">
-            <span>Qty</span>
+            <span>{t("powerPlan.qty")}</span>
             <NumberField
               className="led-input led-input-num power-drop-qty"
               min={1}
@@ -1500,11 +1569,11 @@ function DropChip({
               transform={(n) => Math.max(1, Math.round(n || 1))}
               emptyValue={1}
               onCommit={(qty) => onChangeQty(qty)}
-              aria-label="Drop quantity"
+              aria-label={t("powerPlan.dropQuantity")}
             />
           </label>
           <label className="power-drop-detail-field">
-            <span>Cable</span>
+            <span>{t("powerPlan.cable")}</span>
             <select
               className="led-input power-drop-cable"
               value={drop.cable ?? ""}
@@ -1515,9 +1584,9 @@ function DropChip({
                     : undefined,
                 )
               }
-              aria-label="Cable type"
+              aria-label={t("powerPlan.cableType")}
             >
-              <option value="">cable…</option>
+              <option value="">{t("powerPlan.cable")}…</option>
               {DROP_CABLE_KINDS.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -1526,7 +1595,7 @@ function DropChip({
             </select>
           </label>
           <span className="power-drop-detail-stats">
-            {fmtNum(amps, 1)} A draw
+            {fmtNum(amps, 1)} A {t("powerPlan.draw")}
           </span>
         </div>
       )}
@@ -1535,7 +1604,7 @@ function DropChip({
         type="button"
         className="btn btn-danger btn-sm power-drop-remove"
         onClick={onRemove}
-        title="Remove drop"
+        title={t("powerPlan.removeDrop")}
       >
         ×
       </button>
@@ -1558,6 +1627,7 @@ function AddDropForm({
   fixtures: FixtureRef[];
   onAdd: (drop: { trussId: string; fixtureRef: string; qty: number; cable?: DropCableKind }) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   // Truss options — restricted to distro.feedsTrusses (or all if none picked).
@@ -1603,15 +1673,15 @@ function AddDropForm({
           disabled={trussOptions.length === 0}
           title={
             trussOptions.length === 0
-              ? "Pick a truss in the distro header first"
+              ? t("powerPlan.pickTrussFirst")
               : undefined
           }
         >
-          + Add fixtures
+          + {t("powerPlan.addFixtures")}
         </button>
         {trussOptions.length === 0 && (
           <span className="power-add-drop-hint">
-            Pick a truss in the distro header to add drops.
+            {t("powerPlan.pickTrussHint")}
           </span>
         )}
       </div>
@@ -1630,7 +1700,7 @@ function AddDropForm({
           setTrussId(e.target.value);
           setFixtureRef("");
         }}
-        aria-label="Truss"
+        aria-label={t("powerPlan.truss")}
       >
         {trussOptions.map((s) => (
           <option key={s.id} value={s.id}>
@@ -1642,17 +1712,17 @@ function AddDropForm({
         className="led-input"
         value={fixtureRef}
         onChange={(e) => setFixtureRef(e.target.value)}
-        aria-label="Fixture"
+        aria-label={t("powerPlan.fixture")}
       >
-        <option value="">Fixture…</option>
+        <option value="">{t("powerPlan.fixture")}…</option>
         {fixtureOptions.length === 0 ? (
           <option value="" disabled>
-            (no fixtures on this truss)
+            ({t("powerPlan.noFixturesOnTruss")})
           </option>
         ) : (
           fixtureOptions.map((f, i) => (
             <option key={`${f.name}-${i}`} value={f.name}>
-              {f.name} · {f.qty} pcs · {fmtInt(f.watts)} W
+            {f.name} · {f.qty} {t("powerPlan.pcs")} · {fmtInt(f.watts)} W
             </option>
           ))
         )}
@@ -1665,15 +1735,15 @@ function AddDropForm({
         transform={(n) => Math.max(1, Math.round(n || 1))}
         emptyValue={1}
         onCommit={(n) => setQty(n)}
-        aria-label="Quantity"
+        aria-label={t("powerPlan.quantity")}
       />
       <select
         className="led-input"
         value={cable}
         onChange={(e) => setCable(e.target.value as DropCableKind | "")}
-        aria-label="Cable"
+        aria-label={t("powerPlan.cable")}
       >
-        <option value="">cable…</option>
+        <option value="">{t("powerPlan.cable")}…</option>
         {DROP_CABLE_KINDS.map((c) => (
           <option key={c} value={c}>
             {c}
@@ -1695,14 +1765,14 @@ function AddDropForm({
           setOpen(false);
         }}
       >
-        Add
+        {t("common.add")}
       </button>
       <button
         type="button"
         className="btn btn-soft btn-sm"
         onClick={() => setOpen(false)}
       >
-        Cancel
+        {t("common.cancel")}
       </button>
     </div>
   );
@@ -1719,23 +1789,24 @@ function UnpoweredFixturesPanel({
   unpowered: ReturnType<typeof computeUnpoweredFixtures>;
   systems: SystemLite[];
 }) {
+  const t = useT();
   const systemNameById = new Map(systems.map((s) => [s.id, s.name]));
   const total = unpowered.reduce((n, u) => n + u.remainingQty, 0);
   return (
     <section className="led-card power-unpowered">
       <div className="power-unpowered-head">
-        <h3>Fixtures not yet powered</h3>
-        <span className="badge badge-warn">{total} remaining</span>
+        <h3>{t("powerPlan.unpowered.title")}</h3>
+        <span className="badge badge-warn">{t("powerPlan.remainingCount", { count: total })}</span>
       </div>
       <table className="led-table">
         <thead>
           <tr>
-            <th>Fixture</th>
-            <th>Truss</th>
-            <th className="led-num">Total</th>
-            <th className="led-num">Powered</th>
-            <th className="led-num">Remaining</th>
-            <th className="led-num">W / unit</th>
+            <th>{t("powerPlan.fixture")}</th>
+            <th>{t("powerPlan.truss")}</th>
+            <th className="led-num">{t("powerPlan.total")}</th>
+            <th className="led-num">{t("powerPlan.powered")}</th>
+            <th className="led-num">{t("powerPlan.remaining")}</th>
+            <th className="led-num">{t("powerPlan.wPerUnit")}</th>
           </tr>
         </thead>
         <tbody>
@@ -1768,16 +1839,15 @@ function LegacyCircuitsPanel({
   circuits: PowerCircuit[];
   onRemoveCircuit: (id: string) => void;
 }) {
+  const t = useT();
   return (
     <section className="led-card power-legacy">
       <div className="power-legacy-head">
-        <h3>Legacy circuits (v1)</h3>
-        <span className="badge">read-only — preserved from before the rewrite</span>
+        <h3>{t("powerPlan.legacy.title")}</h3>
+        <span className="badge">{t("powerPlan.legacy.readOnly")}</span>
       </div>
       <p className="power-legacy-help">
-        These are the old free-text circuits with phase items. They're kept
-        here so nothing is lost; new work belongs in distros above. Remove a
-        circuit when you've migrated its content.
+        {t("powerPlan.legacy.help")}
       </p>
       {circuits.map((c) => {
         const load = computeCircuitLoad(c);
@@ -1788,26 +1858,26 @@ function LegacyCircuitsPanel({
               <span>{c.source}</span>
               <span>
                 {c.voltage} V × {c.ampsPerPhase} A · {fmtInt(load.totalWatts)} W
-                · worst {fmtPct(load.worstRatio)}
+                · {t("powerPlan.worst")} {fmtPct(load.worstRatio)}
               </span>
               <button
                 type="button"
                 className="btn btn-danger btn-sm"
                 onClick={() => onRemoveCircuit(c.id)}
               >
-                Remove
+                {t("common.remove")}
               </button>
             </div>
             {c.items.length > 0 && (
               <table className="led-table">
                 <thead>
                   <tr>
-                    <th>Item</th>
-                    <th>Phase</th>
-                    <th className="led-num">Qty</th>
-                    <th className="led-num">W/unit</th>
-                    <th className="led-num">Subtotal W</th>
-                    <th>Notes</th>
+                    <th>{t("powerPlan.item")}</th>
+                    <th>{t("powerPlan.phase")}</th>
+                    <th className="led-num">{t("powerPlan.qty")}</th>
+                    <th className="led-num">{t("powerPlan.wPerUnitCompact")}</th>
+                    <th className="led-num">{t("powerPlan.subtotalW")}</th>
+                    <th>{t("powerPlan.notes")}</th>
                   </tr>
                 </thead>
                 <tbody>
