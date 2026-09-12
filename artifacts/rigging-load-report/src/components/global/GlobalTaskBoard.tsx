@@ -482,7 +482,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                   }}
                 />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+              <div className="gt-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <div className="ehs-form-group">
                   <label>{t("globalTasks.sidebar.status")}</label>
                   <select 
@@ -609,7 +609,7 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
                   <label>{t("globalTasks.modal.taskTitle")}</label>
                   <input required className="ehs-input" value={createDraft.title} onChange={e => setCreateDraft({...createDraft, title: e.target.value})} placeholder={t("globalTasks.modal.titlePlaceholder")} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                <div className="gt-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                   <div className="ehs-form-group">
                     <label>{t("globalTasks.modal.status")}</label>
                     <select required className="ehs-input" value={createDraft.status} onChange={e => setCreateDraft({...createDraft, status: e.target.value as any})}>
@@ -668,6 +668,8 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
           justify-content: space-between;
           align-items: flex-end;
           margin-bottom: 24px;
+          flex-wrap: wrap;
+          gap: 16px;
         }
         .gt-header-title {
           font-size: 1.5rem;
@@ -1007,6 +1009,9 @@ export function GlobalTaskBoard({ getToken, onOpenProject }: Props) {
             align-items: flex-start;
             gap: 16px;
           }
+          .gt-header > div:first-child { min-width: 0; flex: 1 1 100%; }
+          .gt-view-toggle { max-width: 100%; flex-wrap: wrap; }
+          .gt-form-grid { grid-template-columns: minmax(0, 1fr) !important; }
           .gt-filters-bar {
             align-items: stretch;
           }

@@ -248,14 +248,14 @@ export function EditorDialog({
   }, [onClose]);
 
   return (
-    <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, zIndex: 1000, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.5)", padding: 20 }}>
-      <div style={{ background: c.cardBg, color: c.text, padding: 24, borderRadius: 12, width: "100%", maxWidth: 400, minWidth: "min(100vw - 32px, 320px)", boxShadow: "0 24px 80px rgba(0,0,0,0.2)" }}>
+    <div className="portal-availability-editor-dialog" role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, zIndex: 1000, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.5)", padding: 20 }}>
+      <div className="portal-availability-dialog-panel" style={{ background: c.cardBg, color: c.text, padding: 24, borderRadius: 12, width: "100%", maxWidth: 400, minWidth: "min(100vw - 32px, 320px)", boxShadow: "0 24px 80px rgba(0,0,0,0.2)" }}>
         <h2 style={{ margin: "0 0 6px" }}>{t("portal.availability.editor.title")}</h2>
         <div style={{ marginBottom: 20, color: c.muted, fontSize: 14 }}>
           {formattedDate}
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        <div className="portal-availability-editor-status" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
           {(["available", "unavailable", "tentative"] as const).map(s => (
             <button key={s} onClick={() => setStatus(s)} aria-pressed={status === s} style={{ flex: 1, padding: "8px", textTransform: "capitalize", borderRadius: 8, border: `1px solid ${status === s ? c.accent : c.border}`, background: status === s ? c.cardBgSubtle : "transparent", color: c.text, cursor: "pointer", fontWeight: status === s ? "bold" : "normal" }}>
               {s === "available" ? t("portal.availability.legend.available") : s === "unavailable" ? t("portal.availability.legend.unavailable") : t("portal.availability.legend.tentative")}
@@ -263,8 +263,8 @@ export function EditorDialog({
           ))}
         </div>
 
-        <div style={{ display: "grid", gap: 12, margin: "8px 0 16px" }}>
-          <div role="group" aria-label={t("portal.availability.editor.timeMode")} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div className="portal-availability-editor-form" style={{ display: "grid", gap: 12, margin: "8px 0 16px" }}>
+          <div className="portal-availability-editor-mode" role="group" aria-label={t("portal.availability.editor.timeMode")} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <button type="button" onClick={() => setAllDay(true)} aria-pressed={allDay} style={{ ...inputStyle(theme), cursor: "pointer", fontWeight: allDay ? 700 : 400, borderColor: allDay ? c.accent : c.border }}>
               {t("portal.availability.editor.allDay")}
             </button>
@@ -274,7 +274,7 @@ export function EditorDialog({
           </div>
 
           {!allDay && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+            <div className="portal-availability-editor-time-fields" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
               <label style={{ minWidth: 0, fontSize: 12, color: c.muted }}>
                 {t("portal.availability.editor.startTime")}
                 <input className="availability-time-input" type="time" value={startAt} onChange={(e) => setStartAt(e.target.value)} style={{ ...timeInputStyle(theme), width: "100%", marginTop: 4 }} />
@@ -310,7 +310,7 @@ export function EditorDialog({
           </div>
         )}
 
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+        <div className="portal-availability-editor-actions" style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
           <button onClick={handleClear} style={{ padding: "8px 16px", background: "transparent", border: `1px solid ${c.danger}`, color: c.danger, borderRadius: 8, cursor: "pointer", visibility: existingEntry ? "visible" : "hidden" }}>{t("portal.availability.editor.clear")}</button>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             <button onClick={onClose} style={{ padding: "8px 16px", background: "transparent", border: "none", color: c.muted, cursor: "pointer" }}>{t("portal.availability.editor.close")}</button>

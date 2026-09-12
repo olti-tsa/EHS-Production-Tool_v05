@@ -333,6 +333,7 @@ export function CateringView({ briefId, getToken }: Props) {
         </div>
       ) : (
         <div
+          className="catering-day-grid"
           style={{
             display: "grid",
             gap: 12,

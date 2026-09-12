@@ -449,17 +449,17 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <header style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between", flexShrink: 0 }}>
+    <div className="ehs-portal-availability" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <header className="portal-availability-header" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "space-between", flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>{t("portal.availability.title")}</h1>
-        <div style={{ display: "flex", gap: 8, background: c.cardBgSubtle, padding: 4, borderRadius: 8, border: `1px solid ${c.border}` }}>
+        <div className="portal-availability-tabs" style={{ display: "flex", gap: 8, background: c.cardBgSubtle, padding: 4, borderRadius: 8, border: `1px solid ${c.border}` }}>
           <button onClick={() => setTab("calendar")} style={tabBtn(tab === "calendar", theme)}>{t("portal.availability.tab.calendar")}</button>
           <button onClick={() => setTab("integrations")} style={tabBtn(tab === "integrations", theme)}>{t("portal.availability.tab.integrations")}</button>
         </div>
       </header>
 
       {tab === "calendar" && (
-        <div style={{ 
+        <div className="portal-availability-calendar-card" style={{
           background: c.cardBg, 
           border: `1px solid ${c.border}`, 
           borderRadius: 14, 
@@ -468,9 +468,9 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
           flexDirection: "column",
           overflow: "visible"
         }}>
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8, flexShrink: 0 }}>
+          <div className="portal-availability-calendar-toolbar" style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8, flexShrink: 0 }}>
             <button onClick={() => shiftDate(-1)} style={navBtnStyle(theme)} aria-label={t("portal.availability.prev")}>‹</button>
-            <div style={{ flex: 1, textAlign: "center", fontSize: 18, fontWeight: 800 }}>
+            <div className="portal-availability-calendar-title" style={{ flex: 1, textAlign: "center", fontSize: 18, fontWeight: 800 }}>
               {viewMode === "month"
                 ? monthName
                 : t("portal.availability.view.weekOf", {
@@ -478,7 +478,7 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
                   })}
             </div>
             <button onClick={() => shiftDate(+1)} style={navBtnStyle(theme)} aria-label={t("portal.availability.next")}>›</button>
-            <div style={{ display: "flex", gap: 4, background: c.cardBgSubtle, padding: 4, borderRadius: 8, border: `1px solid ${c.border}` }}>
+            <div className="portal-availability-view-tabs" style={{ display: "flex", gap: 4, background: c.cardBgSubtle, padding: 4, borderRadius: 8, border: `1px solid ${c.border}` }}>
               <button onClick={() => setViewMode("month")} style={tabBtn(viewMode === "month", theme)}>{t("portal.availability.view.month")}</button>
               <button onClick={() => setViewMode("week")} style={tabBtn(viewMode === "week", theme)}>{t("portal.availability.view.week")}</button>
             </div>
@@ -575,11 +575,11 @@ export function Availability({ theme, data, setData }: { theme: ThemeMode; data:
       )}
 
       {rotateConfirm && (
-        <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, zIndex: 1000, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.5)", padding: 20 }}>
-          <div style={{ background: c.cardBg, color: c.text, padding: 24, borderRadius: 12, width: "100%", maxWidth: 400, minWidth: "min(100vw - 32px, 320px)", boxShadow: "0 24px 80px rgba(0,0,0,0.2)" }}>
+        <div className="portal-availability-rotate-dialog" role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, zIndex: 1000, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.5)", padding: 20 }}>
+          <div className="portal-availability-dialog-panel" style={{ background: c.cardBg, color: c.text, padding: 24, borderRadius: 12, width: "100%", maxWidth: 400, minWidth: "min(100vw - 32px, 320px)", boxShadow: "0 24px 80px rgba(0,0,0,0.2)" }}>
             <h2 style={{ margin: "0 0 12px" }}>{t("portal.availability.rotateDialog.title")}</h2>
             <p style={{ margin: "0 0 24px", color: c.muted, fontSize: 14 }}>{t("portal.availability.rotateDialog.body")}</p>
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
+            <div className="portal-availability-dialog-actions" style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: 12 }}>
               <button onClick={() => setRotateConfirm(false)} style={{ padding: "8px 16px", background: "transparent", border: "none", color: c.muted, cursor: "pointer" }}>{t("portal.availability.rotateDialog.cancel")}</button>
               <button onClick={confirmRotate} style={{ padding: "8px 16px", background: c.danger, color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: "bold" }}>{t("portal.availability.rotateDialog.confirm")}</button>
             </div>

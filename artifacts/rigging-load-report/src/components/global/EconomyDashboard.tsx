@@ -999,6 +999,8 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
           justify-content: space-between;
           align-items: flex-end;
           margin-bottom: 24px;
+          flex-wrap: wrap;
+          gap: 16px;
         }
         .eco-title {
           font-size: 1.5rem;
@@ -1014,6 +1016,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
         .eco-actions {
           display: flex;
           gap: 12px;
+          flex-wrap: wrap;
         }
         .spin {
           animation: spin 1s linear infinite;
@@ -1025,6 +1028,8 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
           gap: 32px;
           border-bottom: 1px solid var(--border-color);
           margin-bottom: 24px;
+          flex-wrap: wrap;
+          min-width: 0;
         }
         .eco-tab {
           background: none;
@@ -1038,6 +1043,9 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
           display: flex;
           align-items: center;
           gap: 8px;
+          min-width: 0;
+          white-space: normal;
+          text-align: left;
         }
         .eco-tab:hover {
           color: var(--text-main);
@@ -1133,6 +1141,7 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
           display: flex;
           padding: 16px 20px;
           gap: 16px;
+          flex-wrap: wrap;
           background: var(--surface-soft);
           border-bottom: 1px solid var(--border-color);
         }
@@ -1297,6 +1306,16 @@ export function EconomyDashboard({ getToken, onOpenProject }: Props) {
         .btn-flag { background: var(--danger); color: white; }
         .btn-lock { background: var(--primary); color: white; }
         .btn-adjust { background: var(--input-bg); color: var(--text-main); border: 1px solid var(--border-color); }
+        @media (max-width: 640px) {
+          .eco-container { padding-left: 0; padding-right: 0; }
+          .eco-actions { width: 100%; }
+          .eco-actions > button { flex: 1 1 140px; min-width: 0; }
+          .eco-tabs { gap: 8px 16px; }
+          .eco-tab { flex: 1 1 120px; padding-top: 9px; padding-bottom: 9px; }
+          .eco-kpi-grid,
+          .eco-project-grid { grid-template-columns: minmax(0, 1fr); }
+          .eco-table-wrap { max-width: 100%; overflow-x: auto; }
+        }
       `}} />
     </div>
   );

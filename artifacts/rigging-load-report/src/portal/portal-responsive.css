@@ -1,0 +1,637 @@
+/*
+ * Freelancer portal responsive adjustments.
+ *
+ * This stylesheet is intentionally imported by PortalLayout rather than the
+ * shared shell stylesheet.  Portal screens use a mixture of inline theme
+ * styles and shared shell classes, so every rule is scoped to the portal
+ * root and only changes wrapping/constraints at narrow widths.
+ */
+
+.ehs-portal-layout,
+.ehs-portal-layout .ehs-shell-main,
+.ehs-portal-layout .ehs-shell-content {
+  min-width: 0;
+}
+
+.ehs-portal-layout .ehs-portal-topbar {
+  min-width: 0;
+  overflow: visible;
+}
+
+.ehs-portal-layout .ehs-portal-topbar .ehs-shell-crumbs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ehs-portal-layout .ehs-portal-topbar-actions {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+}
+
+.ehs-portal-layout .ehs-portal-topbar-actions > * {
+  min-width: 0;
+}
+
+.ehs-portal-layout .ehs-portal-nav-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-layout .ehs-shell-nav-item {
+  min-width: 0;
+}
+
+.ehs-portal-layout .ehs-shell-nav-item > svg {
+  flex: 0 0 auto;
+}
+
+.ehs-portal-layout .ehs-portal-content > * {
+  min-width: 0;
+}
+
+@media (max-width: 899px) {
+  .ehs-portal-layout .ehs-portal-topbar {
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .ehs-portal-layout .ehs-portal-topbar-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+  }
+
+  .ehs-portal-layout .ehs-portal-content {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .ehs-portal-layout .ehs-portal-topbar-actions {
+    gap: 4px !important;
+  }
+
+  .ehs-portal-layout .ehs-portal-topbar-actions .ehs-shell-action,
+  .ehs-portal-layout .ehs-portal-topbar-actions .ehs-shell-signout-btn,
+  .ehs-portal-layout .ehs-portal-topbar-actions .ehs-portal-mobile-language .lang-fab-trigger {
+    min-width: 32px !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+}
+
+/* Availability ---------------------------------------------------------- */
+
+.ehs-portal-availability,
+.ehs-portal-availability > *,
+.ehs-portal-availability section,
+.ehs-portal-availability h1,
+.ehs-portal-availability h2,
+.ehs-portal-availability h3 {
+  min-width: 0;
+}
+
+.ehs-portal-availability h1,
+.ehs-portal-availability h2,
+.ehs-portal-availability h3,
+.ehs-portal-availability strong,
+.ehs-portal-availability span {
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-availability-tabs,
+.ehs-portal-availability-view-tabs {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.ehs-portal-availability-calendar-card {
+  min-width: 0;
+}
+
+.ehs-portal-availability-calendar-toolbar {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ehs-portal-availability-calendar-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-availability-dialog-panel {
+  min-width: 0 !important;
+}
+
+.ehs-portal-availability-dialog-actions {
+  min-width: 0;
+}
+
+.ehs-portal-availability-editor-status > button,
+.ehs-portal-availability-editor-mode > button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-availability-editor-time-fields {
+  min-width: 0;
+}
+
+.ehs-portal-availability-editor-time-fields > label,
+.ehs-portal-availability-editor-time-fields input,
+.ehs-portal-availability-editor-form input,
+.ehs-portal-availability-editor-form select,
+.ehs-portal-availability-editor-form textarea {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.ehs-portal-availability-editor-actions {
+  min-width: 0;
+}
+
+.ehs-portal-availability-editor-actions > button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ehs-portal-availability-integrations,
+.ehs-portal-availability-integrations > *,
+.ehs-portal-availability-connection-row,
+.ehs-portal-availability-connection-info,
+.ehs-portal-availability-connection-actions {
+  min-width: 0;
+}
+
+.ehs-portal-availability-connection-info {
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-availability-connection-actions {
+  flex-wrap: wrap;
+}
+
+.ehs-portal-availability-url-row,
+.ehs-portal-availability-feed-row {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ehs-portal-availability-url-row input,
+.ehs-portal-availability-feed-row input {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .ehs-portal-availability-dialog-panel {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 400px;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+  }
+
+  .ehs-portal-availability-calendar-toolbar {
+    align-items: center !important;
+  }
+
+  .ehs-portal-availability-calendar-title {
+    flex: 1 1 150px !important;
+  }
+
+  .ehs-portal-availability-view-tabs {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .ehs-portal-availability-connection-row {
+    align-items: stretch !important;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ehs-portal-availability-connection-actions {
+    width: 100%;
+  }
+
+  .ehs-portal-availability-connection-actions > button {
+    flex: 1 1 120px;
+  }
+
+  .ehs-portal-availability-url-row,
+  .ehs-portal-availability-feed-row {
+    flex-direction: column;
+  }
+
+  .ehs-portal-availability-url-row input,
+  .ehs-portal-availability-url-row > button,
+  .ehs-portal-availability-feed-row input,
+  .ehs-portal-availability-feed-row > button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .ehs-portal-availability-editor-time-fields,
+  .ehs-portal-availability-editor-mode {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .ehs-portal-availability-dialog-actions,
+  .ehs-portal-availability-editor-actions {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .ehs-portal-availability-dialog-actions > button,
+  .ehs-portal-availability-editor-actions > button {
+    width: 100%;
+  }
+}
+
+/* Brief detail ---------------------------------------------------------- */
+
+.ehs-portal-brief-detail > *,
+.ehs-portal-brief-detail section,
+.ehs-portal-brief-detail li {
+  min-width: 0;
+}
+
+.ehs-portal-brief-detail {
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-brief-detail h1,
+.ehs-portal-brief-detail h2,
+.ehs-portal-brief-detail strong,
+.ehs-portal-brief-detail span,
+.ehs-portal-brief-detail a {
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-brief-detail .portal-brief-shifts-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)) !important;
+}
+
+.ehs-portal-brief-detail .portal-brief-role-booking {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-brief-detail .portal-brief-shift-card {
+  min-width: 0;
+}
+
+.ehs-portal-brief-detail .portal-brief-shift-card > strong,
+.ehs-portal-brief-detail .portal-brief-shift-summary {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-brief-detail .portal-brief-shift-actions {
+  flex-wrap: wrap;
+}
+
+.ehs-portal-brief-detail .portal-brief-shift-actions > button {
+  min-width: 0;
+}
+
+.ehs-portal-brief-detail .portal-brief-decision-actions > button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ehs-portal-brief-detail .portal-brief-assignment-fields {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)) !important;
+}
+
+.ehs-portal-brief-detail .portal-brief-day-breakdown-row {
+  min-width: 0;
+}
+
+.ehs-portal-brief-detail .portal-brief-day-breakdown-days {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-brief-detail .portal-brief-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ehs-portal-brief-detail .portal-brief-table-scroll > table {
+  min-width: 360px;
+}
+
+.ehs-portal-brief-detail .portal-brief-attachment-row {
+  min-width: 0;
+}
+
+.ehs-portal-brief-detail .portal-brief-attachment-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .ehs-portal-brief-detail .portal-brief-assignment-fields {
+    gap: 10px !important;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-day-breakdown-row {
+    flex-direction: column;
+    gap: 4px !important;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-day-breakdown-label {
+    min-width: 0 !important;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-schedule-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 5px !important;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-schedule-time {
+    margin-left: 0 !important;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-attachment-row {
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-attachment-name {
+    flex: 1 1 180px;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-attachment-row > a {
+    flex: 0 1 auto;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-action-row > button {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-decision-actions {
+    align-items: stretch !important;
+  }
+
+  .ehs-portal-brief-detail .portal-brief-decision-actions > button {
+    flex: 1 1 100%;
+  }
+}
+
+/* Hours ----------------------------------------------------------------- */
+
+.ehs-portal-hours,
+.ehs-portal-hours > *,
+.ehs-portal-hours-gig,
+.ehs-portal-hours-gig > * {
+  min-width: 0;
+}
+
+.ehs-portal-hours-gig-header > h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-hours-gig-header > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-hours-day-header > div:last-child {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ehs-portal-hours-fields {
+  min-width: 0;
+}
+
+.ehs-portal-hours-field {
+  min-width: 0;
+}
+
+.ehs-portal-hours-day-actions {
+  min-width: 0;
+}
+
+.ehs-portal-hours-day-actions > div {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .ehs-portal-hours-fields {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px !important;
+  }
+
+  .ehs-portal-hours-field {
+    width: auto !important;
+  }
+
+  .ehs-portal-hours-field input {
+    width: 100% !important;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+}
+
+@media (max-width: 430px) {
+  .ehs-portal-hours-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ehs-portal-hours-day-actions > div {
+    width: 100%;
+  }
+
+  .ehs-portal-hours-day-actions > div > button {
+    flex: 1 1 120px;
+  }
+}
+
+/* Gigs ------------------------------------------------------------------ */
+
+.ehs-portal-gigs,
+.ehs-portal-gigs > *,
+.ehs-portal-gigs .portal-gig-card,
+.ehs-portal-gigs .portal-gig-card > * {
+  min-width: 0;
+}
+
+.ehs-portal-gigs > header h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-gigs .portal-gig-filter-row {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-filter-row > button {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-gigs .portal-gig-card-main {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-card-content,
+.ehs-portal-gigs .portal-gig-card-content > * {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-card-content strong,
+.ehs-portal-gigs .portal-gig-card-content span {
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-gigs .portal-gig-card-actions {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-card-footer {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-card-footer-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-calendar-action {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ehs-portal-gigs .portal-gig-editor {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-editor-panel {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-editor-header {
+  min-width: 0;
+  gap: 8px;
+}
+
+.ehs-portal-gigs .portal-gig-editor-header h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-gigs .portal-gig-editor-field-grid {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-editor-field-grid > * {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-editor-actions {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-gig-editor-actions > button {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ehs-portal-gigs .portal-working-days-header {
+  min-width: 0;
+}
+
+.ehs-portal-gigs .portal-working-days-header > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ehs-portal-gigs .portal-working-days-header > button {
+  max-width: 100%;
+}
+
+@media (max-width: 600px) {
+  .ehs-portal-gigs .portal-gig-editor-panel {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 560px;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+  }
+
+  .ehs-portal-gigs .portal-gig-card-main {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .ehs-portal-gigs .portal-gig-card-actions {
+    flex-direction: row !important;
+    align-items: stretch !important;
+    flex-wrap: wrap;
+  }
+
+  .ehs-portal-gigs .portal-gig-card-actions > button {
+    flex: 1 1 140px;
+  }
+
+  .ehs-portal-gigs .portal-gig-card-footer {
+    align-items: stretch !important;
+  }
+
+  .ehs-portal-gigs .portal-gig-card-footer-spacer {
+    flex: 1 1 80px;
+  }
+
+  .ehs-portal-gigs .portal-gig-calendar-action {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .ehs-portal-gigs .portal-gig-editor-field-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .ehs-portal-gigs .portal-working-days-header {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .ehs-portal-gigs .portal-working-days-header > button {
+    align-self: flex-start;
+    margin-left: 0 !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .ehs-portal-gigs .portal-gig-editor-actions {
+    flex-direction: column;
+  }
+
+  .ehs-portal-gigs .portal-gig-editor-actions > button {
+    width: 100%;
+    flex: 1 1 auto !important;
+  }
+}

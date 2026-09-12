@@ -988,6 +988,7 @@ export function MasterCrewSheet({
         // pushing the pill and Print A4 into each other. Everything is
         // pinned with inline styles for a bulletproof layout.
         <div
+          className="master-sheet-compact-actions"
           style={{
             display: "flex",
             justifyContent: "flex-end",

@@ -595,7 +595,7 @@ export function Gigs({
   }
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div className="ehs-portal-gigs" style={{ display: "grid", gap: 16 }}>
       <header
         style={{
           display: "flex",
@@ -662,7 +662,7 @@ export function Gigs({
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <div className="portal-gig-filter-row" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {(["all", ...STATUS_ORDER] as const).map((s) => {
           const active = filter === s;
           const count =
@@ -724,6 +724,7 @@ export function Gigs({
             return (
               <div
                 key={g.id}
+                className="portal-gig-card"
                 style={{
                   background: c.cardBg,
                   border: `1px solid ${c.border}`,
@@ -734,6 +735,7 @@ export function Gigs({
                 }}
               >
                 <div
+                  className="portal-gig-card-main"
                   style={{
                     display: "flex",
                     gap: 12,
@@ -741,7 +743,7 @@ export function Gigs({
                     flexWrap: "wrap",
                   }}
                 >
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="portal-gig-card-content" style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
                         display: "flex",
@@ -810,6 +812,7 @@ export function Gigs({
                     </div>
                   </div>
                   <div
+                    className="portal-gig-card-actions"
                     style={{
                       display: "flex",
                       flexDirection: "column",
@@ -855,6 +858,7 @@ export function Gigs({
 
                 {/* Footer: check-in (confirmed/done only) + calendar export */}
                 <div
+                  className="portal-gig-card-footer"
                   style={{
                     display: "flex",
                     gap: 6,
@@ -873,11 +877,12 @@ export function Gigs({
                       locale={locale}
                     />
                   ) : null}
-                  <div style={{ flex: 1 }} />
+                  <div className="portal-gig-card-footer-spacer" />
                   <button
                     type="button"
                     onClick={() => exportGigToCalendar(g)}
                     title={t("portal.gigs.calendarTitle")}
+                    className="portal-gig-calendar-action"
                     style={{
                       fontSize: 12,
                       fontWeight: 700,
@@ -899,6 +904,7 @@ export function Gigs({
                     target="_blank"
                     rel="noopener noreferrer"
                     title={t("portal.gigs.googleCalendarTitle")}
+                    className="portal-gig-calendar-action"
                     style={{
                       fontSize: 12,
                       fontWeight: 700,
@@ -974,6 +980,7 @@ function GigEditor({
 
   return (
     <div
+      className="portal-gig-editor"
       role="dialog"
       aria-modal="true"
       style={{
@@ -991,6 +998,7 @@ function GigEditor({
       }}
     >
       <div
+        className="portal-gig-editor-panel"
         style={{
           background: c.cardBg,
           color: c.text,
@@ -1004,6 +1012,7 @@ function GigEditor({
         }}
       >
         <div
+          className="portal-gig-editor-header"
           style={{
             display: "flex",
             alignItems: "center",
@@ -1043,7 +1052,7 @@ function GigEditor({
             />
           </Field>
 
-          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+          <div className="portal-gig-editor-field-grid" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
             <Field theme={theme} label={t("portal.gigs.editor.client")}>
               <input
                 type="text"
@@ -1074,7 +1083,7 @@ function GigEditor({
             />
           </Field>
 
-          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+          <div className="portal-gig-editor-field-grid" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
             <Field theme={theme} label={t("portal.gigs.editor.startDate")}>
               <input
                 type="date"
@@ -1103,7 +1112,7 @@ function GigEditor({
             t={t}
           />
 
-          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))" }}>
+          <div className="portal-gig-editor-field-grid" style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))" }}>
             <Field theme={theme} label={t("portal.gigs.editor.hours")}>
               <input
                 type="number"
@@ -1183,6 +1192,7 @@ function GigEditor({
           </Field>
 
           <div
+            className="portal-gig-editor-actions"
             style={{
               display: "flex",
               gap: 10,
@@ -1450,6 +1460,7 @@ function WorkingDaysEditor({
   return (
     <div>
       <div
+        className="portal-working-days-header"
         style={{
           display: "flex",
           alignItems: "baseline",

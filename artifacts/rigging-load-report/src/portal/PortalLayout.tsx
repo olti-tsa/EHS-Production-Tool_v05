@@ -33,6 +33,7 @@ import { FeedbackDialog } from "../components/FeedbackDialog";
 import { Toaster } from "../components/ui/sonner";
 import { ActivityPopover } from "./components/ActivityPopover";
 import type { PortalData } from "./lib/portalStorage";
+import "./portal-responsive.css";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -142,7 +143,7 @@ export function PortalLayout({
 
   return (
     <div
-      className="ehs-shell"
+      className="ehs-shell ehs-portal-layout"
       style={{ fontFamily: PORTAL_FONT, minHeight: "100dvh" }}
     >
       {/* SIDEBAR — same chrome as production tool */}
@@ -206,7 +207,7 @@ export function PortalLayout({
                       className={`ehs-shell-nav-item${isActive ? " is-active" : ""}`}
                     >
                       <Icon size={15} strokeWidth={1.75} />
-                      <span style={{ flex: 1, textAlign: "left" }}>
+                      <span className="ehs-portal-nav-label" style={{ flex: 1, textAlign: "left" }}>
                         {t(item.labelKey)}
                       </span>
                       {showBadge ? (
@@ -299,8 +300,8 @@ export function PortalLayout({
       {/* MAIN */}
       <main className="ehs-shell-main">
         <header
-          className="ehs-shell-topbar ehs-portal-mobile-header flex justify-between items-center px-3 py-2.5 w-full max-w-full overflow-hidden"
-          style={{ width: "100%", maxWidth: "100%", overflow: "hidden", boxSizing: "border-box" }}
+          className="ehs-shell-topbar ehs-portal-topbar ehs-portal-mobile-header flex justify-between items-center px-3 py-2.5 w-full max-w-full"
+          style={{ width: "100%", maxWidth: "100%", boxSizing: "border-box" }}
         >
           <Link
             href="/portal"
@@ -324,8 +325,8 @@ export function PortalLayout({
           </div>
 
           <div
-            className="ehs-shell-topbar-actions ehs-portal-mobile-utilities flex items-center gap-1.5 ml-auto pr-1 shrink-0"
-            style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", paddingRight: 4, flexShrink: 0 }}
+            className="ehs-shell-topbar-actions ehs-portal-topbar-actions ehs-portal-mobile-utilities flex items-center gap-1.5 ml-auto pr-1"
+            style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", paddingRight: 4 }}
           >
             <Link
               href="/portal/help"
@@ -399,7 +400,7 @@ export function PortalLayout({
         </nav>
         <div className="ehs-shell-glow" aria-hidden />
         <div
-          className="ehs-shell-content"
+          className="ehs-shell-content ehs-portal-content"
           style={{
             padding: "20px 16px 96px",
             maxWidth: 1100,

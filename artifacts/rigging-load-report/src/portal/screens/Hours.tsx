@@ -280,8 +280,9 @@ export function Hours({
   }
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div className="ehs-portal-hours" style={{ display: "grid", gap: 16 }}>
       <header
+        className="ehs-portal-hours-header"
         style={{
           display: "flex",
           flexDirection: "column",
@@ -390,6 +391,7 @@ function GigBlock({
 
   return (
     <section
+      className="ehs-portal-hours-gig"
       style={{
         background: c.cardBg,
         border: `1px solid ${c.border}`,
@@ -399,6 +401,7 @@ function GigBlock({
       }}
     >
       <header
+        className="ehs-portal-hours-gig-header"
         style={{
           display: "flex",
           alignItems: "baseline",
@@ -442,6 +445,7 @@ function GigBlock({
           return (
             <div
               key={date}
+                className="ehs-portal-hours-day"
               style={{
                 display: "flex",
                 flexDirection: "column",
@@ -453,7 +457,7 @@ function GigBlock({
               }}
             >
               {/* Top Row: Date, Hours, Status */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+              <div className="ehs-portal-hours-day-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 700 }}>
                     {fmtDate(date, locale)}
@@ -491,7 +495,7 @@ function GigBlock({
               </div>
 
               {/* Middle Row: Inputs */}
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div className="ehs-portal-hours-fields" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                 <TimeField
                   theme={theme}
                   value={d.start}
@@ -516,7 +520,7 @@ function GigBlock({
               </div>
 
               {/* Bottom Row: Actions & Status Message */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <div className="ehs-portal-hours-day-actions" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                 {editable ? (
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
@@ -621,6 +625,7 @@ function TimeField({
   const c = PALETTE[theme];
   return (
     <label
+      className="ehs-portal-hours-field"
       style={{
         display: "inline-flex",
         flexDirection: "column",
@@ -668,6 +673,7 @@ function NumField({
   const c = PALETTE[theme];
   return (
     <label
+      className="ehs-portal-hours-field"
       style={{
         display: "inline-flex",
         flexDirection: "column",

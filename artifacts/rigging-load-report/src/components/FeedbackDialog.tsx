@@ -51,6 +51,7 @@ export function FeedbackDialog({
 
   return (
     <div
+      className="ehs-feedback-dialog"
       role="dialog"
       aria-labelledby="feedback-panel-title"
       aria-describedby="feedback-panel-description"
@@ -73,6 +74,7 @@ export function FeedbackDialog({
       }}
     >
       <div
+        className="ehs-feedback-header"
         style={{
           display: "flex",
           alignItems: "flex-start",
@@ -117,6 +119,7 @@ export function FeedbackDialog({
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div
+            className="ehs-feedback-type-grid"
             role="group"
             aria-label={t("feedback.type")}
             style={{

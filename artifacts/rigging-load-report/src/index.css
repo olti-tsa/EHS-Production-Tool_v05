@@ -11460,3 +11460,445 @@ html[data-shell="linear"] .container {
   .crew-daily-scale,
   .crew-daily-row { grid-template-columns: 95px 1fr; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Producer responsive foundations
+
+   Keep the shell and producer-facing cards shrinkable at every breakpoint.
+   Components that contain genuinely wide data (tables and kanban boards)
+   own an explicit scroll wrapper rather than widening the page or clipping
+   content at the shell boundary.
+   ───────────────────────────────────────────────────────────────────── */
+.ehs-shell,
+.ehs-shell-aside,
+.ehs-shell-main,
+.ehs-shell-content,
+.ehs-shell-topbar,
+.ehs-shell-topbar-actions,
+.ehs-shell-crumbs,
+.ehs-shell-action,
+.ehs-shell-signout-btn,
+.ehs-table-container,
+.ehs-table-toolbar,
+.ehs-modal,
+.ehs-modal-header,
+.ehs-modal-body,
+.ehs-modal-footer,
+.card,
+.led-card,
+.led-card-head,
+.led-controls,
+.crew-card,
+.system-tabs,
+.tabs-list,
+.tabs-actions {
+  min-width: 0;
+}
+
+.ehs-shell-main,
+.ehs-shell-content {
+  overflow-x: visible;
+}
+
+.ehs-ui-button {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+[data-slot="button-group"] {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+[data-slot="button-group"] > * {
+  min-width: 0;
+}
+
+.ehs-shell-topbar {
+  height: auto;
+  min-height: 60px;
+  padding-block: 10px;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.ehs-shell-crumbs {
+  flex: 1 1 16rem;
+  max-width: 100%;
+}
+.ehs-shell-topbar-actions {
+  flex: 0 1 auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.ehs-shell-action {
+  height: auto;
+  min-height: 30px;
+  max-width: 100%;
+  white-space: normal;
+}
+.ehs-shell-action span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.ehs-shell-signout-btn {
+  max-width: 100%;
+}
+.ehs-shell-crumb-current {
+  max-width: min(32ch, 100%);
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.system-tabs {
+  align-items: stretch;
+}
+.tabs-list {
+  min-width: 0;
+}
+.system-tab {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.tab-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tabs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.main-grid,
+.ehs-overview-kpis,
+.crew-grid,
+.eco-kpi-grid,
+.eco-project-grid,
+.catering-day-grid,
+.eco-container,
+.gt-container,
+.transport-grid {
+  min-width: 0;
+}
+.main-grid > *,
+.project-meta > *,
+.system-identity > *,
+.ehs-overview-grid > *,
+.meta-field,
+.meta-field input,
+.meta-field select,
+.meta-field textarea,
+.field-label,
+.field-label + input,
+.field-label + select {
+  min-width: 0;
+  max-width: 100%;
+}
+.meta-field input,
+.meta-field select,
+.meta-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.card,
+.led-card {
+  overflow-wrap: anywhere;
+}
+.card h2,
+.led-card-head h3,
+.crew-card-head,
+.crew-info,
+.crew-info h4,
+.crew-info p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.crew-card-head {
+  align-items: flex-start;
+}
+.crew-meta-item {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.crew-meta-item > svg {
+  flex: 0 0 auto;
+}
+
+.ehs-table-toolbar {
+  align-items: center;
+}
+.ehs-table-toolbar > * {
+  min-width: 0;
+}
+.ehs-table-toolbar .ehs-search-input {
+  max-width: 100%;
+}
+.mobile-table-scroll,
+.eco-table-wrap,
+.gt-table-wrapper,
+.ehs-ui-table-wrap,
+.led-table-wrap {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.mobile-table-scroll .ehs-table {
+  min-width: 620px;
+}
+
+/* The crew roster has many intentional columns. Keep it inside its own
+   scroll context instead of allowing it to create document-wide overflow. */
+.led-table-wrap:has(.master-sheet-table) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.master-sheet-table {
+  min-width: 980px;
+}
+
+.ehs-modal-header h3,
+.ehs-modal-body > *,
+.ehs-modal-footer > *,
+.ehs-dialog-content > *,
+.ehs-dialog-footer > *,
+.ehs-dialog-header,
+.ehs-dialog-title,
+.ehs-dialog-description,
+.ehs-dialog-content h1,
+.ehs-dialog-content h2,
+.ehs-dialog-content h3,
+.ehs-dialog-content p,
+.ehs-form-group,
+.ehs-input {
+  min-width: 0;
+  max-width: 100%;
+}
+.ehs-dialog-content {
+  overflow-x: visible;
+}
+.ehs-dialog-footer {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ehs-dialog-content h1,
+.ehs-dialog-content h2,
+.ehs-dialog-content h3,
+.ehs-dialog-content p {
+  overflow-wrap: anywhere;
+}
+.ehs-dialog-header {
+  padding-right: 2rem;
+}
+.ehs-modal-header h3 {
+  overflow-wrap: anywhere;
+}
+.ehs-modal-footer {
+  flex-wrap: wrap;
+}
+.ehs-input,
+.ehs-form-group textarea,
+.ehs-form-group select {
+  width: 100%;
+  box-sizing: border-box;
+}
+.modal-content {
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+.modal-actions {
+  flex-wrap: wrap;
+}
+
+.schedule-popover {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: calc(100vw - 24px);
+}
+.schedule-phase-row {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+.schedule-date-row {
+  grid-template-columns: 36px minmax(0, 1fr) 14px minmax(0, 1fr);
+}
+.schedule-time-row {
+  grid-template-columns: 36px minmax(0, 1fr) 14px minmax(0, 1fr) auto;
+}
+.schedule-time-row > input,
+.schedule-date-row > input {
+  min-width: 0;
+}
+
+.master-sheet-compact-actions {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+.ehs-feedback-dialog,
+.ehs-feedback-header,
+.ehs-feedback-header > div {
+  min-width: 0;
+  max-width: 100%;
+}
+.ehs-feedback-header h3,
+.ehs-feedback-header p {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .ehs-shell-topbar {
+    min-height: 56px;
+    padding-block: 8px;
+    overflow: visible;
+  }
+  .ehs-shell-topbar-actions {
+    flex: 0 1 auto;
+  }
+  .ehs-shell-content {
+    overflow-x: visible;
+  }
+  .system-tabs {
+    align-items: stretch;
+  }
+  .tabs-list,
+  .tabs-actions {
+    width: 100%;
+  }
+  .system-tab {
+    flex: 1 1 140px;
+    justify-content: space-between;
+  }
+  .tabs-actions > button {
+    flex: 1 1 120px;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .ehs-shell-topbar {
+    align-items: center;
+  }
+  .ehs-shell-crumbs {
+    flex: 1 1 auto;
+  }
+  .ehs-shell-crumb-current {
+    max-width: 100%;
+  }
+  .ehs-table-toolbar {
+    align-items: stretch;
+  }
+  .ehs-table-toolbar .ehs-search-input {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .ehs-table-toolbar > div:not(.ehs-search-input) {
+    flex: 1 1 100%;
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+  .ehs-modal-footer {
+    align-items: stretch;
+  }
+  .ehs-modal-footer > button,
+  .modal-actions > button,
+  .modal-actions > .btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .ehs-modal-body {
+    padding: 16px;
+  }
+  .ehs-modal-field-grid,
+  .gt-form-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .master-sheet-compact-actions {
+    justify-content: flex-start !important;
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .card,
+  .led-card {
+    padding: 14px;
+  }
+  .crew-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .catering-day-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .ehs-shell-content {
+    padding-inline: 14px;
+  }
+  .schedule-popover {
+    width: calc(100vw - 24px) !important;
+  }
+  .schedule-phase-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .schedule-date-row {
+    grid-template-columns: 36px minmax(0, 1fr) 14px minmax(0, 1fr);
+  }
+  .schedule-time-row {
+    grid-template-columns: 36px minmax(0, 1fr) 14px minmax(0, 1fr);
+  }
+  .schedule-time-row > label {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+  .calendar-drawer {
+    padding: 20px 16px !important;
+  }
+  .calendar-drawer-header {
+    gap: 8px;
+  }
+  .calendar-drawer-header [data-radix-dialog-title] {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .calendar-quick-add-dates {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .ehs-feedback-dialog {
+    left: 12px !important;
+    bottom: 12px !important;
+    width: calc(100vw - 24px) !important;
+    min-width: 0 !important;
+    max-height: calc(100dvh - 24px) !important;
+    padding: 16px !important;
+  }
+  .ehs-feedback-header {
+    gap: 8px !important;
+  }
+  .ehs-feedback-type-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .ehs-shell-action {
+    padding-inline: 6px;
+  }
+  .system-tab {
+    padding-inline: 10px;
+  }
+  .ehs-modal-backdrop {
+    padding: 12px;
+  }
+  .gt-filter-select {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}

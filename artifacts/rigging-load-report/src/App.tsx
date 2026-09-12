@@ -9618,6 +9618,7 @@ function ScheduleField({
               display: "grid",
               gap: 8,
             }}
+            className="schedule-popover"
           >
           {SCHEDULE_PHASES_ORDER.map((key) => {
             const segments = getSegments(key);
@@ -9657,9 +9658,9 @@ function ScheduleField({
             return (
               <div
                 key={key}
+                className="schedule-phase-row"
                 style={{
                   display: "grid",
-                    gridTemplateColumns: "76px minmax(0, 1fr)",
                   alignItems: "start",
                   gap: 8,
                   paddingBottom: 4,
@@ -9760,10 +9761,9 @@ function ScheduleField({
                         ) : null}
                         {/* Date row */}
                         <div
+                          className="schedule-date-row"
                           style={{
                             display: "grid",
-                            gridTemplateColumns:
-                              "36px minmax(136px, 1fr) 14px minmax(136px, 1fr)",
                             alignItems: "center",
                             gap: 6,
                           }}
@@ -9794,10 +9794,9 @@ function ScheduleField({
                         </div>
                         {/* Time row */}
                         <div
+                          className="schedule-time-row"
                           style={{
                             display: "grid",
-                            gridTemplateColumns:
-                              "36px minmax(0, 1fr) 14px minmax(0, 1fr) auto",
                             alignItems: "center",
                             gap: 6,
                           }}

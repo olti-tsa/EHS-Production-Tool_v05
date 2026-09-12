@@ -300,7 +300,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
                   <label>{t("globalCrew.fullName")}</label>
                   <input required className="ehs-input" value={editingUser.fullName} onChange={e => setEditingUser({...editingUser, fullName: e.target.value})} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div className="ehs-modal-field-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div className="ehs-form-group">
                     <label>{t("globalCrew.email")}</label>
                     <input type="email" required className="ehs-input" value={editingUser.email} onChange={e => setEditingUser({...editingUser, email: e.target.value})} />
@@ -310,7 +310,7 @@ export function CrewDirectoryPage({ getToken }: Props) {
                     <input className="ehs-input" value={editingUser.phone || ""} onChange={e => setEditingUser({...editingUser, phone: e.target.value})} />
                   </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div className="ehs-modal-field-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div className="ehs-form-group">
                     <label>{t("globalCrew.primaryRole")}</label>
                     <input className="ehs-input" value={editingUser.primaryRole || ""} onChange={e => setEditingUser({...editingUser, primaryRole: e.target.value})} />

@@ -725,7 +725,7 @@ export function BriefDetail({
   }
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div className="ehs-portal-brief-detail" style={{ display: "grid", gap: 16 }}>
       <div style={{ fontSize: 13 }}>
         <Link
           href="/portal/briefs"
@@ -738,7 +738,7 @@ export function BriefDetail({
       {/* Exact plain-text block from Project Overview. Keep it at the top of
           the freelancer brief and preserve the producer's whitespace. */}
       {brief.project.description ? (
-        <section
+        <section className="portal-brief-project-notes"
           style={{
             background: c.cardBg,
             border: `1px solid ${c.border}`,
@@ -777,7 +777,7 @@ export function BriefDetail({
       ) : null}
 
       {/* Project hero */}
-      <section
+      <section className="portal-brief-hero"
         style={{
           background: c.cardBg,
           border: `1px solid ${c.border}`,
@@ -874,7 +874,7 @@ export function BriefDetail({
       </section>
 
       {entries.length > 1 ? (
-        <section
+        <section className="portal-brief-role-bookings"
           style={{
             background: c.cardBg,
             border: `1px solid ${c.border}`,
@@ -886,7 +886,7 @@ export function BriefDetail({
           <div style={{ fontSize: 12, fontWeight: 800, color: c.muted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
             Your role bookings
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <div className="portal-brief-role-booking-list" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {entries.map((roleEntry, index) => {
               const assignment = roleEntry.brief.assignments.find(
                 (candidate) => candidate.crewId === roleEntry.brief.recipientCrewId,
@@ -903,6 +903,7 @@ export function BriefDetail({
                 <button
                   key={roleEntry.assignmentId ?? `legacy-${index}`}
                   type="button"
+                  className="portal-brief-role-booking"
                   onClick={() => {
                     setActiveAssignmentId(roleEntry.assignmentId);
                     setSyncError(null);
@@ -925,7 +926,7 @@ export function BriefDetail({
 
       {/* Venue Technical Specs (server-appended snapshot) */}
       {brief.project.venueTechnicalSnapshot && Object.keys(brief.project.venueTechnicalSnapshot).length > 0 ? (
-        <section
+        <section className="portal-brief-venue-specs"
           style={{
             background: c.cardBg,
             border: `1px solid ${c.border}`,
@@ -1495,6 +1496,7 @@ export function BriefDetail({
               ]}
             />
             {brief.sound.byCategory.length > 0 ? (
+              <div className="portal-brief-table-scroll">
               <table
                 style={{
                   width: "100%",
@@ -1526,6 +1528,7 @@ export function BriefDetail({
                   ))}
                 </tbody>
               </table>
+              </div>
             ) : null}
           </>
         )}
@@ -1552,7 +1555,11 @@ export function BriefDetail({
             (drawing.contentType || "").toLowerCase() === "application/pdf" ||
             /\.pdf$/i.test(drawing.name);
           return (
-            <SectionCard theme={theme} title={t("portal.brief.riggPlan")}>
+            <SectionCard
+              theme={theme}
+              title={t("portal.brief.riggPlan")}
+              className="portal-brief-rigg-plan"
+            >
               {isPdf ? (
                 <iframe
                   src={url}
@@ -1602,7 +1609,11 @@ export function BriefDetail({
           );
         }
         return brief.riggPlan ? (
-          <SectionCard theme={theme} title={t("portal.brief.riggPlan")}>
+          <SectionCard
+            theme={theme}
+            title={t("portal.brief.riggPlan")}
+            className="portal-brief-rigg-plan"
+          >
             <RiggPlanMap theme={theme} plan={brief.riggPlan} />
           </SectionCard>
         ) : null;
@@ -1645,6 +1656,7 @@ function AttachmentsList({
       {attachments.map((a) => (
         <li
           key={a.id}
+          className="portal-brief-attachment-row"
           style={{
             display: "flex",
             alignItems: "center",
@@ -1656,7 +1668,7 @@ function AttachmentsList({
             borderRadius: 10,
           }}
         >
-          <div style={{ minWidth: 0 }}>
+          <div className="portal-brief-attachment-name" style={{ minWidth: 0 }}>
             <div
               style={{
                 fontSize: 14,
@@ -1852,7 +1864,7 @@ function AssignmentCard({
     shiftSlots.length > 0 && responseCount === shiftSlots.length;
   const hasDeclinedShift = declinedCount > 0;
   return (
-    <section
+    <section className="portal-brief-assignment-card"
       style={{
         background: c.cardBg,
         border: `2px solid ${c.accent}`,
@@ -1873,6 +1885,7 @@ function AssignmentCard({
         {t("portal.brief.assignment.title")}
       </div>
       <div
+        className="portal-brief-assignment-fields"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
@@ -1936,6 +1949,7 @@ function AssignmentCard({
             {t("portal.brief.assignment.confirmEachShift")}
           </div>
           <div
+            className="portal-brief-shifts-grid"
             style={{
               display: "grid",
               gridTemplateColumns:
@@ -1955,6 +1969,7 @@ function AssignmentCard({
               return (
               <div
                 key={shift.key}
+                className="portal-brief-shift-card"
                 style={{
                   border: `1px solid ${statusColor}`,
                   borderRadius: 9,
@@ -1965,7 +1980,7 @@ function AssignmentCard({
                 }}
               >
                 <strong>{shift.dateKey}</strong>
-                <div style={{ marginTop: 2, color: c.muted }}>
+                <div className="portal-brief-shift-summary" style={{ marginTop: 2, color: c.muted }}>
                   {shift.phaseLabel} · {shift.callLabel} · {shift.timing}
                 </div>
                 {shift.tasks.length > 0 ? (
@@ -1990,6 +2005,7 @@ function AssignmentCard({
                 ) : null}
                 {decision !== "too_late" ? (
                   <div
+                    className="portal-brief-shift-actions"
                     style={{
                       display: "flex",
                       gap: 6,
@@ -2086,6 +2102,7 @@ function AssignmentCard({
             {dayBreakdown.map((bucket) => (
               <div
                 key={bucket.key}
+                className="portal-brief-day-breakdown-row"
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
@@ -2099,6 +2116,7 @@ function AssignmentCard({
                 }}
               >
                 <div
+                  className="portal-brief-day-breakdown-label"
                   style={{
                     minWidth: 110,
                     fontSize: 12,
@@ -2110,6 +2128,7 @@ function AssignmentCard({
                   {bucket.days.length === 1 ? "day" : "days"})
                 </div>
                 <div
+                  className="portal-brief-day-breakdown-days"
                   style={{
                     fontSize: 13,
                     color: c.text,
@@ -2156,6 +2175,7 @@ function AssignmentCard({
       ) : null}
 
       <div
+        className="portal-brief-decision-actions"
         style={{
           marginTop: 16,
           display: "flex",
@@ -2428,7 +2448,7 @@ function GenericNoticeCard({
     setDraftDeclineReason(declineReason ?? "");
   }, [declineReason]);
   return (
-    <section
+    <section className="portal-brief-generic-notice"
       style={{
         background: c.cardBgSubtle,
         border: `1px dashed ${c.border}`,
@@ -2671,6 +2691,7 @@ function CrewTable({
     return <Empty theme={theme} text={t("portal.brief.crew.empty")} />;
   }
   return (
+    <div className="portal-brief-table-scroll">
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
       <thead>
         <tr style={{ color: c.muted, textAlign: "left" }}>
@@ -2722,6 +2743,7 @@ function CrewTable({
         })}
       </tbody>
     </table>
+    </div>
   );
 }
 
@@ -2853,6 +2875,7 @@ function ScheduleList({
         return (
           <div
             key={block.key}
+            className="portal-brief-schedule-row"
             style={{
               display: "grid",
               gridTemplateColumns: "100px 1fr",
@@ -2913,6 +2936,7 @@ function ScheduleList({
                       {dateRange || "—"}
                       {timeRange ? (
                         <span
+                          className="portal-brief-schedule-time"
                           style={{
                             marginLeft: 10,
                             fontSize: 13,
@@ -3072,11 +3096,11 @@ function BriefActionRow({
     gap: 8,
   };
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <button type="button" onClick={onAddToCalendar} style={btnStyle}>
+    <div className="portal-brief-action-row" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <button className="portal-brief-action-button" type="button" onClick={onAddToCalendar} style={btnStyle}>
         <span aria-hidden>📅</span> {t("portal.brief.actions.addToCalendar")}
       </button>
-      <button type="button" onClick={onOpenCallSheet} style={btnStyle}>
+      <button className="portal-brief-action-button" type="button" onClick={onOpenCallSheet} style={btnStyle}>
         <span aria-hidden>📄</span> {t("portal.brief.actions.callSheetPdf")}
       </button>
     </div>
@@ -3166,14 +3190,17 @@ function SectionCard({
   theme,
   title,
   children,
+  className,
 }: {
   theme: ThemeMode;
   title: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   const c = PALETTE[theme];
   return (
     <section
+      className={className}
       style={{
         background: c.cardBg,
         border: `1px solid ${c.border}`,

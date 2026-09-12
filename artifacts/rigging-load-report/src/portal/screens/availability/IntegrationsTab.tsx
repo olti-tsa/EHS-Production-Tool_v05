@@ -38,8 +38,8 @@ function ConnectionRow({
 }) {
   const c = PALETTE[theme];
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: c.cardBgSubtle, border: `1px solid ${c.border}`, borderRadius: 8 }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div className="portal-availability-connection-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: c.cardBgSubtle, border: `1px solid ${c.border}`, borderRadius: 8 }}>
+      <div className="portal-availability-connection-info" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <strong style={{ fontSize: 14 }}>{name}</strong>
         <div style={{ fontSize: 12, color: c.muted, display: "flex", alignItems: "center", gap: 6 }}>
           {!connection ? t("portal.availability.notConnected") : connection.connected ? (
@@ -57,7 +57,7 @@ function ConnectionRow({
           )}
         </div>
       </div>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div className="portal-availability-connection-actions" style={{ display: "flex", gap: 8 }}>
         {connection?.connected ? (
           <>
             <button onClick={() => onSync(connection.id)} style={{ padding: "6px 12px", fontSize: 13, background: "transparent", border: `1px solid ${c.border}`, color: c.text, borderRadius: 6, cursor: "pointer" }}>{t("portal.availability.sync")}</button>
@@ -106,7 +106,7 @@ export function IntegrationsTab({
   const t = useT();
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div className="portal-availability-integrations" style={{ display: "grid", gap: 16 }}>
       <div style={{ background: c.cardBg, border: `1px solid ${c.border}`, borderRadius: 14, padding: 20 }}>
         <h3 style={{ margin: "0 0 16px", fontSize: 18 }}>{t("portal.availability.connectedAccounts")}</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -149,7 +149,7 @@ export function IntegrationsTab({
         <p style={{ fontSize: 13, color: c.muted, marginBottom: 12 }}>
           {t("portal.availability.icsHint")}
         </p>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="portal-availability-url-row" style={{ display: "flex", gap: 8 }}>
           <input 
             type="url" 
             value={icsUrl} 
@@ -172,7 +172,7 @@ export function IntegrationsTab({
           {t("portal.availability.exportHint")}
         </p>
         {feed?.enabled && (
-          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <div className="portal-availability-feed-row" style={{ display: "flex", gap: 8, marginBottom: 16 }}>
             <input 
               readOnly 
               value={feed.url} 

@@ -526,8 +526,8 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
       <Dialog.Root open={!!quickAddDate} onOpenChange={(open) => !open && setQuickAddDate(null)}>
         <Dialog.Portal>
           <Dialog.Overlay style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, animation: "fadeIn 0.15s ease-out" }} />
-          <Dialog.Content onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "100%", maxWidth: 400, background: "var(--card-bg)", zIndex: 1001, padding: "32px 24px", boxShadow: "-8px 0 32px rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", overflowY: "auto", borderLeft: "1px solid var(--border-color)", animation: "slideInRight 0.2s ease-out" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <Dialog.Content className="calendar-drawer" onClick={(e) => e.stopPropagation()} style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "100%", maxWidth: 400, background: "var(--card-bg)", zIndex: 1001, padding: "32px 24px", boxShadow: "-8px 0 32px rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", overflowY: "auto", borderLeft: "1px solid var(--border-color)", animation: "slideInRight 0.2s ease-out" }}>
+            <div className="calendar-drawer-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
               <Dialog.Title style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "var(--text-main)" }}>
                 {t("calendar.quickAdd.title")}
               </Dialog.Title>
@@ -546,7 +546,7 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
             )}
 
             {quickAddDate && (
-              <form onSubmit={handleQuickAddSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <form className="calendar-quick-add-form" onSubmit={handleQuickAddSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div className="meta-field" style={{ background: "var(--input-bg)" }}>
                   <label>{t("calendar.quickAdd.projectName")}</label>
                   <input type="text" ref={titleRef} placeholder={t("calendar.quickAdd.projectNamePlaceholder")} />
@@ -563,7 +563,7 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
                   <label>{t("calendar.quickAdd.client")}</label>
                   <input type="text" ref={clientRef} placeholder={t("calendar.quickAdd.clientPlaceholder")} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div className="calendar-quick-add-dates" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div className="meta-field" style={{ background: "var(--input-bg)" }}>
                     <label>{t("calendar.quickAdd.start")}</label>
                     <input type="date" ref={startRef} defaultValue={format(quickAddDate, "yyyy-MM-dd")} required />

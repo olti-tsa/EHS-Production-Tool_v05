@@ -254,7 +254,7 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
 
   return (
     <div style={{ padding: "0 16px 40px", maxWidth: 1400, margin: "0 auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
+      <div className="producer-page-header transport-page-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
         <div>
           <h2 style={{ fontSize: "1.5rem", fontWeight: 300, margin: "0 0 8px 0", color: "var(--text-main)" }}>
             {t("transport.title")}
@@ -263,7 +263,7 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
             {t("transport.subtitle")}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 12 }}>
+        <div className="producer-action-bar transport-actions" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
            <button className="ehs-ghost-btn" onClick={() => {
              setEditingVehicle({ vehicleType: "truck", availabilityStatus: "available" });
              setIsVehicleModalOpen(true);
@@ -750,6 +750,29 @@ export function TransportDashboard({ getToken, onOpenProject }: Props) {
         .status-dot.assigned { background: var(--primary); }
         .status-dot.maintenance { background: var(--danger); }
         .status-dot.unavailable { background: var(--text-muted); }
+        .transport-page-header > div:first-child,
+        .run-card,
+        .fleet-card,
+        .run-header,
+        .run-meta-item,
+        .fleet-card-header,
+        .fleet-card-title { min-width: 0; }
+        .run-title,
+        .run-project,
+        .run-route span,
+        .run-meta-item,
+        .fleet-card-title,
+        .fleet-card-meta,
+        .fleet-card-driver {
+          overflow-wrap: anywhere;
+        }
+        @media (max-width: 640px) {
+          .transport-page-header > div:first-child { flex: 1 1 100%; }
+          .transport-actions { width: 100%; }
+          .transport-actions > button { flex: 1 1 150px; min-width: 0; }
+          .run-actions { gap: 6px; }
+          .status-btn { flex: 1 1 130px; min-width: 0; }
+        }
       `}} />
     </div>
   );
