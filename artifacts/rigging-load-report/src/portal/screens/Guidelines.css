@@ -1,24 +1,26 @@
 .ehs-guidelines {
-  color-scheme: dark;
+  color-scheme: inherit;
   box-sizing: border-box;
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
   padding: clamp(20px, 4vw, 44px);
-  border: 1px solid #34373e;
+  border: 1px solid var(--border);
   border-radius: 16px;
-  background: #191b20;
-  color: #d9dce2;
+  background: var(--card-bg);
+  color: var(--text-main);
   font-size: 15px;
   line-height: 1.75;
   overflow-wrap: anywhere;
 }
-.ehs-guidelines header { border-bottom: 1px solid #34373e; padding-bottom: 24px; }
-.ehs-guidelines h1 { margin: 0 0 12px; color: #ff9500; font-size: clamp(25px, 4vw, 34px); line-height: 1.25; font-weight: 700; }
-.ehs-guidelines h2 { color: #f7f8fa; font-size: 19px; line-height: 1.4; margin: 0 0 12px; font-weight: 650; }
+.ehs-guidelines header { border-bottom: 1px solid var(--border); padding-bottom: 24px; }
+.ehs-guidelines h1 { margin: 0 0 12px; color: #a94d00; font-size: clamp(25px, 4vw, 34px); line-height: 1.25; font-weight: 700; }
+.ehs-guidelines h2 { color: var(--text-main); font-size: 19px; line-height: 1.4; margin: 0 0 12px; font-weight: 650; }
 .ehs-guidelines section { margin-top: 30px; }
 .ehs-guidelines p { margin: 0 0 14px; }
 .ehs-guidelines p:last-child { margin-bottom: 0; }
 .ehs-guidelines ul { list-style: disc; padding-left: 22px; margin: 0; }
 .ehs-guidelines li { padding-left: 5px; margin-bottom: 12px; }
-.ehs-guidelines li::marker { color: #ff9500; }
+.ehs-guidelines li::marker { color: #a94d00; }
+[data-theme="dark"] .ehs-guidelines h1,
+[data-theme="dark"] .ehs-guidelines li::marker { color: #ff9500; }

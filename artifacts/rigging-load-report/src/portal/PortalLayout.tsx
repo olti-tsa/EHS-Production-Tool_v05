@@ -382,6 +382,21 @@ export function PortalLayout({
           </div>
         </header>
 
+        <nav className="ehs-portal-brief-tabs" aria-label={t("portal.header.sectionsAria")}>
+          {NAV_WORK.filter((item) => item.key === "briefs" || item.key === "guidelines").map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                aria-current={active === item.key ? "page" : undefined}
+              >
+                <Icon size={18} aria-hidden="true" />
+                {t(item.labelKey)}
+              </Link>
+            );
+          })}
+        </nav>
         <div className="ehs-shell-glow" aria-hidden />
         <div
           className="ehs-shell-content"
@@ -594,7 +609,40 @@ export function PortalLayout({
         : null}
 
       <style>{`
+        .ehs-portal-brief-tabs { display: none; }
         @media (max-width: 899px) {
+          .ehs-portal-brief-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 12px 16px 0;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+          }
+          .ehs-portal-brief-tabs a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 44px;
+            padding: 8px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--card-bg);
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+          }
+          .ehs-portal-brief-tabs a[aria-current="page"] {
+            border-color: var(--primary, #f88000);
+            background: color-mix(in srgb, var(--primary, #f88000) 12%, var(--card-bg));
+          }
+          .ehs-portal-brief-tabs a:focus-visible {
+            outline: 2px solid var(--primary, #f88000);
+            outline-offset: 2px;
+          }
           .ehs-portal-aside { display: none !important; }
           .ehs-portal-only-desktop { display: none !important; }
           .ehs-shell-crumbs { display: none !important; }
