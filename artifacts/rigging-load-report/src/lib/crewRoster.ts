@@ -83,6 +83,8 @@ export type RosterRow = {
   /** Exact server assignment / producer role slot when available. */
   briefAssignmentId?: string | null;
   crewId?: string | null;
+  /** Optional explanation supplied when this exact role was declined. */
+  declineReason: string | null;
   /** Clerk user id of the freelancer. Null for purely-manual rows. */
   freelancerUserId: string | null;
   name: string;
@@ -175,6 +177,7 @@ export type RosterGig = {
   >;
   assignedShiftTasks: Record<string, string[]>;
   shiftResponses?: ShiftResponseMap | null;
+  declineReason: string | null;
   hotelRequired: boolean;
   hotelDates: string[];
   dietaryTags: DietaryTag[];
@@ -245,6 +248,7 @@ export function mergeRoster(
       gigId: g.gigId,
       briefAssignmentId: g.briefAssignmentId ?? null,
       crewId: g.crewId ?? null,
+      declineReason: g.declineReason ?? matchedLocal?.declineReason ?? null,
       freelancerUserId: g.freelancerUserId,
       name: g.name,
       // Producer's typed role wins when present — they may have
@@ -321,6 +325,7 @@ export function mergeRoster(
       id: m.id,
       gigId: null,
       freelancerUserId: m.freelancerUserId ?? null,
+      declineReason: m.declineReason ?? null,
       name: m.name,
       role: m.role,
       // A local row with no gig match either:

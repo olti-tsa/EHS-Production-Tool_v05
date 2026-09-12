@@ -345,6 +345,7 @@ type ServerBriefRow = {
   briefId: string;
   crewId: string | null;
   decision: BriefDecision;
+  declineReason: string | null;
   shiftResponses: unknown;
   decidedAt: string | null;
   acceptedSnapshot: unknown;
@@ -381,6 +382,8 @@ function serverRowToSharedBrief(row: ServerBriefRow): SharedBrief | null {
     assignmentId: row.assignmentId,
     receivedAt,
     decision: row.decision,
+    declineReason:
+      typeof row.declineReason === "string" ? row.declineReason : null,
     shiftResponses:
       row.shiftResponses &&
       typeof row.shiftResponses === "object" &&
@@ -725,6 +728,7 @@ function mergeServerBriefs(
     const fresh = isFresh(local.decidedLocallyAt);
     if (fresh) {
       merged.shiftResponses = local.shiftResponses;
+      merged.declineReason = local.declineReason;
     }
     if (fresh && local.decision !== s.decision) {
       // Within the freshness window the local decision wins. We also
@@ -734,6 +738,7 @@ function mergeServerBriefs(
       merged = {
         ...merged,
         decision: local.decision,
+        declineReason: local.declineReason,
         acceptedGigId: local.acceptedGigId,
         acceptedSnapshot: local.acceptedSnapshot,
       };

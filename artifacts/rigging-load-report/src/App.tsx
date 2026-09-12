@@ -134,6 +134,8 @@ import {
   type CrewShiftTimeMap,
 } from "./lib/crewShiftAssignments";
 import { CrewReportView } from "./components/CrewReportView";
+import type { FreelancerCandidate } from "./components/MasterCrewSheet";
+import { subscribeCrewResponses } from "./lib/crewResponseEvents";
 import { CateringView } from "./components/CateringView";
 import { HotelView } from "./components/HotelView";
 import { skillToCrewRole } from "./lib/skillToCrewRole";
@@ -3523,6 +3525,9 @@ function App() {
       userId: string;
       fullName: string;
       primaryRole: string | null;
+        /** Replacement requests preserve the exact declined role slot,
+         *  even when the directory profile's primary role differs. */
+        role?: CrewMember["role"];
       phone?: string;
       dietaryTags?: string[];
       allergens?: string[];
@@ -3544,7 +3549,13 @@ function App() {
           : crew.find(
               (member) => member.freelancerUserId === row.userId,
             );
-        return !existing?.requestStatus;
+        // A replacement targets the existing declined roster slot by its
+        // immutable crew id. Reuse that local row (and its planned windows)
+        // rather than growing the active roster denominator. Other
+        // requested/accepted rows remain ineligible for mutation.
+        return row.crewId
+          ? !existing?.requestStatus || existing.requestStatus === "declined"
+          : !existing?.requestStatus;
       });
       if (uniqueRows.length === 0) return;
       // Seed every new row with the project's full schedule so the
@@ -3565,11 +3576,7 @@ function App() {
       const createdMemberIds = new Set<string>();
       const requestMembers: CrewMember[] = uniqueRows.map((r) => {
         const existing = r.crewId
-          ? crew.find(
-              (member) =>
-                member.id === r.crewId &&
-                member.freelancerUserId === r.userId,
-            )
+          ? crew.find((member) => member.id === r.crewId)
           : undefined;
         if (existing) {
           previousMembersById.set(existing.id, existing);
@@ -3578,6 +3585,7 @@ function App() {
             name: r.fullName,
             freelancerUserId: r.userId,
             requestStatus: "requested" as CrewRequestStatus,
+            declineReason: null,
             phone: r.phone ?? existing.phone,
             dietaryTags:
               r.dietaryTags && r.dietaryTags.length > 0
@@ -3592,8 +3600,10 @@ function App() {
         const m = makeCrewMember(r.fullName);
         createdMemberIds.add(m.id);
         m.role = skillToCrewRole(r.primaryRole);
+        if (r.role) m.role = r.role;
         m.freelancerUserId = r.userId;
         m.requestStatus = "requested" as CrewRequestStatus;
+        m.declineReason = null;
         // Copy contact + catering data from the portal directory so
         // the producer sees phone/food/allergens on the call sheet
         // the moment the row appears — no need to wait for the
@@ -3698,6 +3708,27 @@ function App() {
     [sendCrewRequests],
   );
 
+  /** Replacement dispatch targets the existing declined producer row by
+   *  crew id, preserving its planned windows and exact role. The old
+   *  declined assignment remains immutable server history, while accepted
+   *  roles held by the same freelancer remain untouched. */
+  const replaceCrewRole = useCallback(
+    (member: CrewMember, candidate: FreelancerCandidate) =>
+      sendCrewRequests([
+        {
+          crewId: member.id,
+          userId: candidate.userId,
+          fullName: candidate.fullName,
+          primaryRole: member.role,
+          role: member.role,
+          phone: candidate.phone,
+          dietaryTags: candidate.dietaryTags,
+          allergens: candidate.allergens,
+        },
+      ]),
+    [sendCrewRequests],
+  );
+
   const emailAssignedCrewBriefs = useCallback(async () => {
     if (sendingRequests) return;
     const recipients = crew
@@ -3786,6 +3817,7 @@ function App() {
               | "declined"
               | "too_late";
             shiftResponses?: Record<string, "accepted" | "declined"> | null;
+            declineReason?: string | null;
             createdAt: string;
           }>;
         };
@@ -3797,6 +3829,7 @@ function App() {
             id: string;
             status: CrewRequestStatus;
             shiftResponses?: Record<string, "accepted" | "declined">;
+            declineReason: string | null;
           }
         >();
         for (const a of json.assignments) {
@@ -3828,6 +3861,10 @@ function App() {
               typeof a.shiftResponses === "object"
                 ? { ...a.shiftResponses }
                 : undefined,
+            declineReason:
+              typeof a.declineReason === "string"
+                ? a.declineReason
+                : null,
           });
         }
         // Patch in-place by the producer crew row, not account identity.
@@ -3842,6 +3879,7 @@ function App() {
             if (
               m.requestStatus === sa.status &&
               m.briefAssignmentId === sa.id &&
+              m.declineReason === sa.declineReason &&
               JSON.stringify(m.shiftResponses ?? {}) ===
                 JSON.stringify(sa.shiftResponses ?? {})
             )
@@ -3852,6 +3890,7 @@ function App() {
               requestStatus: sa.status,
               briefAssignmentId: sa.id,
               shiftResponses: sa.shiftResponses,
+              declineReason: sa.declineReason,
             };
           });
           return changed ? next : all;
@@ -3861,10 +3900,21 @@ function App() {
       }
     };
     void fetchAssignments();
+    // SSE gives producers near-real-time response updates while the
+    // interval remains as a resilient fallback for dropped connections.
+    const unsubscribeCrewResponses = subscribeCrewResponses(
+      getToken,
+      () => {
+        if (!cancelled) {
+          void fetchAssignments();
+        }
+      },
+    );
     const t = window.setInterval(fetchAssignments, 15_000);
     return () => {
       cancelled = true;
       window.clearInterval(t);
+      unsubscribeCrewResponses();
     };
   }, [mainView, activeBriefId, getToken]);
 
@@ -7975,6 +8025,7 @@ function App() {
           onRemove={removeCrew}
           onDuplicate={duplicateCrew}
           onSendLinkedRequests={sendLinkedCrewRequests}
+          onReplaceRole={replaceCrewRole}
           readOnly={projectIsTerminal || currentProjectAccessRole === "viewer"}
           sendingLinkedRequests={sendingRequests}
           activeBriefId={activeBriefId}

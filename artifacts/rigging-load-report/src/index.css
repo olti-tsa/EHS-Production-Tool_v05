@@ -7134,6 +7134,65 @@ textarea:focus {
   font-size: 13px;
 }
 
+.crew-decline-reason {
+  max-width: 190px;
+  margin-top: 4px;
+  color: var(--danger, #b91c1c);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.crew-replacement-picker {
+  position: relative;
+  display: inline-block;
+  margin-top: 6px;
+}
+.crew-replacement-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 5px);
+  left: 0;
+  width: min(250px, 70vw);
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border-color, #d1d5db);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+}
+.crew-replacement-heading {
+  padding: 2px 4px 5px;
+  color: var(--text-muted, #64748b);
+  font-size: 11px;
+  font-weight: 700;
+}
+.crew-replacement-option {
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  text-align: left;
+  color: var(--text-main, #0f172a);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.crew-replacement-option:hover,
+.crew-replacement-option:focus-visible {
+  background: var(--input-bg, #f1f5f9);
+}
+.crew-replacement-option span {
+  color: var(--text-muted, #64748b);
+  font-size: 11px;
+}
+.crew-replacement-empty {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted, #64748b);
+  font-size: 11px;
+}
+
 /* ===========================================================
    Available Crew sidebar — multi-select & Send requests bar
    =========================================================== */

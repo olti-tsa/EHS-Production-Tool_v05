@@ -40,7 +40,7 @@ import { AssignShiftsModal } from "./AssignShiftsModal";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
 
-type FreelancerCandidate = {
+export type FreelancerCandidate = {
   userId: string;
   fullName: string;
   primaryRole: string | null;
@@ -141,6 +141,7 @@ export function MasterCrewSheet({
   onDuplicate,
   onSendLinkedRequests,
   sendingLinkedRequests = false,
+  onReplaceRole,
   onMergedRolesChange,
   onCountsChange,
   getTimesForDates,
@@ -175,6 +176,12 @@ export function MasterCrewSheet({
   onDuplicate: (id: string) => void;
   onSendLinkedRequests?: (members: CrewMember[]) => void | Promise<void>;
   sendingLinkedRequests?: boolean;
+  /** Invite a directory freelancer into a new row for one exact declined
+   *  role. The declined row is never mutated or reused. */
+  onReplaceRole?: (
+    member: CrewMember,
+    candidate: FreelancerCandidate,
+  ) => void | Promise<void>;
   /** Optional callback fired whenever the merged roster changes.
    *  CrewReportView uses this to feed the AdequacyPanel with the
    *  full roster (gig + local) instead of just localCrew[], so the
@@ -1288,6 +1295,15 @@ export function MasterCrewSheet({
                       const ownerId = linkedOwnerByUserId.get(candidate.userId);
                       return !ownerId || ownerId === local?.id;
                     })}
+                    onReplaceRole={
+                      !readOnly &&
+                      briefId &&
+                      local?.freelancerUserId &&
+                      local.requestStatus === "declined" &&
+                      onReplaceRole
+                        ? (candidate) => onReplaceRole(local, candidate)
+                        : undefined
+                    }
                     onLocalUpdate={
                       local
                         ? (patch) => onUpdate(local.id, patch)
@@ -1668,6 +1684,71 @@ function CrewNameCombobox({
   );
 }
 
+/** Compact replacement action for one declined role slot. Candidates are
+ * exact directory identities (user ids), never free-typed names. Selecting
+ * one delegates to App's normal request dispatcher, which creates a new
+ * local row while leaving the declined row and any accepted roles intact. */
+function ReplacementPicker({
+  role,
+  candidates,
+  onSelect,
+}: {
+  role: string;
+  candidates: ReadonlyArray<FreelancerCandidate>;
+  onSelect: (candidate: FreelancerCandidate) => void | Promise<void>;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  if (candidates.length === 0) {
+    return (
+      <span
+        className="crew-replacement-empty"
+        title={t("crew.sheet.replacementNoCandidates")}
+      >
+        {t("crew.sheet.replacementNoCandidates")}
+      </span>
+    );
+  }
+  return (
+    <div className="crew-replacement-picker">
+      <button
+        type="button"
+        className="btn btn-danger btn-sm"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+      >
+        {t("crew.sheet.needsReplacement")}
+      </button>
+      {open ? (
+        <div className="crew-replacement-options" role="listbox">
+          <div className="crew-replacement-heading">
+            {t("crew.sheet.replaceRole", { role })}
+          </div>
+          {candidates.slice(0, 8).map((candidate) => (
+            <button
+              key={candidate.userId}
+              type="button"
+              role="option"
+              className="crew-replacement-option"
+              onClick={() => {
+                setOpen(false);
+                void onSelect(candidate);
+              }}
+            >
+              <strong>{candidate.fullName}</strong>
+              <span>
+                {[candidate.primaryRole, candidate.city]
+                  .filter(Boolean)
+                  .join(" · ") || t("crew.sheet.registeredFreelancer")}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** One row in the master sheet. Editing affordances depend on row
  *  source + presence of a matched local CrewMember (see MasterCrewSheet
  *  doc). */
@@ -1695,6 +1776,7 @@ function MasterRow({
   onApplyScheduleToRole,
   onOpenProfile,
   onCopyPortalLink,
+  onReplaceRole,
 }: {
   row: RosterRow;
   projectDays: ReadonlyArray<string> | null;
@@ -1744,6 +1826,7 @@ function MasterRow({
   ) => void;
   onOpenProfile?: (userId: string) => void;
   onCopyPortalLink?: () => void;
+  onReplaceRole?: (candidate: FreelancerCandidate) => void | Promise<void>;
 }) {
   const t = useT();
   const chips = useMemo(
@@ -1758,7 +1841,7 @@ function MasterRow({
   return (
     <tr>
       <td>
-        {editableLocal ? (
+        {editableLocal && !local?.requestStatus ? (
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <CrewNameCombobox
@@ -1870,7 +1953,7 @@ function MasterRow({
         </div>
       </td>
       <td>
-        {editableLocal ? (
+        {editableLocal && !local?.requestStatus ? (
           // Editable status for local rows. Covers two real scenarios:
           //   • Producer phoned a "requested" freelancer who confirmed
           //     verbally — flip them to Accepted without waiting on
@@ -1906,9 +1989,25 @@ function MasterRow({
             <option value="too_late">{t("crew.status.tooLate")}</option>
           </select>
         ) : (
-          <span className={`crew-pill crew-pill-${tone}`} title={label}>
-            {label}
-          </span>
+          <div>
+            <span className={`crew-pill crew-pill-${tone}`} title={label}>
+              {statusIcon(row.status)} {label}
+            </span>
+            {row.status === "declined" && row.declineReason ? (
+              <div className="crew-decline-reason" title={row.declineReason}>
+                {row.declineReason}
+              </div>
+            ) : null}
+            {row.status === "declined" && onReplaceRole ? (
+              <ReplacementPicker
+                role={row.role}
+                candidates={portalCandidates.filter(
+                  (candidate) => candidate.userId !== row.freelancerUserId,
+                )}
+                onSelect={onReplaceRole}
+              />
+            ) : null}
+          </div>
         )}
       </td>
       <td>
@@ -2385,6 +2484,25 @@ const DIETARY_LABELS: Record<DietaryTag, string> = {
   "gluten-free": "GF",
   "lactose-free": "LF",
 };
+
+function statusIcon(status: RosterRow["status"]): string {
+  switch (status) {
+    case "accepted":
+    case "confirmed":
+    case "done":
+    case "invoiced":
+    case "paid":
+      return "✓";
+    case "declined":
+      return "×";
+    case "requested":
+    case "invited":
+    case "partially_accepted":
+      return "●";
+    default:
+      return "";
+  }
+}
 
 function statusTone(s: RosterRow["status"]): "ok" | "warn" | "bad" | "muted" {
   switch (s) {

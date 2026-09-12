@@ -255,6 +255,7 @@ export function BriefDetail({
       acceptedSnapshot?: unknown;
       acceptedGigId?: string | null;
       shiftResponses?: ShiftResponseMap;
+      declineReason?: string | null;
     },
   ): Promise<SyncResult> => {
     try {
@@ -278,6 +279,9 @@ export function BriefDetail({
             acceptedGigId: extras?.acceptedGigId ?? null,
             ...(extras?.shiftResponses
               ? { shiftResponses: extras.shiftResponses }
+              : {}),
+            ...(extras && "declineReason" in extras
+              ? { declineReason: extras.declineReason }
               : {}),
           }),
         },
@@ -396,13 +400,21 @@ export function BriefDetail({
   // outer `if (!entry) return …` narrowing into nested function
   // declarations, so without these the new `entry.foo` reads would be
   // typed as possibly-undefined.
-  async function accept(shiftResponses?: ShiftResponseMap) {
+  async function accept(
+    shiftResponses?: ShiftResponseMap,
+    declineReason?: string | null,
+  ) {
     if (!entry) return;
     const snapshot = buildAcceptedSnapshot(brief);
     const prevDecision = entry.decision;
     const prevAcceptedSnapshot = entry.acceptedSnapshot;
     const prevAcceptedGigId = entry.acceptedGigId;
     const prevShiftResponses = entry.shiftResponses;
+    const prevDeclineReason = entry.declineReason;
+    const nextDeclineReason =
+      typeof declineReason === "string"
+        ? declineReason.trim().slice(0, 1000) || null
+        : declineReason ?? null;
     // Decide what gig id to send to the server *outside* the setData
     // updater. setData callbacks must be pure (React strict mode
     // double-invokes them in dev), so any side effect that mutates
@@ -423,6 +435,7 @@ export function BriefDetail({
         acceptedGigId: gigIdForServer ?? undefined,
         acceptedSnapshot: snapshot,
         shiftResponses,
+        declineReason: nextDeclineReason,
         decidedLocallyAt: Date.now(),
       }, entry.assignmentId);
       return createdGig
@@ -434,6 +447,7 @@ export function BriefDetail({
       acceptedSnapshot: snapshot,
       acceptedGigId: gigIdForServer,
       shiftResponses,
+      declineReason: nextDeclineReason,
     });
     if (result.ok && result.tooLate) {
       // Race lost — strip the local accept and the gig we just made.
@@ -443,6 +457,7 @@ export function BriefDetail({
           acceptedGigId: undefined,
           acceptedSnapshot: undefined,
           shiftResponses: undefined,
+          declineReason: null,
           decidedLocallyAt: Date.now(),
         }, entry.assignmentId);
         return createdGigId
@@ -459,6 +474,7 @@ export function BriefDetail({
           acceptedGigId: prevAcceptedGigId,
           acceptedSnapshot: prevAcceptedSnapshot,
           shiftResponses: prevShiftResponses,
+          declineReason: prevDeclineReason,
           decidedLocallyAt: undefined,
         }, entry.assignmentId);
         return createdGigId
@@ -536,12 +552,20 @@ export function BriefDetail({
     }
   }
 
-  async function decline(shiftResponses?: ShiftResponseMap) {
+  async function decline(
+    shiftResponses?: ShiftResponseMap,
+    declineReason?: string | null,
+  ) {
     if (!entry) return;
     const prevDecision = entry.decision;
     const prevAcceptedGigId = entry.acceptedGigId;
     const prevAcceptedSnapshot = entry.acceptedSnapshot;
     const prevShiftResponses = entry.shiftResponses;
+    const prevDeclineReason = entry.declineReason;
+    const nextDeclineReason =
+      typeof declineReason === "string"
+        ? declineReason.trim().slice(0, 1000) || null
+        : declineReason ?? null;
     // If the freelancer is reversing a prior accept, capture the gig
     // they made then so we can restore it on a sync failure.
     const wasAccepted = prevDecision === "accepted";
@@ -560,6 +584,7 @@ export function BriefDetail({
         acceptedGigId: undefined,
         acceptedSnapshot: undefined,
         shiftResponses,
+        declineReason: nextDeclineReason,
         decidedLocallyAt: Date.now(),
       }, entry.assignmentId);
       return prevAcceptedGigId
@@ -567,7 +592,10 @@ export function BriefDetail({
         : next;
     });
     setSyncError(null);
-    const result = await syncDecisionToServer("declined", { shiftResponses });
+    const result = await syncDecisionToServer("declined", {
+      shiftResponses,
+      declineReason: nextDeclineReason,
+    });
     if (!result.ok) {
       setData((prev) => {
         const next = updateBrief(prev, briefId, {
@@ -575,6 +603,7 @@ export function BriefDetail({
           acceptedGigId: prevAcceptedGigId,
           acceptedSnapshot: prevAcceptedSnapshot,
           shiftResponses: prevShiftResponses,
+          declineReason: prevDeclineReason,
           decidedLocallyAt: undefined,
         }, entry.assignmentId);
         return removedGig
@@ -593,6 +622,7 @@ export function BriefDetail({
     const prevAcceptedGigId = entry.acceptedGigId;
     const prevAcceptedSnapshot = entry.acceptedSnapshot;
     const prevShiftResponses = entry.shiftResponses;
+    const prevDeclineReason = entry.declineReason;
     // Same gig-teardown logic as decline(): undoing an accept must
     // pull the materialised gig back out of the freelancer's local
     // calendar so they don't see a stale "confirmed" booking for a
@@ -607,6 +637,7 @@ export function BriefDetail({
         acceptedGigId: undefined,
         acceptedSnapshot: undefined,
         shiftResponses: undefined,
+        declineReason: null,
         decidedLocallyAt: Date.now(),
       }, entry.assignmentId);
       return prevAcceptedGigId
@@ -622,6 +653,7 @@ export function BriefDetail({
           acceptedGigId: prevAcceptedGigId,
           acceptedSnapshot: prevAcceptedSnapshot,
           shiftResponses: prevShiftResponses,
+          declineReason: prevDeclineReason,
           decidedLocallyAt: undefined,
         }, entry.assignmentId);
         return removedGig
@@ -1011,18 +1043,19 @@ export function BriefDetail({
           assignment={myAssignment}
           schedule={brief.project.schedule}
           decision={entry.decision}
+          declineReason={entry.declineReason}
           shiftResponses={entry.shiftResponses}
           acceptedGigId={entry.acceptedGigId}
           conflicts={conflicts}
-          onSubmitShiftResponses={(responses) => {
+          onSubmitShiftResponses={(responses, declineReason) => {
             if (Object.values(responses).includes("accepted")) {
-              void accept(responses);
+              void accept(responses, declineReason);
             } else {
-              void decline(responses);
+              void decline(responses, declineReason);
             }
           }}
-          onLegacyAccept={() => void accept()}
-          onLegacyDecline={() => void decline()}
+          onLegacyAccept={() => void accept(undefined, null)}
+          onLegacyDecline={(reason) => void decline(undefined, reason)}
           onLegacyReset={() => void resetDecision()}
           onOpenGig={() => setLocation("/portal/gigs")}
         />
@@ -1030,10 +1063,11 @@ export function BriefDetail({
         <GenericNoticeCard
           theme={theme}
           decision={entry.decision}
+          declineReason={entry.declineReason}
           acceptedGigId={entry.acceptedGigId}
           conflicts={conflicts}
           onAccept={accept}
-          onDecline={decline}
+           onDecline={(reason) => void decline(undefined, reason)}
           onReset={resetDecision}
           onOpenGig={() => setLocation("/portal/gigs")}
         />
@@ -1612,8 +1646,8 @@ function AttachmentsList({
   theme: ThemeMode;
   attachments: BriefAttachment[];
 }) {
-  const c = PALETTE[theme];
   const t = useT();
+  const c = PALETTE[theme];
   return (
     <ul
       style={{
@@ -1703,6 +1737,7 @@ function AssignmentCard({
   assignment,
   schedule,
   decision,
+  declineReason,
   shiftResponses,
   acceptedGigId,
   conflicts,
@@ -1716,12 +1751,16 @@ function AssignmentCard({
   assignment: BriefAssignment;
   schedule: BriefSchedule | undefined;
   decision: BriefDecision;
+  declineReason: string | null;
   shiftResponses?: ShiftResponseMap;
   acceptedGigId?: string;
   conflicts: ScheduleConflict[];
-  onSubmitShiftResponses: (responses: ShiftResponseMap) => void;
+  onSubmitShiftResponses: (
+    responses: ShiftResponseMap,
+    declineReason: string | null,
+  ) => void;
   onLegacyAccept: () => void;
-  onLegacyDecline: () => void;
+  onLegacyDecline: (declineReason: string | null) => void;
   onLegacyReset: () => void;
   onOpenGig: () => void;
 }) {
@@ -1803,6 +1842,9 @@ function AssignmentCard({
     t,
   ]);
   const [draftResponses, setDraftResponses] = useState<ShiftResponseMap>({});
+  const [draftDeclineReason, setDraftDeclineReason] = useState(
+    declineReason ?? "",
+  );
   useEffect(() => {
     const next: ShiftResponseMap = {};
     for (const slot of shiftSlots) {
@@ -1813,6 +1855,9 @@ function AssignmentCard({
     }
     setDraftResponses(next);
   }, [decision, shiftResponses, shiftSlots]);
+  useEffect(() => {
+    setDraftDeclineReason(declineReason ?? "");
+  }, [declineReason]);
   const responseCount = Object.keys(draftResponses).length;
   const acceptedCount = Object.values(draftResponses).filter(
     (value) => value === "accepted",
@@ -1822,6 +1867,7 @@ function AssignmentCard({
   ).length;
   const responseComplete =
     shiftSlots.length > 0 && responseCount === shiftSlots.length;
+  const hasDeclinedShift = declinedCount > 0;
   return (
     <section
       style={{
@@ -2138,6 +2184,11 @@ function AssignmentCard({
         {shiftSlots.length === 0 ? (
           decision === "pending" ? (
             <>
+              <DeclineReasonField
+                theme={theme}
+                value={draftDeclineReason}
+                onChange={setDraftDeclineReason}
+              />
               <button
                 type="button"
                 onClick={onLegacyAccept}
@@ -2158,7 +2209,7 @@ function AssignmentCard({
               </button>
               <button
                 type="button"
-                onClick={onLegacyDecline}
+                onClick={() => onLegacyDecline(draftDeclineReason.trim() || null)}
                 style={{
                   padding: "10px 16px",
                   fontSize: 14,
@@ -2218,6 +2269,9 @@ function AssignmentCard({
               >
                 Undo
               </button>
+              {decision === "declined" && declineReason ? (
+                <DeclineReasonNote theme={theme} reason={declineReason} />
+              ) : null}
             </>
           )
         ) : decision === "too_late" ? (
@@ -2226,6 +2280,13 @@ function AssignmentCard({
           </span>
         ) : (
           <>
+            {responseComplete && (hasDeclinedShift || decision === "pending") ? (
+              <DeclineReasonField
+                theme={theme}
+                value={draftDeclineReason}
+                onChange={setDraftDeclineReason}
+              />
+            ) : null}
             <span style={{ fontSize: 13, fontWeight: 700, color: c.muted }}>
               {responseComplete
                 ? `${acceptedCount} accepted · ${declinedCount} declined`
@@ -2234,7 +2295,12 @@ function AssignmentCard({
             <button
               type="button"
               disabled={!responseComplete}
-              onClick={() => onSubmitShiftResponses(draftResponses)}
+              onClick={() =>
+                onSubmitShiftResponses(
+                  draftResponses,
+                  hasDeclinedShift ? draftDeclineReason.trim() || null : null,
+                )
+              }
               style={{
                 padding: "10px 18px",
                 fontSize: 14,
@@ -2266,6 +2332,9 @@ function AssignmentCard({
                 Open in logbook
               </button>
             ) : null}
+            {decision === "declined" && declineReason ? (
+              <DeclineReasonNote theme={theme} reason={declineReason} />
+            ) : null}
           </>
         )}
       </div>
@@ -2273,9 +2342,83 @@ function AssignmentCard({
   );
 }
 
+function DeclineReasonField({
+  theme,
+  value,
+  onChange,
+}: {
+  theme: ThemeMode;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const t = useT();
+  const c = PALETTE[theme];
+  return (
+    <label
+      style={{
+        display: "grid",
+        gap: 4,
+        flex: "1 1 100%",
+        color: c.muted,
+        fontSize: 12,
+        fontWeight: 700,
+      }}
+    >
+      {t("portal.brief.declineReasonLabel")}
+      <textarea
+        value={value}
+        maxLength={1000}
+        rows={2}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={t("portal.brief.declineReasonPlaceholder")}
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          resize: "vertical",
+          padding: "8px 10px",
+          borderRadius: 8,
+          border: `1px solid ${c.border}`,
+          background: c.cardBgSubtle,
+          color: c.text,
+          font: "inherit",
+          fontSize: 13,
+          fontWeight: 400,
+        }}
+      />
+    </label>
+  );
+}
+
+function DeclineReasonNote({
+  theme,
+  reason,
+}: {
+  theme: ThemeMode;
+  reason: string;
+}) {
+  const t = useT();
+  return (
+    <div
+      style={{
+        flex: "1 1 100%",
+        color: theme === "dark" ? "#fecaca" : "#991b1b",
+        background: theme === "dark" ? "rgba(220,38,38,.14)" : "#fef2f2",
+        border: "1px solid rgba(220,38,38,.35)",
+        borderRadius: 8,
+        padding: "8px 10px",
+        fontSize: 12,
+        lineHeight: 1.4,
+      }}
+    >
+      <strong>{t("portal.brief.declineReasonLabel")}:</strong> {reason}
+    </div>
+  );
+}
+
 function GenericNoticeCard({
   theme,
   decision,
+  declineReason,
   acceptedGigId,
   conflicts,
   onAccept,
@@ -2285,15 +2428,22 @@ function GenericNoticeCard({
 }: {
   theme: ThemeMode;
   decision: BriefDecision;
+  declineReason: string | null;
   acceptedGigId?: string;
   conflicts: ScheduleConflict[];
   onAccept: () => void;
-  onDecline: () => void;
+  onDecline: (declineReason: string | null) => void;
   onReset: () => void;
   onOpenGig: () => void;
 }) {
   const c = PALETTE[theme];
   const t = useT();
+  const [draftDeclineReason, setDraftDeclineReason] = useState(
+    declineReason ?? "",
+  );
+  useEffect(() => {
+    setDraftDeclineReason(declineReason ?? "");
+  }, [declineReason]);
   return (
     <section
       style={{
@@ -2323,6 +2473,11 @@ function GenericNoticeCard({
       >
         {decision === "pending" ? (
           <>
+            <DeclineReasonField
+              theme={theme}
+              value={draftDeclineReason}
+              onChange={setDraftDeclineReason}
+            />
             <button
               type="button"
               onClick={onAccept}
@@ -2343,7 +2498,7 @@ function GenericNoticeCard({
             </button>
             <button
               type="button"
-              onClick={onDecline}
+              onClick={() => onDecline(draftDeclineReason.trim() || null)}
               style={{
                 padding: "9px 16px",
                 fontSize: 13,
@@ -2419,6 +2574,9 @@ function GenericNoticeCard({
             >
               Undo
             </button>
+            {declineReason ? (
+              <DeclineReasonNote theme={theme} reason={declineReason} />
+            ) : null}
           </>
         ) : (
           // too_late — see AssignmentCard for the matching message.

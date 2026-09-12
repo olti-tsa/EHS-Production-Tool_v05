@@ -94,6 +94,8 @@ export type SharedBrief = {
   assignmentId?: string;
   receivedAt: number;
   decision: BriefDecision;
+  /** Optional reason for declining this exact assignment/role slot. */
+  declineReason: string | null;
   /** Per-window response keyed by YYYY-MM-DD::phase::windowIndex.
    *  Missing on legacy whole-project responses. */
   shiftResponses?: ShiftResponseMap;
@@ -429,6 +431,10 @@ function normalizeSharedBrief(raw: unknown): SharedBrief | null {
         ? b.receivedAt
         : Date.now(),
     decision,
+    declineReason:
+      typeof b.declineReason === "string" && b.declineReason.trim()
+        ? b.declineReason.trim().slice(0, 1000)
+        : null,
     shiftResponses: normalizeShiftResponses(b.shiftResponses),
     acceptedGigId:
       typeof b.acceptedGigId === "string" && b.acceptedGigId
@@ -600,6 +606,7 @@ export function upsertBrief(
     briefId: brief.briefId,
     receivedAt: Date.now(),
     decision: "pending",
+    declineReason: null,
     brief,
   };
   return { data: { ...data, briefs: [entry, ...data.briefs] }, entry };

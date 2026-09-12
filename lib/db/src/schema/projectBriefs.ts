@@ -89,6 +89,8 @@ export const briefAssignmentsTable = pgTable(
     crewId: text("crew_id").notNull().default(""),
     /** "pending" until the freelancer accepts or declines. */
     decision: text("decision").notNull().default("pending"),
+    /** Optional explanation supplied with a freelancer decline. */
+    declineReason: text("decline_reason"),
     /** Per-shift freelancer response map. Keys are server-validated slot ids
      * (`YYYY-MM-DD::phase::index`), values are `accepted` or `declined`. */
     shiftResponses: jsonb("shift_responses").$type<

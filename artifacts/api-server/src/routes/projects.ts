@@ -1,7 +1,8 @@
 import { Router, type IRouter, type RequestHandler } from "express";
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
+  briefAssignmentsTable,
   clientsTable,
   db,
   hardDeleteProject,
@@ -41,6 +42,7 @@ import {
   isProjectStatus,
   recipientsFromBriefData,
 } from "../lib/projectLifecycle";
+import { deriveProjectCrewCounts } from "../lib/projectCrewCounts";
 
 const router: IRouter = Router();
 
@@ -188,9 +190,9 @@ router.get("/projects", requireSignedIn, async (req, res) => {
         cloned_from_project_id: projectsTable.clonedFromProjectId,
         reportDate: sql<unknown>`${projectsTable.data}->>'reportDate'`,
         reportEndDate: sql<unknown>`${projectsTable.data}->>'reportEndDate'`,
+         projectData: projectsTable.data,
          category: sql<string | null>`nullif(${projectsTable.data}->>'eventCategory', '')`,
          type: sql<string | null>`coalesce(nullif(${projectsTable.data}->>'projectType', ''), nullif(${projectsTable.data}->>'type', ''))`,
-        crewCount: sql<number>`case when jsonb_typeof(${projectsTable.data}->'crew') = 'array' then jsonb_array_length(${projectsTable.data}->'crew') else 0 end`,
         status: sql<string>`coalesce(${projectsTable.status}, case when nullif(${projectsTable.data}->>'activeBriefId', '') is not null then 'active' when nullif(${projectsTable.venue}, '') is not null or nullif(${projectsTable.client}, '') is not null then 'planning' else 'draft' end)`,
         archivedAt: projectsTable.archivedAt,
         isArchived: sql<boolean>`coalesce(${projectsTable.archivedAt} is not null or ${projectsTable.status} = 'archived', false)`,
@@ -216,6 +218,85 @@ router.get("/projects", requireSignedIn, async (req, res) => {
       )
       .orderBy(desc(projectsTable.updatedAt));
     const managers = await getProjectManagers(rows.map((row) => row.created_by));
+    const activeBriefIds = rows
+      .map((row) => activeBriefIdIn(row.projectData))
+      .filter(
+        (id): id is string =>
+          typeof id === "string" && id !== "invalid",
+      );
+    const briefRows =
+      activeBriefIds.length === 0
+        ? []
+        : await db
+            .select({
+              id: projectBriefsTable.id,
+              projectId: projectBriefsTable.projectId,
+              ownerUserId: projectBriefsTable.ownerUserId,
+              data: projectBriefsTable.data,
+            })
+            .from(projectBriefsTable)
+            .where(inArray(projectBriefsTable.id, activeBriefIds));
+    const briefById = new Map(briefRows.map((brief) => [brief.id, brief]));
+    const assignmentsByBrief = new Map<
+      string,
+      Array<{
+        crewId: string | null;
+        freelancerUserId: string | null;
+        decision: string;
+        shiftResponses: Record<string, "accepted" | "declined"> | null;
+      }>
+    >();
+    if (briefRows.length > 0) {
+      const assignmentRows = await db
+        .select({
+          briefId: briefAssignmentsTable.briefId,
+          crewId: briefAssignmentsTable.crewId,
+          freelancerUserId: briefAssignmentsTable.freelancerUserId,
+          decision: briefAssignmentsTable.decision,
+          shiftResponses: briefAssignmentsTable.shiftResponses,
+        })
+        .from(briefAssignmentsTable)
+        .where(
+          inArray(
+            briefAssignmentsTable.briefId,
+            briefRows.map((brief) => brief.id),
+          ),
+        );
+      for (const assignment of assignmentRows) {
+        const list = assignmentsByBrief.get(assignment.briefId) ?? [];
+        list.push({
+          crewId: assignment.crewId,
+          freelancerUserId: assignment.freelancerUserId,
+          decision: assignment.decision,
+          shiftResponses: assignment.shiftResponses,
+        });
+        assignmentsByBrief.set(assignment.briefId, list);
+      }
+    }
+    const countsByProject = new Map<
+      string,
+      { crewCount: number; confirmedCrewCount: number }
+    >();
+    for (const row of rows) {
+      const briefId = activeBriefIdIn(row.projectData);
+      const brief = typeof briefId === "string" ? briefById.get(briefId) : undefined;
+      if (
+        !brief ||
+        brief.ownerUserId !== row.created_by ||
+        (brief.projectId !== null && brief.projectId !== row.id)
+      ) {
+        countsByProject.set(row.id, deriveProjectCrewCounts(row.projectData, null, []));
+        continue;
+      }
+      countsByProject.set(
+        row.id,
+        deriveProjectCrewCounts(
+          row.projectData,
+          brief.data,
+          assignmentsByBrief.get(brief.id) ?? [],
+        ),
+      );
+    }
     const normaliseDate = (raw: unknown): string | null => {
       if (typeof raw !== "string") return null;
       const value = raw.trim();
@@ -238,9 +319,10 @@ router.get("/projects", requireSignedIn, async (req, res) => {
     };
     res.json({
       ok: true,
-      projects: rows.map(({ reportDate, reportEndDate, created_by, ...row }) => ({
+      projects: rows.map(({ reportDate, reportEndDate, projectData: _projectData, created_by, ...row }) => ({
         ...row,
         created_by,
+        ...(countsByProject.get(row.id) ?? { crewCount: 0, confirmedCrewCount: 0 }),
         manager: managers.get(created_by),
         startDate: normaliseDate(reportDate),
         endDate: normaliseDate(reportEndDate),

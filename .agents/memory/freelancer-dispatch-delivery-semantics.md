@@ -20,3 +20,9 @@ Dispatch emails are intentionally ultra-minimal: one Norwegian sentence naming t
 **Why:** Email is only a notification channel; the authenticated freelancer portal is the complete and authoritative brief surface.
 
 **How to apply:** All producer dispatch actions must share the explicit synchronous email path, while complete operational details remain in the portal DTO and UI.
+
+Keep the full roster used for assignment reconciliation separate from the recipients explicitly selected for notification.
+
+**Why:** Replacing one declined freelancer must not resend requests to every existing crew member. The full roster is needed to preserve other assignments, not to define who should receive a new email.
+
+**How to apply:** A targeted request or replacement notifies only its selected recipients. A deliberate share-to-all action may notify the full roster, still respecting in-flight delivery protection.

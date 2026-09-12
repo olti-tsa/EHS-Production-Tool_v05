@@ -5,6 +5,7 @@ import { FreelancerProfileModal } from "./global/FreelancerProfileModal";
 import {
   type CrewMember,
 } from "../lib/crew";
+import type { FreelancerCandidate } from "./MasterCrewSheet";
 import type {
   CrewShiftPhaseKey,
   CrewShiftTimeMap,
@@ -20,6 +21,10 @@ type Props = {
   onDuplicate: (id: string) => void;
   onSendLinkedRequests?: (members: CrewMember[]) => void | Promise<void>;
   sendingLinkedRequests?: boolean;
+  onReplaceRole?: (
+    member: CrewMember,
+    candidate: FreelancerCandidate,
+  ) => void | Promise<void>;
   /** Producer's active brief id from App.tsx. Threaded through to
    *  MasterCrewSheet so it can pull portal roster data. When null
    *  the sheet still renders the local CrewMember[] as a pure call
@@ -85,6 +90,7 @@ export function CrewReportView({
   onDuplicate,
   onSendLinkedRequests,
   sendingLinkedRequests,
+  onReplaceRole,
   activeBriefId,
   getToken,
   getTimesForDates,
@@ -189,6 +195,7 @@ export function CrewReportView({
             onDuplicate={onDuplicate}
             onSendLinkedRequests={onSendLinkedRequests}
             sendingLinkedRequests={sendingLinkedRequests}
+            onReplaceRole={onReplaceRole}
             onCountsChange={handleCountsChange}
             getTimesForDates={getTimesForDates}
             phaseDays={phaseDays}

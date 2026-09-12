@@ -6,6 +6,7 @@ import * as HoverCard from "@radix-ui/react-hover-card";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Popover from "@radix-ui/react-popover";
 import { useI18n, useT } from "../../lib/i18n/I18nContext";
+import { subscribeCrewResponses } from "../../lib/crewResponseEvents";
 
 export type CalendarProject = {
   id: string;
@@ -14,6 +15,7 @@ export type CalendarProject = {
   endDate: string | null;
   easyjob_number: string | null;
   crewCount: number | null;
+  confirmedCrewCount?: number | null;
   status: string | null;
   venue?: string | null;
   client?: string | null;
@@ -76,6 +78,8 @@ export function normalizeCalendarProject(value: unknown): CalendarProject | null
     endDate: normaliseDate(raw.endDate) ?? normaliseDate(data?.reportEndDate),
     easyjob_number: nonEmptyString(raw.easyjob_number),
     crewCount: typeof raw.crewCount === "number" && Number.isFinite(raw.crewCount) ? raw.crewCount : null,
+    confirmedCrewCount: typeof raw.confirmedCrewCount === "number" && Number.isFinite(raw.confirmedCrewCount)
+      ? Math.max(0, Math.floor(raw.confirmedCrewCount)) : null,
     status: nonEmptyString(raw.status), venue: nonEmptyString(raw.venue), client: nonEmptyString(raw.client),
     category: nonEmptyString(raw.category) ?? nonEmptyString(data?.eventCategory),
     type: nonEmptyString(raw.type) ?? nonEmptyString(raw.projectType) ?? nonEmptyString(data?.projectType) ?? nonEmptyString(data?.type),
@@ -191,7 +195,11 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
 
   useEffect(() => {
     let mounted = true;
+    let fetching = false;
+    let refreshQueued = false;
     const fetchProjects = async () => {
+      if (fetching) { refreshQueued = true; return; }
+      fetching = true;
       try {
         const token = await getToken();
         const baseUrl =
@@ -209,16 +217,28 @@ export function MasterCalendarPage({ getToken, onOpenProject }: Props) {
           }
           const received = Array.isArray(json.projects) ? json.projects : [];
           setProjects(received.map(normalizeCalendarProject).filter((project): project is CalendarProject => project !== null));
+          setError(null);
         }
       } catch (err: unknown) {
         if (mounted) setError(err instanceof Error ? err.message : t("calendar.error.load"));
       } finally {
+        fetching = false;
         if (mounted) setLoading(false);
+        if (mounted && refreshQueued) {
+          refreshQueued = false;
+          void fetchProjects();
+        }
       }
     };
-    fetchProjects();
+    void fetchProjects();
+    const unsubscribe = subscribeCrewResponses(getToken, () => { void fetchProjects(); });
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") void fetchProjects();
+    }, 15_000);
     return () => {
       mounted = false;
+      unsubscribe();
+      window.clearInterval(timer);
     };
   }, [getToken, t]);
 
@@ -686,7 +706,12 @@ function ProjectPopover({ project, onOpenProject, compact, isClippedLeft, isClip
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)" }}>
               <Users size={14} />
-               <span>{project.crewCount || 0} {t("calendar.project.crewMembers")}</span>
+                <span>{project.confirmedCrewCount == null
+                  ? `${project.crewCount || 0} ${t("calendar.project.crewMembers")}`
+                  : t("calendar.project.crewConfirmed", {
+                    confirmed: project.confirmedCrewCount,
+                    total: project.crewCount || 0,
+                  })}</span>
             </div>
           </div>
           

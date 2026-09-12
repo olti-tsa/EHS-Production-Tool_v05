@@ -332,6 +332,23 @@ export declare const briefAssignmentsTable: import("drizzle-orm/pg-core").PgTabl
             identity: undefined;
             generated: undefined;
         }, {}, {}>;
+        declineReason: import("drizzle-orm/pg-core").PgColumn<{
+            name: "decline_reason";
+            tableName: "brief_assignments";
+            dataType: "string";
+            columnType: "PgText";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
         shiftResponses: import("drizzle-orm/pg-core").PgColumn<{
             name: "shift_responses";
             tableName: "brief_assignments";
@@ -462,6 +479,7 @@ export declare const insertBriefAssignmentSchema: z.ZodObject<{
     freelancerUserId: z.ZodString;
     crewId: z.ZodOptional<z.ZodString>;
     decision: z.ZodOptional<z.ZodString>;
+    declineReason: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     shiftResponses: z.ZodOptional<z.ZodNullable<z.ZodType<Record<string, "accepted" | "declined">, Record<string, "accepted" | "declined">, z.core.$ZodTypeInternals<Record<string, "accepted" | "declined">, Record<string, "accepted" | "declined">>>>>;
     decidedAt: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
     acceptedSnapshot: z.ZodOptional<z.ZodNullable<z.ZodType<import("drizzle-zod").Json, unknown, z.core.$ZodTypeInternals<import("drizzle-zod").Json, unknown>>>>;

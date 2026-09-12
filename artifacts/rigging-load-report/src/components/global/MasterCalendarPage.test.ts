@@ -5,6 +5,7 @@ import {
   getLanesForWeek,
   getProjectTitle,
   isValidCalendarDate,
+  normalizeCalendarProject,
   type CalendarProject,
 } from "./MasterCalendarPage";
 
@@ -13,6 +14,12 @@ const project = (id: string, startDate: string | null, endDate: string | null = 
   id, name: null, startDate, endDate, easyjob_number: null, crewCount: null, status: null,
 });
 const week = eachDayOfInterval({ start: parseISO("2025-01-06"), end: parseISO("2025-01-12") });
+
+test("preserves authoritative calendar confirmation totals without treating missing counts as confirmed", () => {
+  assert.equal(normalizeCalendarProject({ id: "counts", crewCount: 3, confirmedCrewCount: 2 })?.confirmedCrewCount, 2);
+  assert.equal(normalizeCalendarProject({ id: "legacy", crewCount: 3 })?.confirmedCrewCount, null);
+  assert.equal(normalizeCalendarProject({ id: "invalid", confirmedCrewCount: Infinity })?.confirmedCrewCount, null);
+});
 
 test("resolves calendar titles from a name, category/location, and generic fallback", () => {
   assert.equal(getProjectTitle({ ...project("1", null), name: "  Named show  " }, t), "Named show");

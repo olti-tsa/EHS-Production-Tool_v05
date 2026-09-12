@@ -27,6 +27,13 @@ import {
   canCancelBriefAssignment,
   removeCancelledAssignmentFromBriefData,
 } from "../lib/briefAssignmentCancellation";
+import { parseDeclineReason } from "../lib/briefResponse";
+import { getBriefShiftSlots } from "../lib/briefShiftSlots";
+import { readBriefRecipients } from "../lib/briefRecipients";
+import {
+  notifyCrewResponse,
+  subscribeCrewResponses,
+} from "../lib/briefResponseEvents";
 import { autoAssignedDatesFor } from "../lib/roleSchedule";
 import { rollupItinerary } from "../lib/itineraryRollup";
 import {
@@ -40,6 +47,7 @@ import {
   completeBriefDispatches,
   deriveLegacyProjectStatus,
   effectiveBriefProjectId,
+  recipientsFromBriefData,
   summarizeBriefDelivery,
   synchronizeBriefAssignments,
 } from "../lib/projectLifecycle";
@@ -51,6 +59,18 @@ import {
 } from "../lib/dietaryTags";
 
 const router: IRouter = Router();
+
+function isCurrentBriefRecipient(
+  briefData: unknown,
+  crewId: string,
+  freelancerUserId: string,
+): boolean {
+  return recipientsFromBriefData(briefData).some(
+    (recipient) =>
+      recipient.crewId === crewId &&
+      recipient.freelancerUserId === freelancerUserId,
+  );
+}
 
 const requireUnarchivedBriefProject: RequestHandler = async (req, res, next) => {
   const briefId = String(req.params.id ?? "");
@@ -423,8 +443,6 @@ function gigFieldsFromBrief(
 
 type ShiftResponse = "accepted" | "declined";
 type ShiftResponses = Record<string, ShiftResponse>;
-const SHIFT_SLOT_KEY = /^(\d{4}-\d{2}-\d{2})::(setup|rehearsal|show|downrig)$/;
-const SHIFT_SLOT_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Build the current, producer-authored response slots for one assignment.
  * Explicit split windows take precedence over a phase's single timing entry;
@@ -433,62 +451,7 @@ function responseSlotsForAssignment(
   brief: Parameters<typeof gigFieldsFromBrief>[0],
   crewId: string,
 ): string[] {
-  const data =
-    brief.data && typeof brief.data === "object" && !Array.isArray(brief.data)
-      ? (brief.data as Record<string, unknown>)
-      : {};
-  const assignment = Array.isArray(data.assignments)
-    ? data.assignments.find(
-        (value) =>
-          value &&
-          typeof value === "object" &&
-          !Array.isArray(value) &&
-          (value as Record<string, unknown>).crewId === crewId,
-      ) as Record<string, unknown> | undefined
-    : undefined;
-  const slots: string[] = [];
-  const explicitKeys = new Set<string>();
-  const rawWindows = assignment?.assignedShiftWindows;
-  if (rawWindows && typeof rawWindows === "object" && !Array.isArray(rawWindows)) {
-    for (const [key, raw] of Object.entries(rawWindows as Record<string, unknown>)) {
-      if (!SHIFT_SLOT_KEY.test(key) || !Array.isArray(raw)) continue;
-      const validCount = raw.filter(
-        (window) => window && typeof window === "object" && !Array.isArray(window),
-      ).length;
-      if (!validCount) continue;
-      explicitKeys.add(key);
-      for (let index = 0; index < validCount; index++) slots.push(`${key}::${index}`);
-    }
-  }
-  const rawTimes = assignment?.assignedShiftTimes;
-  if (rawTimes && typeof rawTimes === "object" && !Array.isArray(rawTimes)) {
-    for (const [key, raw] of Object.entries(rawTimes as Record<string, unknown>)) {
-      if (
-        !explicitKeys.has(key) &&
-        SHIFT_SLOT_KEY.test(key) &&
-        raw &&
-        typeof raw === "object" &&
-        !Array.isArray(raw)
-      ) {
-        explicitKeys.add(key);
-        slots.push(`${key}::0`);
-      }
-    }
-  }
-  const rawPhases = assignment?.assignedShiftPhases;
-  if (Array.isArray(rawPhases)) {
-    for (const key of rawPhases) {
-      if (typeof key === "string" && SHIFT_SLOT_KEY.test(key) && !explicitKeys.has(key)) {
-        explicitKeys.add(key);
-        slots.push(`${key}::0`);
-      }
-    }
-  }
-  if (slots.length) return slots.sort();
-  return gigFieldsFromBrief(brief, crewId).assignedDates
-    .filter((date) => SHIFT_SLOT_DATE.test(date))
-    .map((date) => `${date}::day::0`)
-    .sort();
+  return getBriefShiftSlots(brief, crewId);
 }
 
 /** Read the recipient list for a brief. Sources, in priority order:
@@ -504,36 +467,6 @@ function responseSlotsForAssignment(
  *  Both sources are merged and de-duplicated by the immutable role slot
  *  `(freelancerUserId, crewId)`. A freelancer may legitimately hold more
  *  than one role on the same brief. */
-function readRecipients(
-  data: Record<string, unknown>,
-  topLevelRecipients: unknown,
-): { crewId: string; freelancerUserId: string }[] {
-  const seen = new Map<string, { crewId: string; freelancerUserId: string }>();
-  const push = (rawCrew: unknown, rawUid: unknown): void => {
-    const crewId = typeof rawCrew === "string" ? rawCrew : "";
-    const freelancerUserId = typeof rawUid === "string" ? rawUid : "";
-    if (!freelancerUserId) return;
-    const key = `${freelancerUserId}\u0000${crewId}`;
-    if (!seen.has(key)) seen.set(key, { freelancerUserId, crewId });
-  };
-  if (Array.isArray(topLevelRecipients)) {
-    for (const r of topLevelRecipients) {
-      if (!r || typeof r !== "object") continue;
-      const rr = r as Record<string, unknown>;
-      push(rr.crewId, rr.freelancerUserId);
-    }
-  }
-  const fromBrief = data.assignments;
-  if (Array.isArray(fromBrief)) {
-    for (const a of fromBrief) {
-      if (!a || typeof a !== "object") continue;
-      const ar = a as Record<string, unknown>;
-      push(ar.crewId, ar.freelancerUserId);
-    }
-  }
-  return Array.from(seen.values());
-}
-
 /** GET /api/portal/briefs/mine
  *  Returns every brief addressed to the signed-in freelancer, joined
  *  with the assignment row that carries the decision + accepted snapshot. */
@@ -547,6 +480,7 @@ router.get("/portal/briefs/mine", requireSignedIn, async (req, res) => {
         crewId: briefAssignmentsTable.crewId,
         decision: briefAssignmentsTable.decision,
         shiftResponses: briefAssignmentsTable.shiftResponses,
+        declineReason: briefAssignmentsTable.declineReason,
         decidedAt: briefAssignmentsTable.decidedAt,
         acceptedSnapshot: briefAssignmentsTable.acceptedSnapshot,
         acceptedGigId: briefAssignmentsTable.acceptedGigId,
@@ -564,11 +498,22 @@ router.get("/portal/briefs/mine", requireSignedIn, async (req, res) => {
         projectBriefsTable,
         eq(briefAssignmentsTable.briefId, projectBriefsTable.id),
       )
-      .where(eq(briefAssignmentsTable.freelancerUserId, userId))
+      .where(
+        and(
+          eq(briefAssignmentsTable.freelancerUserId, userId),
+          sql`${briefAssignmentsTable.decision} <> 'cancelled'`,
+        ),
+      )
       .orderBy(desc(briefAssignmentsTable.createdAt));
     res.json({
       ok: true,
-      briefs: rows.map((row) => ({
+      briefs: rows
+        .filter(
+          (row) =>
+            row.decision !== "declined" ||
+            isCurrentBriefRecipient(row.brief, row.crewId, userId),
+        )
+        .map((row) => ({
         ...(() => {
           const { venueTechnicalSnapshot: _trustedSnapshot, ...withoutSnapshot } = row;
           return withoutSnapshot;
@@ -580,7 +525,7 @@ router.get("/portal/briefs/mine", requireSignedIn, async (req, res) => {
           !Array.isArray(row.acceptedSnapshot)
             ? freelancerBriefData(row.acceptedSnapshot, null)
             : row.acceptedSnapshot,
-      })),
+        })),
     });
   } catch (err) {
     logger.error(
@@ -612,6 +557,87 @@ router.get("/portal/briefs", requireEmployee, async (req, res) => {
   }
 });
 
+/** GET /api/portal/briefs/events/stream
+ *  Producer-only account-scoped stream. The event contains only the brief id;
+ *  the producer refetches the already-authorized assignments DTO. */
+router.get(
+  "/portal/briefs/events/stream",
+  requireEmployee,
+  async (req, res) => {
+    const userId = (req as unknown as { _userId: string })._userId;
+    const STREAM_MAX_LIFETIME_MS = 15 * 60 * 1000;
+    const HEARTBEAT_MS = 25 * 1000;
+    let unsubscribe: (() => void) | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let lifetime: ReturnType<typeof setTimeout> | null = null;
+    let closed = false;
+    let cleanedUp = false;
+    const cleanup = () => {
+      // `subscribeCrewResponses` can still be awaiting its LISTEN client
+      // while the request closes. In that case the close handler runs first;
+      // consume a late unsubscribe here instead of letting it leak.
+      if (unsubscribe) {
+        const stop = unsubscribe;
+        unsubscribe = null;
+        stop();
+      }
+      if (cleanedUp) return;
+      cleanedUp = true;
+      if (heartbeat) clearInterval(heartbeat);
+      if (lifetime) clearTimeout(lifetime);
+    };
+    const close = () => {
+      closed = true;
+      cleanup();
+    };
+    req.once("close", close);
+    res.once("close", close);
+    try {
+      res.status(200);
+      res.set({
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      res.flushHeaders();
+      if (closed) {
+        cleanup();
+        return;
+      }
+      unsubscribe = await subscribeCrewResponses(userId, res);
+      // The client may have disconnected while LISTEN was being acquired.
+      // Remove the subscription without writing an event to a closed socket.
+      if (closed) {
+        cleanup();
+        return;
+      }
+      if (!res.write("event: ready\ndata: {}\n\n")) {
+        cleanup();
+        return;
+      }
+      heartbeat = setInterval(() => {
+        if (closed || !res.write(": heartbeat\n\n")) cleanup();
+      }, HEARTBEAT_MS);
+      lifetime = setTimeout(() => {
+        cleanup();
+        if (!res.writableEnded) res.end();
+      }, STREAM_MAX_LIFETIME_MS);
+    } catch (err) {
+      req.log.error(err, "portal brief events stream failed");
+      cleanup();
+      if (!res.headersSent) {
+        res.status(503).json({
+          ok: false,
+          error: "Crew response updates are temporarily unavailable.",
+        });
+      } else {
+        res.end();
+      }
+    }
+  },
+);
+
 /** GET /api/portal/briefs/:id
  *  Fetch a specific brief. The owner and explicitly assigned freelancers can
  *  read it. Employees may additionally read a brief linked to a project they
@@ -634,16 +660,25 @@ router.get("/portal/briefs/:id", requireSignedIn, async (req, res) => {
     let freelancerView = false;
     if (brief.ownerUserId !== userId) {
       const assigned = await db
-        .select({ id: briefAssignmentsTable.id })
+        .select({
+          id: briefAssignmentsTable.id,
+          decision: briefAssignmentsTable.decision,
+          crewId: briefAssignmentsTable.crewId,
+        })
         .from(briefAssignmentsTable)
         .where(
           and(
             eq(briefAssignmentsTable.briefId, id),
             eq(briefAssignmentsTable.freelancerUserId, userId),
           ),
-        )
-        .limit(1);
-      if (assigned.length > 0) {
+        );
+      const currentAssignments = assigned.filter(
+        (assignment) =>
+          assignment.decision !== "cancelled" &&
+          (assignment.decision !== "declined" ||
+            isCurrentBriefRecipient(brief.data, assignment.crewId, userId)),
+      );
+      if (currentAssignments.length > 0) {
         freelancerView = true;
       } else {
         const [priorDispatch] = await db
@@ -757,15 +792,22 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
       ? body.id.trim().slice(0, 64)
       : randomUUID();
   const indexed = extractIndexed(data as Record<string, unknown>);
-  const recipients = readRecipients(
+  const recipients = readBriefRecipients(
     data,
     body.recipients,
   );
-    const explicitEmailDispatch = body.send_email === true;
-    const notificationType =
-      body.notification_type === "share_brief"
-        ? "share_brief" as const
-        : "send_request" as const;
+  const explicitEmailDispatch = body.send_email === true;
+  // `recipients` reconciles the entire current brief. An explicit send,
+  // however, targets only the top-level recipient list supplied for this
+  // delivery action; never reset/reclaim every assignment merely because the
+  // saved brief still contains their historical recipient ids.
+  const explicitDeliveryRecipients = explicitEmailDispatch
+    ? readBriefRecipients({}, body.recipients)
+    : [];
+  const notificationType =
+    body.notification_type === "share_brief"
+      ? ("share_brief" as const)
+      : ("send_request" as const);
   try {
     const nestedProject =
       data.project && typeof data.project === "object" && !Array.isArray(data.project)
@@ -859,9 +901,13 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
       // reorganisation. The client can flag "removed" using the
       // brief's current `recipients` list as the source of truth.
       const assignmentSync = await synchronizeBriefAssignments(tx, id, recipients);
-      if (explicitEmailDispatch && recipients.length > 0) {
+      if (explicitEmailDispatch && explicitDeliveryRecipients.length > 0) {
         const recipientIds = [
-          ...new Set(recipients.map((recipient) => recipient.freelancerUserId)),
+          ...new Set(
+            explicitDeliveryRecipients.map(
+              (recipient) => recipient.freelancerUserId,
+            ),
+          ),
         ];
         await tx
           .update(briefDispatchesTable)
@@ -881,7 +927,11 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
           );
       }
       const dispatch = explicitEmailDispatch || effectiveProjectStatus === "active"
-        ? await claimBriefDispatches(tx, id, recipients)
+        ? await claimBriefDispatches(
+            tx,
+            id,
+            explicitEmailDispatch ? explicitDeliveryRecipients : recipients,
+          )
         : null;
       return {
         brief: inserted[0] ?? null,
@@ -967,7 +1017,10 @@ router.get(
     const id = String(req.params.id ?? "");
     try {
       const briefRows = await db
-        .select({ ownerUserId: projectBriefsTable.ownerUserId })
+        .select({
+          ownerUserId: projectBriefsTable.ownerUserId,
+          data: projectBriefsTable.data,
+        })
         .from(projectBriefsTable)
         .where(eq(projectBriefsTable.id, id))
         .limit(1);
@@ -986,6 +1039,7 @@ router.get(
           crewId: briefAssignmentsTable.crewId,
           decision: briefAssignmentsTable.decision,
           shiftResponses: briefAssignmentsTable.shiftResponses,
+          declineReason: briefAssignmentsTable.declineReason,
           decidedAt: briefAssignmentsTable.decidedAt,
           acceptedGigId: briefAssignmentsTable.acceptedGigId,
           createdAt: briefAssignmentsTable.createdAt,
@@ -994,7 +1048,17 @@ router.get(
         .from(briefAssignmentsTable)
         .where(eq(briefAssignmentsTable.briefId, id))
         .orderBy(briefAssignmentsTable.createdAt);
-      res.json({ ok: true, assignments });
+      res.json({
+        ok: true,
+        assignments: assignments.map((assignment) => ({
+          ...assignment,
+          isCurrent: isCurrentBriefRecipient(
+            briefRows[0].data,
+            assignment.crewId,
+            assignment.freelancerUserId,
+          ),
+        })),
+      });
     } catch (err) {
       logger.error(
         { err: err instanceof Error ? err.message : String(err) },
@@ -1147,11 +1211,20 @@ router.post(
       decision?: unknown;
       shiftResponses?: unknown;
       assignmentId?: unknown;
+      declineReason?: unknown;
     };
     const requestedDecision =
       typeof body.decision === "string" ? body.decision : "";
     const hasShiftResponses = body.shiftResponses !== undefined;
     const submittedShiftResponses = body.shiftResponses;
+    const declineReason = parseDeclineReason(body.declineReason);
+    if (!declineReason.ok) {
+      res.status(400).json({
+        ok: false,
+        error: "declineReason must be a string of at most 1000 characters or null.",
+      });
+      return;
+    }
     if (
       hasShiftResponses &&
       (!submittedShiftResponses ||
@@ -1222,6 +1295,15 @@ router.post(
           ? ownRows.find((s) => s.id === requestedAssignmentId)
           : ownRows.length === 1 ? ownRows[0] : undefined;
         if (!myRow) return { kind: "no_assignment" as const };
+        if (myRow.decision === "cancelled") {
+          return { kind: "cancelled" as const };
+        }
+        if (
+          myRow.decision === "declined" &&
+          !isCurrentBriefRecipient(briefRow.data, myRow.crewId, userId)
+        ) {
+          return { kind: "replaced" as const };
+        }
         const slotSiblings = siblings.filter((s) => s.crewId === myRow.crewId);
         // Older server-created assignments can have a trusted snapshot and
         // acceptedGigId but no exact gig link. Adopt only that exact,
@@ -1276,7 +1358,11 @@ router.post(
         if (myRow.decision === "too_late") {
           const updated = await tx
             .update(briefAssignmentsTable)
-            .set({ shiftResponses: null, updatedAt: sql`now()` })
+            .set({
+              shiftResponses: null,
+              declineReason: null,
+              updatedAt: sql`now()`,
+            })
             .where(eq(briefAssignmentsTable.id, myRow.id))
             .returning();
           return {
@@ -1301,6 +1387,7 @@ router.post(
                 decision: "pending",
                 decidedAt: sql`now()`,
                 shiftResponses: null,
+                declineReason: null,
                 updatedAt: sql`now()`,
               })
               .where(
@@ -1322,6 +1409,8 @@ router.post(
               ...(shiftResponses
                 ? { shiftResponses }
                 : decision === "pending" ? { shiftResponses: null } : {}),
+              declineReason:
+                decision === "declined" ? declineReason.value ?? null : null,
               updatedAt: sql`now()`,
             })
             .where(eq(briefAssignmentsTable.id, myRow.id))
@@ -1364,6 +1453,7 @@ router.post(
               acceptedSnapshotTrusted: false,
               acceptedGigId: null,
               shiftResponses: null,
+              declineReason: null,
               updatedAt: sql`now()`,
             })
             .where(eq(briefAssignmentsTable.id, myRow.id))
@@ -1386,6 +1476,7 @@ router.post(
             decision: "too_late",
             decidedAt: sql`now()`,
             shiftResponses: null,
+            declineReason: null,
             updatedAt: sql`now()`,
           })
           .where(
@@ -1491,6 +1582,11 @@ router.post(
             acceptedSnapshotTrusted: true,
             acceptedGigId: gigRow.id,
             ...(shiftResponses ? { shiftResponses } : {}),
+            declineReason:
+              shiftResponses &&
+              Object.values(shiftResponses).includes("declined")
+                ? declineReason.value ?? null
+                : null,
             updatedAt: sql`now()`,
           })
           .where(eq(briefAssignmentsTable.id, myRow.id))
@@ -1512,12 +1608,42 @@ router.post(
           .json({ ok: false, error: "No assignment for this user." });
         return;
       }
+      if (result.kind === "cancelled") {
+        res.status(410).json({
+          ok: false,
+          code: "request_cancelled",
+          error: "Denne forespørselen er ikke lenger gyldig.",
+        });
+        return;
+      }
+      if (result.kind === "replaced") {
+        res.status(410).json({
+          ok: false,
+          code: "request_replaced",
+          error: "Denne forespørselen er ikke lenger aktuell.",
+        });
+        return;
+      }
       if (result.kind === "invalid_shift_responses") {
         res.status(400).json({
           ok: false,
           error: "Shift responses must cover every current assignment slot.",
         });
         return;
+      }
+      // The transaction has committed before this notification is published.
+      // Failure to refresh an optional producer stream must not turn a
+      // durable freelancer response into a 500.
+      try {
+        await notifyCrewResponse(briefId);
+      } catch (err) {
+        logger.error(
+          {
+            briefId,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "portal crew response notification failed",
+        );
       }
       res.json({
         ok: true,
@@ -2718,6 +2844,7 @@ router.get(
           freelancerUserId: gigsTable.freelancerUserId,
           crewId: briefAssignmentsTable.crewId,
           shiftResponses: briefAssignmentsTable.shiftResponses,
+          declineReason: briefAssignmentsTable.declineReason,
           profileFullName: freelancerProfilesTable.fullName,
           profileDietary: freelancerProfilesTable.dietary,
           profileAllergies: freelancerProfilesTable.allergies,
@@ -2815,6 +2942,7 @@ router.get(
             status: r.status,
             assignedDates: dates,
             shiftResponses: r.shiftResponses,
+            declineReason: r.declineReason,
             hotelRequired: !!r.hotelRequired,
             hotelDates,
             callTime: timing.callTime,

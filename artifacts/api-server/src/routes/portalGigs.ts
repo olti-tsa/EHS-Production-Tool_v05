@@ -181,6 +181,7 @@ router.post("/portal/gigs", requireSignedIn, async (req, res) => {
         .select({
           freelancerUserId: gigsTable.freelancerUserId,
           briefId: gigsTable.briefId,
+          briefAssignmentId: gigsTable.briefAssignmentId,
         })
         .from(gigsTable)
         .where(eq(gigsTable.id, clientId))
@@ -189,7 +190,7 @@ router.post("/portal/gigs", requireSignedIn, async (req, res) => {
         res.status(403).json({ ok: false, error: "Not your gig." });
         return;
       }
-      if (existing[0]?.briefId) {
+      if (existing[0]?.briefId || existing[0]?.briefAssignmentId) {
         res.status(403).json({
           ok: false,
           error: "Producer-assigned gigs cannot be overwritten from the portal.",
@@ -231,7 +232,10 @@ router.patch("/portal/gigs/:id", requireSignedIn, async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const patch: Record<string, unknown> = { updatedAt: sql`now()` };
   const existing = await db
-    .select({ briefId: gigsTable.briefId })
+    .select({
+      briefId: gigsTable.briefId,
+      briefAssignmentId: gigsTable.briefAssignmentId,
+    })
     .from(gigsTable)
     .where(and(eq(gigsTable.id, id), eq(gigsTable.freelancerUserId, userId)))
     .limit(1);
@@ -240,7 +244,7 @@ router.patch("/portal/gigs/:id", requireSignedIn, async (req, res) => {
     return;
   }
   if (
-    existing[0].briefId &&
+    (existing[0].briefId || existing[0].briefAssignmentId) &&
     Object.keys(body).some(
       (key) => !["status", "checkIn", "notes"].includes(key),
     )
@@ -299,7 +303,10 @@ router.delete("/portal/gigs/:id", requireSignedIn, async (req, res) => {
   const id = String(req.params.id ?? "");
   try {
     const [existing] = await db
-      .select({ briefId: gigsTable.briefId })
+      .select({
+        briefId: gigsTable.briefId,
+        briefAssignmentId: gigsTable.briefAssignmentId,
+      })
       .from(gigsTable)
       .where(and(eq(gigsTable.id, id), eq(gigsTable.freelancerUserId, userId)))
       .limit(1);
@@ -307,7 +314,7 @@ router.delete("/portal/gigs/:id", requireSignedIn, async (req, res) => {
       res.status(404).json({ ok: false, error: "Gig not found." });
       return;
     }
-    if (existing.briefId) {
+    if (existing.briefId || existing.briefAssignmentId) {
       res.status(403).json({
         ok: false,
         error: "Producer-assigned gigs cannot be deleted from the portal.",

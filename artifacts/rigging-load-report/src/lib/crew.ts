@@ -64,7 +64,7 @@ export const CREW_REQUEST_STATUS_META: Record<
     labelKey: "crew.status.partiallyAccepted",
     tone: "warn",
   },
-  declined: { labelKey: "crew.status.declined", tone: "muted" },
+  declined: { labelKey: "crew.status.declined", tone: "bad" },
   "no-reply": { labelKey: "crew.status.noReply", tone: "bad" },
   too_late: { labelKey: "crew.status.tooLate", tone: "bad" },
 };
@@ -95,6 +95,10 @@ export type CrewMember = {
    *  Used by the producer's poll loop to correlate accept/decline
    *  responses with the right local row. */
   briefAssignmentId?: string;
+  /** Optional explanation supplied when this exact role slot was
+   *  declined. Kept on the row rather than the freelancer identity
+   *  because one person may hold several role slots. */
+  declineReason?: string | null;
   /** YYYY-MM-DD strings the producer has assigned this person to work.
    *  Defaulted on creation to the project's full schedule (load-in →
    *  load-out) so a freshly added crew member is "on for the whole
@@ -206,6 +210,10 @@ export function normalizeCrewMember(raw: unknown): CrewMember {
       typeof r.briefAssignmentId === "string" && r.briefAssignmentId
         ? r.briefAssignmentId
         : undefined,
+    declineReason:
+      typeof r.declineReason === "string" && r.declineReason.trim()
+        ? r.declineReason.trim().slice(0, 1000)
+        : null,
     shiftResponses:
       r.shiftResponses &&
       typeof r.shiftResponses === "object" &&

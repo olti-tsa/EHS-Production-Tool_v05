@@ -74570,6 +74570,8 @@ var briefAssignmentsTable = pgTable(
     crewId: text("crew_id").notNull().default(""),
     /** "pending" until the freelancer accepts or declines. */
     decision: text("decision").notNull().default("pending"),
+    /** Optional explanation supplied with a freelancer decline. */
+    declineReason: text("decline_reason"),
     /** Per-shift freelancer response map. Keys are server-validated slot ids
      * (`YYYY-MM-DD::phase::index`), values are `accepted` or `declined`. */
     shiftResponses: jsonb("shift_responses").$type(),
@@ -78453,6 +78455,16 @@ function canCancelBriefAssignment(assignment) {
   return assignment.decision === "pending" && !assignment.acceptedGigId;
 }
 
+// src/lib/briefResponse.ts
+function parseDeclineReason(raw) {
+  if (raw === void 0) return { ok: true, value: void 0 };
+  if (raw === null) return { ok: true, value: null };
+  if (typeof raw !== "string") return { ok: false };
+  const value = raw.trim();
+  if (value.length > 1e3) return { ok: false };
+  return { ok: true, value: value || null };
+}
+
 // src/lib/roleSchedule.ts
 var ALL_PHASES = [
   "setup",
@@ -78554,6 +78566,208 @@ function normaliseAssignedDates(raw) {
     if (seen.size >= 366) break;
   }
   return Array.from(seen).sort();
+}
+
+// src/lib/briefShiftSlots.ts
+var SHIFT_SLOT_KEY = /^(\d{4}-\d{2}-\d{2})::(setup|rehearsal|show|downrig)$/;
+var SHIFT_SLOT_DATE = /^\d{4}-\d{2}-\d{2}$/;
+function record2(raw) {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+}
+function briefDate(raw) {
+  return typeof raw === "string" && SHIFT_SLOT_DATE.test(raw) ? raw : null;
+}
+function getBriefShiftSlots(brief, crewId) {
+  const data = record2(brief.data);
+  const assignments = data.assignments;
+  const assignment = Array.isArray(assignments) ? assignments.find(
+    (value) => value && typeof value === "object" && !Array.isArray(value) && value.crewId === crewId
+  ) : void 0;
+  const slots = [];
+  const explicitKeys = /* @__PURE__ */ new Set();
+  const windows = assignment?.assignedShiftWindows;
+  if (windows && typeof windows === "object" && !Array.isArray(windows)) {
+    for (const [key2, raw] of Object.entries(windows)) {
+      if (!SHIFT_SLOT_KEY.test(key2) || !Array.isArray(raw)) continue;
+      const validCount = raw.filter(
+        (window2) => window2 && typeof window2 === "object" && !Array.isArray(window2)
+      ).length;
+      if (!validCount) continue;
+      explicitKeys.add(key2);
+      for (let index2 = 0; index2 < validCount; index2 += 1) {
+        slots.push(`${key2}::${index2}`);
+      }
+    }
+  }
+  const times = assignment?.assignedShiftTimes;
+  if (times && typeof times === "object" && !Array.isArray(times)) {
+    for (const [key2, raw] of Object.entries(times)) {
+      if (!explicitKeys.has(key2) && SHIFT_SLOT_KEY.test(key2) && raw && typeof raw === "object" && !Array.isArray(raw)) {
+        explicitKeys.add(key2);
+        slots.push(`${key2}::0`);
+      }
+    }
+  }
+  const phases = assignment?.assignedShiftPhases;
+  if (Array.isArray(phases)) {
+    for (const key2 of phases) {
+      if (typeof key2 === "string" && SHIFT_SLOT_KEY.test(key2) && !explicitKeys.has(key2)) {
+        explicitKeys.add(key2);
+        slots.push(`${key2}::0`);
+      }
+    }
+  }
+  if (slots.length) return slots.sort();
+  const project = record2(data.project);
+  const role = typeof assignment?.role === "string" ? assignment.role.slice(0, 280) : "";
+  const startDate = briefDate(brief.startDate) ?? briefDate(project.date);
+  const endDate = briefDate(brief.endDate) ?? briefDate(project.endDate) ?? startDate;
+  const assignedDates = autoAssignedDatesFor({
+    role,
+    schedule: project.schedule,
+    startDate,
+    endDate
+  });
+  return assignedDates.filter((date7) => SHIFT_SLOT_DATE.test(date7)).map((date7) => `${date7}::day::0`).sort();
+}
+
+// src/lib/briefRecipients.ts
+function readBriefRecipients(data, topLevelRecipients) {
+  const seen = /* @__PURE__ */ new Map();
+  const push = (rawCrew, rawUid) => {
+    const crewId = typeof rawCrew === "string" ? rawCrew : "";
+    const freelancerUserId = typeof rawUid === "string" ? rawUid : "";
+    if (!freelancerUserId) return;
+    const key2 = `${freelancerUserId}\0${crewId}`;
+    if (!seen.has(key2)) seen.set(key2, { freelancerUserId, crewId });
+  };
+  if (Array.isArray(topLevelRecipients)) {
+    for (const value of topLevelRecipients) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const row = value;
+      push(row.crewId, row.freelancerUserId);
+    }
+  }
+  const assignments = data.assignments;
+  if (Array.isArray(assignments)) {
+    for (const value of assignments) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const row = value;
+      push(row.crewId, row.freelancerUserId);
+    }
+  }
+  return [...seen.values()];
+}
+
+// src/lib/briefResponseEvents.ts
+var CHANNEL = "portal_crew_response";
+var MAX_SUBSCRIBERS = 2e3;
+var subscribers = /* @__PURE__ */ new Set();
+var listenerClient = null;
+var listenerPromise = null;
+var listenerGeneration = 0;
+function writeEvent(response, event, data) {
+  try {
+    return response.write(
+      `event: ${event}
+data: ${JSON.stringify(data)}
+
+`
+    );
+  } catch {
+    return false;
+  }
+}
+async function broadcast(briefId) {
+  const [brief] = await db.select({ ownerUserId: projectBriefsTable.ownerUserId }).from(projectBriefsTable).where(eq(projectBriefsTable.id, briefId)).limit(1);
+  if (!brief) return;
+  for (const subscriber of [...subscribers]) {
+    if (subscriber.userId !== brief.ownerUserId) continue;
+    if (!writeEvent(subscriber.response, "crew-response", { briefId })) {
+      unsubscribe(subscriber);
+    }
+  }
+}
+async function ensureListener() {
+  if (listenerClient) return;
+  if (listenerPromise) return listenerPromise;
+  const generation = ++listenerGeneration;
+  listenerPromise = (async () => {
+    const client = await pool.connect();
+    const onNotification = (message) => {
+      if (message.channel !== CHANNEL || !message.payload) return;
+      try {
+        const payload = JSON.parse(message.payload);
+        if (typeof payload.briefId === "string" && payload.briefId) {
+          void broadcast(payload.briefId).catch(
+            (error40) => logger.error(
+              { err: error40 instanceof Error ? error40.message : String(error40) },
+              "crew response broadcast failed"
+            )
+          );
+        }
+      } catch {
+        logger.warn("Ignoring malformed crew response notification");
+      }
+    };
+    const onError = (error40) => {
+      if (listenerClient !== client) return;
+      listenerClient = null;
+      listenerGeneration += 1;
+      for (const subscriber of [...subscribers]) {
+        subscribers.delete(subscriber);
+        subscriber.response.end();
+      }
+      client.release(true);
+      logger.error({ err: error40 }, "crew response listener failed");
+    };
+    client.on("notification", onNotification);
+    client.on("error", onError);
+    try {
+      await client.query(`LISTEN ${CHANNEL}`);
+    } catch (error40) {
+      client.release(true);
+      throw error40;
+    }
+    if (generation !== listenerGeneration || subscribers.size === 0) {
+      await client.query(`UNLISTEN ${CHANNEL}`).catch(() => void 0);
+      client.release();
+      return;
+    }
+    listenerClient = client;
+  })().finally(() => {
+    listenerPromise = null;
+  });
+  return listenerPromise;
+}
+function unsubscribe(subscriber) {
+  if (!subscribers.delete(subscriber)) return;
+  subscriber.response.end();
+  if (subscribers.size === 0 && listenerClient) {
+    const client = listenerClient;
+    listenerClient = null;
+    listenerGeneration += 1;
+    void client.query(`UNLISTEN ${CHANNEL}`).catch(() => void 0).finally(() => client.release());
+  }
+}
+async function subscribeCrewResponses(userId2, response) {
+  if (subscribers.size >= MAX_SUBSCRIBERS) {
+    throw new Error("Crew response stream capacity reached.");
+  }
+  const subscriber = { userId: userId2, response };
+  subscribers.add(subscriber);
+  try {
+    await ensureListener();
+    return () => unsubscribe(subscriber);
+  } catch (error40) {
+    unsubscribe(subscriber);
+    throw error40;
+  }
+}
+async function notifyCrewResponse(briefId) {
+  await db.execute(
+    sql`select pg_notify(${CHANNEL}, ${JSON.stringify({ briefId })})`
+  );
 }
 
 // src/lib/itineraryRollup.ts
@@ -78781,7 +78995,44 @@ function summarizeBriefDelivery(dispatch, delivery) {
 async function synchronizeBriefAssignments(tx, briefId, recipients) {
   const newRecipientUserIds = [];
   let existingRecipientCount = 0;
+  const currentKeys = new Set(
+    recipients.map(
+      (recipient) => `${recipient.freelancerUserId}\0${recipient.crewId}`
+    )
+  );
+  const existingAssignments = await tx.select({
+    id: briefAssignmentsTable.id,
+    freelancerUserId: briefAssignmentsTable.freelancerUserId,
+    crewId: briefAssignmentsTable.crewId,
+    decision: briefAssignmentsTable.decision
+  }).from(briefAssignmentsTable).where(eq(briefAssignmentsTable.briefId, briefId));
+  for (const existing of existingAssignments) {
+    if (existing.decision === "pending" && !currentKeys.has(
+      `${existing.freelancerUserId}\0${existing.crewId}`
+    )) {
+      await tx.update(briefAssignmentsTable).set({
+        decision: "cancelled",
+        shiftResponses: null,
+        declineReason: null,
+        updatedAt: sql`now()`
+      }).where(eq(briefAssignmentsTable.id, existing.id));
+    }
+  }
   for (const recipient of recipients) {
+    const existing = existingAssignments.find(
+      (assignment) => assignment.freelancerUserId === recipient.freelancerUserId && assignment.crewId === recipient.crewId
+    );
+    if (existing?.decision === "cancelled") {
+      await tx.update(briefAssignmentsTable).set({
+        decision: "pending",
+        decidedAt: null,
+        declineReason: null,
+        shiftResponses: null,
+        updatedAt: sql`now()`
+      }).where(eq(briefAssignmentsTable.id, existing.id));
+      newRecipientUserIds.push(recipient.freelancerUserId);
+      continue;
+    }
     const inserted = await tx.insert(briefAssignmentsTable).values({
       id: randomUUID2(),
       briefId,
@@ -78883,6 +79134,11 @@ function emptyDispatchSummary() {
 
 // src/routes/portalBriefs.ts
 var router7 = (0, import_express10.Router)();
+function isCurrentBriefRecipient(briefData, crewId, freelancerUserId) {
+  return recipientsFromBriefData(briefData).some(
+    (recipient) => recipient.crewId === crewId && recipient.freelancerUserId === freelancerUserId
+  );
+}
 var requireUnarchivedBriefProject = async (req, res, next) => {
   const briefId = String(req.params.id ?? "");
   try {
@@ -79085,73 +79341,8 @@ function gigFieldsFromBrief(brief, crewId) {
     assignedDates
   };
 }
-var SHIFT_SLOT_KEY = /^(\d{4}-\d{2}-\d{2})::(setup|rehearsal|show|downrig)$/;
-var SHIFT_SLOT_DATE = /^\d{4}-\d{2}-\d{2}$/;
 function responseSlotsForAssignment(brief, crewId) {
-  const data = brief.data && typeof brief.data === "object" && !Array.isArray(brief.data) ? brief.data : {};
-  const assignment = Array.isArray(data.assignments) ? data.assignments.find(
-    (value) => value && typeof value === "object" && !Array.isArray(value) && value.crewId === crewId
-  ) : void 0;
-  const slots = [];
-  const explicitKeys = /* @__PURE__ */ new Set();
-  const rawWindows = assignment?.assignedShiftWindows;
-  if (rawWindows && typeof rawWindows === "object" && !Array.isArray(rawWindows)) {
-    for (const [key2, raw] of Object.entries(rawWindows)) {
-      if (!SHIFT_SLOT_KEY.test(key2) || !Array.isArray(raw)) continue;
-      const validCount = raw.filter(
-        (window2) => window2 && typeof window2 === "object" && !Array.isArray(window2)
-      ).length;
-      if (!validCount) continue;
-      explicitKeys.add(key2);
-      for (let index2 = 0; index2 < validCount; index2++) slots.push(`${key2}::${index2}`);
-    }
-  }
-  const rawTimes = assignment?.assignedShiftTimes;
-  if (rawTimes && typeof rawTimes === "object" && !Array.isArray(rawTimes)) {
-    for (const [key2, raw] of Object.entries(rawTimes)) {
-      if (!explicitKeys.has(key2) && SHIFT_SLOT_KEY.test(key2) && raw && typeof raw === "object" && !Array.isArray(raw)) {
-        explicitKeys.add(key2);
-        slots.push(`${key2}::0`);
-      }
-    }
-  }
-  const rawPhases = assignment?.assignedShiftPhases;
-  if (Array.isArray(rawPhases)) {
-    for (const key2 of rawPhases) {
-      if (typeof key2 === "string" && SHIFT_SLOT_KEY.test(key2) && !explicitKeys.has(key2)) {
-        explicitKeys.add(key2);
-        slots.push(`${key2}::0`);
-      }
-    }
-  }
-  if (slots.length) return slots.sort();
-  return gigFieldsFromBrief(brief, crewId).assignedDates.filter((date7) => SHIFT_SLOT_DATE.test(date7)).map((date7) => `${date7}::day::0`).sort();
-}
-function readRecipients(data, topLevelRecipients) {
-  const seen = /* @__PURE__ */ new Map();
-  const push = (rawCrew, rawUid) => {
-    const crewId = typeof rawCrew === "string" ? rawCrew : "";
-    const freelancerUserId = typeof rawUid === "string" ? rawUid : "";
-    if (!freelancerUserId) return;
-    const key2 = `${freelancerUserId}\0${crewId}`;
-    if (!seen.has(key2)) seen.set(key2, { freelancerUserId, crewId });
-  };
-  if (Array.isArray(topLevelRecipients)) {
-    for (const r of topLevelRecipients) {
-      if (!r || typeof r !== "object") continue;
-      const rr = r;
-      push(rr.crewId, rr.freelancerUserId);
-    }
-  }
-  const fromBrief = data.assignments;
-  if (Array.isArray(fromBrief)) {
-    for (const a of fromBrief) {
-      if (!a || typeof a !== "object") continue;
-      const ar = a;
-      push(ar.crewId, ar.freelancerUserId);
-    }
-  }
-  return Array.from(seen.values());
+  return getBriefShiftSlots(brief, crewId);
 }
 router7.get("/portal/briefs/mine", requireSignedIn5, async (req, res) => {
   const userId2 = req._userId;
@@ -79162,6 +79353,7 @@ router7.get("/portal/briefs/mine", requireSignedIn5, async (req, res) => {
       crewId: briefAssignmentsTable.crewId,
       decision: briefAssignmentsTable.decision,
       shiftResponses: briefAssignmentsTable.shiftResponses,
+      declineReason: briefAssignmentsTable.declineReason,
       decidedAt: briefAssignmentsTable.decidedAt,
       acceptedSnapshot: briefAssignmentsTable.acceptedSnapshot,
       acceptedGigId: briefAssignmentsTable.acceptedGigId,
@@ -79176,10 +79368,17 @@ router7.get("/portal/briefs/mine", requireSignedIn5, async (req, res) => {
     }).from(briefAssignmentsTable).innerJoin(
       projectBriefsTable,
       eq(briefAssignmentsTable.briefId, projectBriefsTable.id)
-    ).where(eq(briefAssignmentsTable.freelancerUserId, userId2)).orderBy(desc(briefAssignmentsTable.createdAt));
+    ).where(
+      and(
+        eq(briefAssignmentsTable.freelancerUserId, userId2),
+        sql`${briefAssignmentsTable.decision} <> 'cancelled'`
+      )
+    ).orderBy(desc(briefAssignmentsTable.createdAt));
     res.json({
       ok: true,
-      briefs: rows.map((row) => ({
+      briefs: rows.filter(
+        (row) => row.decision !== "declined" || isCurrentBriefRecipient(row.brief, row.crewId, userId2)
+      ).map((row) => ({
         ...(() => {
           const { venueTechnicalSnapshot: _trustedSnapshot, ...withoutSnapshot } = row;
           return withoutSnapshot;
@@ -79209,6 +79408,78 @@ router7.get("/portal/briefs", requireEmployee, async (req, res) => {
     res.status(500).json({ ok: false, error: "Could not load briefs." });
   }
 });
+router7.get(
+  "/portal/briefs/events/stream",
+  requireEmployee,
+  async (req, res) => {
+    const userId2 = req._userId;
+    const STREAM_MAX_LIFETIME_MS = 15 * 60 * 1e3;
+    const HEARTBEAT_MS = 25 * 1e3;
+    let unsubscribe2 = null;
+    let heartbeat = null;
+    let lifetime = null;
+    let closed = false;
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (unsubscribe2) {
+        const stop = unsubscribe2;
+        unsubscribe2 = null;
+        stop();
+      }
+      if (cleanedUp) return;
+      cleanedUp = true;
+      if (heartbeat) clearInterval(heartbeat);
+      if (lifetime) clearTimeout(lifetime);
+    };
+    const close = () => {
+      closed = true;
+      cleanup();
+    };
+    req.once("close", close);
+    res.once("close", close);
+    try {
+      res.status(200);
+      res.set({
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no"
+      });
+      res.flushHeaders();
+      if (closed) {
+        cleanup();
+        return;
+      }
+      unsubscribe2 = await subscribeCrewResponses(userId2, res);
+      if (closed) {
+        cleanup();
+        return;
+      }
+      if (!res.write("event: ready\ndata: {}\n\n")) {
+        cleanup();
+        return;
+      }
+      heartbeat = setInterval(() => {
+        if (closed || !res.write(": heartbeat\n\n")) cleanup();
+      }, HEARTBEAT_MS);
+      lifetime = setTimeout(() => {
+        cleanup();
+        if (!res.writableEnded) res.end();
+      }, STREAM_MAX_LIFETIME_MS);
+    } catch (err) {
+      req.log.error(err, "portal brief events stream failed");
+      cleanup();
+      if (!res.headersSent) {
+        res.status(503).json({
+          ok: false,
+          error: "Crew response updates are temporarily unavailable."
+        });
+      } else {
+        res.end();
+      }
+    }
+  }
+);
 router7.get("/portal/briefs/:id", requireSignedIn5, async (req, res) => {
   const userId2 = req._userId;
   const id = String(req.params.id ?? "");
@@ -79221,13 +79492,20 @@ router7.get("/portal/briefs/:id", requireSignedIn5, async (req, res) => {
     }
     let freelancerView = false;
     if (brief.ownerUserId !== userId2) {
-      const assigned = await db.select({ id: briefAssignmentsTable.id }).from(briefAssignmentsTable).where(
+      const assigned = await db.select({
+        id: briefAssignmentsTable.id,
+        decision: briefAssignmentsTable.decision,
+        crewId: briefAssignmentsTable.crewId
+      }).from(briefAssignmentsTable).where(
         and(
           eq(briefAssignmentsTable.briefId, id),
           eq(briefAssignmentsTable.freelancerUserId, userId2)
         )
-      ).limit(1);
-      if (assigned.length > 0) {
+      );
+      const currentAssignments = assigned.filter(
+        (assignment) => assignment.decision !== "cancelled" && (assignment.decision !== "declined" || isCurrentBriefRecipient(brief.data, assignment.crewId, userId2))
+      );
+      if (currentAssignments.length > 0) {
         freelancerView = true;
       } else {
         const [priorDispatch] = await db.select({ id: briefDispatchesTable.id }).from(briefDispatchesTable).where(
@@ -79306,11 +79584,12 @@ router7.post("/portal/briefs", requireEmployee, async (req, res) => {
   }
   const id = typeof body.id === "string" && body.id.trim() ? body.id.trim().slice(0, 64) : randomUUID3();
   const indexed = extractIndexed(data);
-  const recipients = readRecipients(
+  const recipients = readBriefRecipients(
     data,
     body.recipients
   );
   const explicitEmailDispatch = body.send_email === true;
+  const explicitDeliveryRecipients = explicitEmailDispatch ? readBriefRecipients({}, body.recipients) : [];
   const notificationType = body.notification_type === "share_brief" ? "share_brief" : "send_request";
   try {
     const nestedProject = data.project && typeof data.project === "object" && !Array.isArray(data.project) ? data.project : {};
@@ -79369,9 +79648,13 @@ router7.post("/portal/briefs", requireEmployee, async (req, res) => {
         }
       }).returning();
       const assignmentSync = await synchronizeBriefAssignments(tx, id, recipients);
-      if (explicitEmailDispatch && recipients.length > 0) {
+      if (explicitEmailDispatch && explicitDeliveryRecipients.length > 0) {
         const recipientIds = [
-          ...new Set(recipients.map((recipient) => recipient.freelancerUserId))
+          ...new Set(
+            explicitDeliveryRecipients.map(
+              (recipient) => recipient.freelancerUserId
+            )
+          )
         ];
         await tx.update(briefDispatchesTable).set({
           state: "pending",
@@ -79387,7 +79670,11 @@ router7.post("/portal/briefs", requireEmployee, async (req, res) => {
           )
         );
       }
-      const dispatch = explicitEmailDispatch || effectiveProjectStatus === "active" ? await claimBriefDispatches(tx, id, recipients) : null;
+      const dispatch = explicitEmailDispatch || effectiveProjectStatus === "active" ? await claimBriefDispatches(
+        tx,
+        id,
+        explicitEmailDispatch ? explicitDeliveryRecipients : recipients
+      ) : null;
       return {
         brief: inserted[0] ?? null,
         newRecipientUserIds: assignmentSync.newRecipientUserIds,
@@ -79454,7 +79741,10 @@ router7.get(
     const userId2 = req._userId;
     const id = String(req.params.id ?? "");
     try {
-      const briefRows = await db.select({ ownerUserId: projectBriefsTable.ownerUserId }).from(projectBriefsTable).where(eq(projectBriefsTable.id, id)).limit(1);
+      const briefRows = await db.select({
+        ownerUserId: projectBriefsTable.ownerUserId,
+        data: projectBriefsTable.data
+      }).from(projectBriefsTable).where(eq(projectBriefsTable.id, id)).limit(1);
       if (briefRows.length === 0) {
         res.status(404).json({ ok: false, error: "Brief not found." });
         return;
@@ -79469,12 +79759,23 @@ router7.get(
         crewId: briefAssignmentsTable.crewId,
         decision: briefAssignmentsTable.decision,
         shiftResponses: briefAssignmentsTable.shiftResponses,
+        declineReason: briefAssignmentsTable.declineReason,
         decidedAt: briefAssignmentsTable.decidedAt,
         acceptedGigId: briefAssignmentsTable.acceptedGigId,
         createdAt: briefAssignmentsTable.createdAt,
         updatedAt: briefAssignmentsTable.updatedAt
       }).from(briefAssignmentsTable).where(eq(briefAssignmentsTable.briefId, id)).orderBy(briefAssignmentsTable.createdAt);
-      res.json({ ok: true, assignments });
+      res.json({
+        ok: true,
+        assignments: assignments.map((assignment) => ({
+          ...assignment,
+          isCurrent: isCurrentBriefRecipient(
+            briefRows[0].data,
+            assignment.crewId,
+            assignment.freelancerUserId
+          )
+        }))
+      });
     } catch (err) {
       logger.error(
         { err: err instanceof Error ? err.message : String(err) },
@@ -79573,6 +79874,14 @@ router7.post(
     const requestedDecision = typeof body.decision === "string" ? body.decision : "";
     const hasShiftResponses = body.shiftResponses !== void 0;
     const submittedShiftResponses = body.shiftResponses;
+    const declineReason = parseDeclineReason(body.declineReason);
+    if (!declineReason.ok) {
+      res.status(400).json({
+        ok: false,
+        error: "declineReason must be a string of at most 1000 characters or null."
+      });
+      return;
+    }
     if (hasShiftResponses && (!submittedShiftResponses || typeof submittedShiftResponses !== "object" || Array.isArray(submittedShiftResponses) || Object.values(submittedShiftResponses).some(
       (value) => value !== "accepted" && value !== "declined"
     ))) {
@@ -79610,6 +79919,12 @@ router7.post(
         const requestedAssignmentId = typeof body.assignmentId === "string" && body.assignmentId ? body.assignmentId : null;
         const myRow = requestedAssignmentId ? ownRows.find((s2) => s2.id === requestedAssignmentId) : ownRows.length === 1 ? ownRows[0] : void 0;
         if (!myRow) return { kind: "no_assignment" };
+        if (myRow.decision === "cancelled") {
+          return { kind: "cancelled" };
+        }
+        if (myRow.decision === "declined" && !isCurrentBriefRecipient(briefRow.data, myRow.crewId, userId2)) {
+          return { kind: "replaced" };
+        }
         const slotSiblings = siblings.filter((s2) => s2.crewId === myRow.crewId);
         if (myRow.acceptedSnapshotTrusted && myRow.acceptedGigId) {
           await tx.update(gigsTable).set({
@@ -79639,7 +79954,11 @@ router7.post(
         }
         const decision = shiftResponses ? Object.values(shiftResponses).some((value) => value === "accepted") ? "accepted" : "declined" : requestedDecision;
         if (myRow.decision === "too_late") {
-          const updated2 = await tx.update(briefAssignmentsTable).set({ shiftResponses: null, updatedAt: sql`now()` }).where(eq(briefAssignmentsTable.id, myRow.id)).returning();
+          const updated2 = await tx.update(briefAssignmentsTable).set({
+            shiftResponses: null,
+            declineReason: null,
+            updatedAt: sql`now()`
+          }).where(eq(briefAssignmentsTable.id, myRow.id)).returning();
           return {
             kind: "ok",
             assignment: updated2[0] ?? myRow,
@@ -79653,6 +79972,7 @@ router7.post(
               decision: "pending",
               decidedAt: sql`now()`,
               shiftResponses: null,
+              declineReason: null,
               updatedAt: sql`now()`
             }).where(
               and(
@@ -79669,6 +79989,7 @@ router7.post(
             acceptedSnapshotTrusted: false,
             acceptedGigId: null,
             ...shiftResponses ? { shiftResponses } : decision === "pending" ? { shiftResponses: null } : {},
+            declineReason: decision === "declined" ? declineReason.value ?? null : null,
             updatedAt: sql`now()`
           }).where(eq(briefAssignmentsTable.id, myRow.id)).returning();
           if (updated2.length === 0) return { kind: "no_assignment" };
@@ -79693,6 +80014,7 @@ router7.post(
             acceptedSnapshotTrusted: false,
             acceptedGigId: null,
             shiftResponses: null,
+            declineReason: null,
             updatedAt: sql`now()`
           }).where(eq(briefAssignmentsTable.id, myRow.id)).returning();
           return {
@@ -79705,6 +80027,7 @@ router7.post(
           decision: "too_late",
           decidedAt: sql`now()`,
           shiftResponses: null,
+          declineReason: null,
           updatedAt: sql`now()`
         }).where(
           and(
@@ -79764,6 +80087,7 @@ router7.post(
           acceptedSnapshotTrusted: true,
           acceptedGigId: gigRow.id,
           ...shiftResponses ? { shiftResponses } : {},
+          declineReason: shiftResponses && Object.values(shiftResponses).includes("declined") ? declineReason.value ?? null : null,
           updatedAt: sql`now()`
         }).where(eq(briefAssignmentsTable.id, myRow.id)).returning();
         return {
@@ -79781,12 +80105,39 @@ router7.post(
         res.status(404).json({ ok: false, error: "No assignment for this user." });
         return;
       }
+      if (result.kind === "cancelled") {
+        res.status(410).json({
+          ok: false,
+          code: "request_cancelled",
+          error: "Denne foresp\xF8rselen er ikke lenger gyldig."
+        });
+        return;
+      }
+      if (result.kind === "replaced") {
+        res.status(410).json({
+          ok: false,
+          code: "request_replaced",
+          error: "Denne foresp\xF8rselen er ikke lenger aktuell."
+        });
+        return;
+      }
       if (result.kind === "invalid_shift_responses") {
         res.status(400).json({
           ok: false,
           error: "Shift responses must cover every current assignment slot."
         });
         return;
+      }
+      try {
+        await notifyCrewResponse(briefId);
+      } catch (err) {
+        logger.error(
+          {
+            briefId,
+            err: err instanceof Error ? err.message : String(err)
+          },
+          "portal crew response notification failed"
+        );
       }
       res.json({
         ok: true,
@@ -80486,6 +80837,7 @@ router7.get(
         freelancerUserId: gigsTable.freelancerUserId,
         crewId: briefAssignmentsTable.crewId,
         shiftResponses: briefAssignmentsTable.shiftResponses,
+        declineReason: briefAssignmentsTable.declineReason,
         profileFullName: freelancerProfilesTable.fullName,
         profileDietary: freelancerProfilesTable.dietary,
         profileAllergies: freelancerProfilesTable.allergies,
@@ -80540,6 +80892,7 @@ router7.get(
           status: r.status,
           assignedDates: dates,
           shiftResponses: r.shiftResponses,
+          declineReason: r.declineReason,
           hotelRequired: !!r.hotelRequired,
           hotelDates,
           callTime: timing.callTime,
@@ -81233,13 +81586,14 @@ router8.post("/portal/gigs", requireSignedIn6, async (req, res) => {
     if (clientId) {
       const existing = await db.select({
         freelancerUserId: gigsTable.freelancerUserId,
-        briefId: gigsTable.briefId
+        briefId: gigsTable.briefId,
+        briefAssignmentId: gigsTable.briefAssignmentId
       }).from(gigsTable).where(eq(gigsTable.id, clientId)).limit(1);
       if (existing[0] && existing[0].freelancerUserId !== userId2) {
         res.status(403).json({ ok: false, error: "Not your gig." });
         return;
       }
-      if (existing[0]?.briefId) {
+      if (existing[0]?.briefId || existing[0]?.briefAssignmentId) {
         res.status(403).json({
           ok: false,
           error: "Producer-assigned gigs cannot be overwritten from the portal."
@@ -81271,12 +81625,15 @@ router8.patch("/portal/gigs/:id", requireSignedIn6, async (req, res) => {
   const id = String(req.params.id ?? "");
   const body = req.body ?? {};
   const patch = { updatedAt: sql`now()` };
-  const existing = await db.select({ briefId: gigsTable.briefId }).from(gigsTable).where(and(eq(gigsTable.id, id), eq(gigsTable.freelancerUserId, userId2))).limit(1);
+  const existing = await db.select({
+    briefId: gigsTable.briefId,
+    briefAssignmentId: gigsTable.briefAssignmentId
+  }).from(gigsTable).where(and(eq(gigsTable.id, id), eq(gigsTable.freelancerUserId, userId2))).limit(1);
   if (!existing[0]) {
     res.status(404).json({ ok: false, error: "Gig not found." });
     return;
   }
-  if (existing[0].briefId && Object.keys(body).some(
+  if ((existing[0].briefId || existing[0].briefAssignmentId) && Object.keys(body).some(
     (key2) => !["status", "checkIn", "notes"].includes(key2)
   )) {
     res.status(403).json({
@@ -81324,12 +81681,15 @@ router8.delete("/portal/gigs/:id", requireSignedIn6, async (req, res) => {
   const userId2 = req._userId;
   const id = String(req.params.id ?? "");
   try {
-    const [existing] = await db.select({ briefId: gigsTable.briefId }).from(gigsTable).where(and(eq(gigsTable.id, id), eq(gigsTable.freelancerUserId, userId2))).limit(1);
+    const [existing] = await db.select({
+      briefId: gigsTable.briefId,
+      briefAssignmentId: gigsTable.briefAssignmentId
+    }).from(gigsTable).where(and(eq(gigsTable.id, id), eq(gigsTable.freelancerUserId, userId2))).limit(1);
     if (!existing) {
       res.status(404).json({ ok: false, error: "Gig not found." });
       return;
     }
-    if (existing.briefId) {
+    if (existing.briefId || existing.briefAssignmentId) {
       res.status(403).json({
         ok: false,
         error: "Producer-assigned gigs cannot be deleted from the portal."
@@ -83366,6 +83726,49 @@ function projectFinanceSeed(rawData) {
   };
 }
 
+// src/lib/projectCrewCounts.ts
+function record3(raw) {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+}
+function rosterRoleSlots(projectData) {
+  const crew = record3(projectData).crew;
+  if (!Array.isArray(crew)) return [];
+  const slots = /* @__PURE__ */ new Map();
+  for (const value of crew) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const row = value;
+    const id = row.id;
+    if (typeof id !== "string") continue;
+    const trimmed = id.trim();
+    if (!trimmed || slots.has(trimmed)) continue;
+    const freelancerUserId = typeof row.freelancerUserId === "string" && row.freelancerUserId.trim() ? row.freelancerUserId.trim() : null;
+    slots.set(trimmed, { id: trimmed, freelancerUserId });
+  }
+  return [...slots.values()];
+}
+function plannedResponseSlots(briefData, crewId) {
+  return getBriefShiftSlots({ data: briefData }, crewId);
+}
+function fullyAcceptedRole(briefData, assignment) {
+  if (assignment.decision !== "accepted" || !assignment.crewId) return false;
+  const responses = assignment.shiftResponses;
+  if (!responses) return true;
+  const expected = plannedResponseSlots(briefData, assignment.crewId);
+  const actual = Object.keys(responses);
+  return actual.length === expected.length && expected.every((slot) => responses[slot] === "accepted");
+}
+function deriveProjectCrewCounts(projectData, briefData, assignments) {
+  const roleSlots = rosterRoleSlots(projectData);
+  const roleSlotById = new Map(roleSlots.map((slot) => [slot.id, slot]));
+  const confirmed = /* @__PURE__ */ new Set();
+  for (const assignment of assignments) {
+    if (assignment.crewId && roleSlotById.has(assignment.crewId) && (!roleSlotById.get(assignment.crewId)?.freelancerUserId || assignment.freelancerUserId === roleSlotById.get(assignment.crewId)?.freelancerUserId) && fullyAcceptedRole(briefData, assignment)) {
+      confirmed.add(assignment.crewId);
+    }
+  }
+  return { crewCount: roleSlots.length, confirmedCrewCount: confirmed.size };
+}
+
 // src/routes/projects.ts
 var router13 = (0, import_express18.Router)();
 var requireSignedIn10 = (req, res, next) => {
@@ -83461,9 +83864,9 @@ router13.get("/projects", requireSignedIn10, async (req, res) => {
       cloned_from_project_id: projectsTable.clonedFromProjectId,
       reportDate: sql`${projectsTable.data}->>'reportDate'`,
       reportEndDate: sql`${projectsTable.data}->>'reportEndDate'`,
+      projectData: projectsTable.data,
       category: sql`nullif(${projectsTable.data}->>'eventCategory', '')`,
       type: sql`coalesce(nullif(${projectsTable.data}->>'projectType', ''), nullif(${projectsTable.data}->>'type', ''))`,
-      crewCount: sql`case when jsonb_typeof(${projectsTable.data}->'crew') = 'array' then jsonb_array_length(${projectsTable.data}->'crew') else 0 end`,
       status: sql`coalesce(${projectsTable.status}, case when nullif(${projectsTable.data}->>'activeBriefId', '') is not null then 'active' when nullif(${projectsTable.venue}, '') is not null or nullif(${projectsTable.client}, '') is not null then 'planning' else 'draft' end)`,
       archivedAt: projectsTable.archivedAt,
       isArchived: sql`coalesce(${projectsTable.archivedAt} is not null or ${projectsTable.status} = 'archived', false)`,
@@ -83483,6 +83886,58 @@ router13.get("/projects", requireSignedIn10, async (req, res) => {
       )
     ).orderBy(desc(projectsTable.updatedAt));
     const managers = await getProjectManagers(rows.map((row) => row.created_by));
+    const activeBriefIds = rows.map((row) => activeBriefIdIn(row.projectData)).filter(
+      (id) => typeof id === "string" && id !== "invalid"
+    );
+    const briefRows = activeBriefIds.length === 0 ? [] : await db.select({
+      id: projectBriefsTable.id,
+      projectId: projectBriefsTable.projectId,
+      ownerUserId: projectBriefsTable.ownerUserId,
+      data: projectBriefsTable.data
+    }).from(projectBriefsTable).where(inArray(projectBriefsTable.id, activeBriefIds));
+    const briefById = new Map(briefRows.map((brief) => [brief.id, brief]));
+    const assignmentsByBrief = /* @__PURE__ */ new Map();
+    if (briefRows.length > 0) {
+      const assignmentRows = await db.select({
+        briefId: briefAssignmentsTable.briefId,
+        crewId: briefAssignmentsTable.crewId,
+        freelancerUserId: briefAssignmentsTable.freelancerUserId,
+        decision: briefAssignmentsTable.decision,
+        shiftResponses: briefAssignmentsTable.shiftResponses
+      }).from(briefAssignmentsTable).where(
+        inArray(
+          briefAssignmentsTable.briefId,
+          briefRows.map((brief) => brief.id)
+        )
+      );
+      for (const assignment of assignmentRows) {
+        const list2 = assignmentsByBrief.get(assignment.briefId) ?? [];
+        list2.push({
+          crewId: assignment.crewId,
+          freelancerUserId: assignment.freelancerUserId,
+          decision: assignment.decision,
+          shiftResponses: assignment.shiftResponses
+        });
+        assignmentsByBrief.set(assignment.briefId, list2);
+      }
+    }
+    const countsByProject = /* @__PURE__ */ new Map();
+    for (const row of rows) {
+      const briefId = activeBriefIdIn(row.projectData);
+      const brief = typeof briefId === "string" ? briefById.get(briefId) : void 0;
+      if (!brief || brief.ownerUserId !== row.created_by || brief.projectId !== null && brief.projectId !== row.id) {
+        countsByProject.set(row.id, deriveProjectCrewCounts(row.projectData, null, []));
+        continue;
+      }
+      countsByProject.set(
+        row.id,
+        deriveProjectCrewCounts(
+          row.projectData,
+          brief.data,
+          assignmentsByBrief.get(brief.id) ?? []
+        )
+      );
+    }
     const normaliseDate = (raw) => {
       if (typeof raw !== "string") return null;
       const value = raw.trim();
@@ -83500,9 +83955,10 @@ router13.get("/projects", requireSignedIn10, async (req, res) => {
     };
     res.json({
       ok: true,
-      projects: rows.map(({ reportDate, reportEndDate, created_by, ...row }) => ({
+      projects: rows.map(({ reportDate, reportEndDate, projectData: _projectData, created_by, ...row }) => ({
         ...row,
         created_by,
+        ...countsByProject.get(row.id) ?? { crewCount: 0, confirmedCrewCount: 0 },
         manager: managers.get(created_by),
         startDate: normaliseDate(reportDate),
         endDate: normaliseDate(reportEndDate)
@@ -86187,20 +86643,20 @@ var import_express32 = __toESM(require_express2(), 1);
 
 // src/lib/fartBroadcast.ts
 import { randomUUID as randomUUID8 } from "node:crypto";
-var CHANNEL = "ehs_fart_alerts";
-var subscribers = /* @__PURE__ */ new Set();
+var CHANNEL2 = "ehs_fart_alerts";
+var subscribers2 = /* @__PURE__ */ new Set();
 var listenerRecord = null;
 var connectionPromise = null;
 var reconnectTimer = null;
 var shuttingDown = false;
-var listenerGeneration = 0;
+var listenerGeneration2 = 0;
 function isFartAlert(value) {
   if (!value || typeof value !== "object") return false;
   const alert = value;
   return typeof alert.id === "string" && typeof alert.senderUserId === "string" && typeof alert.senderName === "string" && typeof alert.message === "string" && (alert.intensity === "small" || alert.intensity === "medium" || alert.intensity === "nuclear") && typeof alert.createdAt === "string";
 }
 function scheduleReconnect() {
-  if (shuttingDown || reconnectTimer || listenerRecord || connectionPromise || subscribers.size === 0) {
+  if (shuttingDown || reconnectTimer || listenerRecord || connectionPromise || subscribers2.size === 0) {
     return;
   }
   reconnectTimer = setTimeout(() => {
@@ -86210,10 +86666,10 @@ function scheduleReconnect() {
   reconnectTimer.unref();
 }
 async function ensureFartBroadcastListener() {
-  if (listenerRecord || connectionPromise || shuttingDown || subscribers.size === 0) {
+  if (listenerRecord || connectionPromise || shuttingDown || subscribers2.size === 0) {
     return;
   }
-  const generation = ++listenerGeneration;
+  const generation = ++listenerGeneration2;
   connectionPromise = (async () => {
     const client = await pool.connect();
     let released = false;
@@ -86228,7 +86684,7 @@ async function ensureFartBroadcastListener() {
       if (released) return;
       released = true;
       detach();
-      if (listenerRecord === record2) listenerRecord = null;
+      if (listenerRecord === record4) listenerRecord = null;
       client.release(error40);
     };
     const close = async () => {
@@ -86236,10 +86692,10 @@ async function ensureFartBroadcastListener() {
       closing = true;
       client.off("notification", onNotification);
       client.off("end", onEnd);
-      if (listenerRecord === record2) listenerRecord = null;
+      if (listenerRecord === record4) listenerRecord = null;
       let releaseError;
       try {
-        await client.query(`UNLISTEN ${CHANNEL}`);
+        await client.query(`UNLISTEN ${CHANNEL2}`);
       } catch (error40) {
         releaseError = error40 instanceof Error ? error40 : new Error(String(error40));
       } finally {
@@ -86250,14 +86706,14 @@ async function ensureFartBroadcastListener() {
       }
     };
     const onNotification = (notification) => {
-      if (notification.channel !== CHANNEL || !notification.payload) return;
+      if (notification.channel !== CHANNEL2 || !notification.payload) return;
       try {
         const parsed = JSON.parse(notification.payload);
         if (!isFartAlert(parsed)) {
           logger.warn({ scope: "fartBroadcast" }, "ignored invalid fart alert");
           return;
         }
-        for (const subscriber of subscribers) subscriber(parsed);
+        for (const subscriber of subscribers2) subscriber(parsed);
       } catch (error40) {
         logger.warn(
           {
@@ -86278,13 +86734,13 @@ async function ensureFartBroadcastListener() {
         return;
       }
       dispose(error40);
-      if (generation === listenerGeneration) scheduleReconnect();
+      if (generation === listenerGeneration2) scheduleReconnect();
     };
     const onEnd = () => {
       dispose();
-      if (generation === listenerGeneration) scheduleReconnect();
+      if (generation === listenerGeneration2) scheduleReconnect();
     };
-    const record2 = {
+    const record4 = {
       client,
       generation,
       dispose,
@@ -86294,12 +86750,12 @@ async function ensureFartBroadcastListener() {
     client.on("error", onError);
     client.on("end", onEnd);
     try {
-      await client.query(`LISTEN ${CHANNEL}`);
-      if (generation !== listenerGeneration || shuttingDown || subscribers.size === 0) {
+      await client.query(`LISTEN ${CHANNEL2}`);
+      if (generation !== listenerGeneration2 || shuttingDown || subscribers2.size === 0) {
         await close();
         return;
       }
-      listenerRecord = record2;
+      listenerRecord = record4;
       logger.info({ scope: "fartBroadcast" }, "fart broadcast listener ready");
     } catch (error40) {
       dispose(error40 instanceof Error ? error40 : new Error(String(error40)));
@@ -86314,7 +86770,7 @@ async function ensureFartBroadcastListener() {
       "could not start fart broadcast listener"
     );
   }).finally(() => {
-    if (generation === listenerGeneration) {
+    if (generation === listenerGeneration2) {
       connectionPromise = null;
       scheduleReconnect();
     }
@@ -86322,20 +86778,20 @@ async function ensureFartBroadcastListener() {
   await connectionPromise;
 }
 async function disconnectFartBroadcastListener() {
-  listenerGeneration += 1;
+  listenerGeneration2 += 1;
   if (reconnectTimer) clearTimeout(reconnectTimer);
   reconnectTimer = null;
   connectionPromise = null;
-  const record2 = listenerRecord;
+  const record4 = listenerRecord;
   listenerRecord = null;
-  if (record2) await record2.close();
+  if (record4) await record4.close();
 }
 function subscribeToFartAlerts(subscriber) {
-  subscribers.add(subscriber);
+  subscribers2.add(subscriber);
   void ensureFartBroadcastListener();
   return () => {
-    subscribers.delete(subscriber);
-    if (subscribers.size === 0) void disconnectFartBroadcastListener();
+    subscribers2.delete(subscriber);
+    if (subscribers2.size === 0) void disconnectFartBroadcastListener();
   };
 }
 async function broadcastFartAlert(input) {
@@ -86345,7 +86801,7 @@ async function broadcastFartAlert(input) {
     createdAt: (/* @__PURE__ */ new Date()).toISOString()
   };
   await pool.query("select pg_notify($1, $2)", [
-    CHANNEL,
+    CHANNEL2,
     JSON.stringify(alert)
   ]);
   return alert;
@@ -86367,17 +86823,17 @@ router24.get("/fart-alerts/stream", (req, res) => {
   }
   let closed = false;
   let heartbeat = null;
-  let unsubscribe = () => {
+  let unsubscribe2 = () => {
   };
   const cleanup = () => {
     if (closed) return;
     closed = true;
     if (heartbeat) clearInterval(heartbeat);
     heartbeat = null;
-    unsubscribe();
+    unsubscribe2();
     if (!res.writableEnded) res.end();
   };
-  unsubscribe = subscribeToFartAlerts((alert) => {
+  unsubscribe2 = subscribeToFartAlerts((alert) => {
     if (closed || !res.write(`event: fart-alert
 data: ${JSON.stringify(alert)}
 
@@ -88409,10 +88865,10 @@ var queryTimeZoneIntlFormat = /* @__PURE__ */ memoize((upperNormId) => new RawDa
   second: "numeric"
 }));
 function queryTimeZone(rawTimeZoneId) {
-  const record2 = resolveTimeZoneRecord(rawTimeZoneId);
-  return queryTimeZoneRecord(record2.id, record2);
+  const record4 = resolveTimeZoneRecord(rawTimeZoneId);
+  return queryTimeZoneRecord(record4.id, record4);
 }
-var queryTimeZoneRecord = /* @__PURE__ */ memoize((normTimeZoneId, record2) => "named" === record2.kind ? new IntlTimeZone(normTimeZoneId, record2.o, record2.format) : new FixedTimeZone(normTimeZoneId, record2.o, "fixed" === record2.kind ? record2._ : 0));
+var queryTimeZoneRecord = /* @__PURE__ */ memoize((normTimeZoneId, record4) => "named" === record4.kind ? new IntlTimeZone(normTimeZoneId, record4.o, record4.format) : new FixedTimeZone(normTimeZoneId, record4.o, "fixed" === record4.kind ? record4._ : 0));
 var FixedTimeZone = class {
   constructor(id, compareKey, offsetNano) {
     this.id = id, this.o = compareKey, this._ = offsetNano;
@@ -97774,10 +98230,10 @@ var queryTimeZoneIntlFormat2 = /* @__PURE__ */ memoize2((upperNormId) => new Raw
   second: "numeric"
 }));
 function queryTimeZone2(rawTimeZoneId) {
-  const record2 = resolveTimeZoneRecord2(rawTimeZoneId);
-  return queryTimeZoneRecord2(record2.id, record2);
+  const record4 = resolveTimeZoneRecord2(rawTimeZoneId);
+  return queryTimeZoneRecord2(record4.id, record4);
 }
-var queryTimeZoneRecord2 = /* @__PURE__ */ memoize2((normTimeZoneId, record2) => "named" === record2.kind ? new IntlTimeZone2(normTimeZoneId, record2.m, record2.format) : new FixedTimeZone2(normTimeZoneId, record2.m, "fixed" === record2.kind ? record2.X : 0));
+var queryTimeZoneRecord2 = /* @__PURE__ */ memoize2((normTimeZoneId, record4) => "named" === record4.kind ? new IntlTimeZone2(normTimeZoneId, record4.m, record4.format) : new FixedTimeZone2(normTimeZoneId, record4.m, "fixed" === record4.kind ? record4.X : 0));
 var FixedTimeZone2 = class {
   constructor(id, compareKey, offsetNano) {
     this.id = id, this.m = compareKey, this.X = offsetNano;

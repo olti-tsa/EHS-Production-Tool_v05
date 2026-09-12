@@ -141,7 +141,63 @@ export async function synchronizeBriefAssignments(
 ): Promise<{ newRecipientUserIds: string[]; existingRecipientCount: number }> {
   const newRecipientUserIds: string[] = [];
   let existingRecipientCount = 0;
+  const currentKeys = new Set(
+    recipients.map(
+      (recipient) =>
+        `${recipient.freelancerUserId}\u0000${recipient.crewId}`,
+    ),
+  );
+  // A producer save is also a roster reconciliation. Preserve accepted and
+  // declined rows as history, but revoke access for pending recipients that
+  // are no longer in the current brief. They remain visible to the producer
+  // as cancelled history and can only regain access if explicitly re-added.
+  const existingAssignments = await tx
+    .select({
+      id: briefAssignmentsTable.id,
+      freelancerUserId: briefAssignmentsTable.freelancerUserId,
+      crewId: briefAssignmentsTable.crewId,
+      decision: briefAssignmentsTable.decision,
+    })
+    .from(briefAssignmentsTable)
+    .where(eq(briefAssignmentsTable.briefId, briefId));
+  for (const existing of existingAssignments) {
+    if (
+      existing.decision === "pending" &&
+      !currentKeys.has(
+        `${existing.freelancerUserId}\u0000${existing.crewId}`,
+      )
+    ) {
+      await tx
+        .update(briefAssignmentsTable)
+        .set({
+          decision: "cancelled",
+          shiftResponses: null,
+          declineReason: null,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(briefAssignmentsTable.id, existing.id));
+    }
+  }
   for (const recipient of recipients) {
+    const existing = existingAssignments.find(
+      (assignment) =>
+        assignment.freelancerUserId === recipient.freelancerUserId &&
+        assignment.crewId === recipient.crewId,
+    );
+    if (existing?.decision === "cancelled") {
+      await tx
+        .update(briefAssignmentsTable)
+        .set({
+          decision: "pending",
+          decidedAt: null,
+          declineReason: null,
+          shiftResponses: null,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(briefAssignmentsTable.id, existing.id));
+      newRecipientUserIds.push(recipient.freelancerUserId);
+      continue;
+    }
     const inserted = await tx
       .insert(briefAssignmentsTable)
       .values({
