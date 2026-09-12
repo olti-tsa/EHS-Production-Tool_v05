@@ -120,7 +120,7 @@ function roleColor(role: string): string {
  *
  *  Visible columns (always):
  *    Name · Role · Status · Days · Hotel · Food · Phone
- *    · Notes · Actions (local rows only)
+ *    · Notes · Actions (local and linked booking rows)
  *
  *  "Show production details" toggle adds:
  *    Call · Off · Day rate
@@ -142,6 +142,7 @@ export function MasterCrewSheet({
   onSendLinkedRequests,
   sendingLinkedRequests = false,
   onReplaceRole,
+  onRemoveBooking,
   onMergedRolesChange,
   onCountsChange,
   getTimesForDates,
@@ -176,6 +177,13 @@ export function MasterCrewSheet({
   onDuplicate: (id: string) => void;
   onSendLinkedRequests?: (members: CrewMember[]) => void | Promise<void>;
   sendingLinkedRequests?: boolean;
+  /** Remove one exact freelancer account from one exact producer role
+   *  slot. The parent serializes this with project autosave so a stale
+   *  local payload cannot recreate the booking after the server DELETE. */
+  onRemoveBooking?: (
+    crewId: string,
+    freelancerUserId: string,
+  ) => void | Promise<void>;
   /** Invite a directory freelancer into a new row for one exact declined
    *  role. The declined row is never mutated or reused. */
   onReplaceRole?: (
@@ -338,6 +346,98 @@ export function MasterCrewSheet({
       }
     },
     [baseUrl, briefId, getToken, onRemove, t],
+  );
+
+  /** Remove a linked row from the active booking while leaving the server's
+   *  assignment history intact. Pending request cancellation deliberately
+   *  stays on the existing `cancelPendingRequest` path above. */
+  const removeActiveBooking = useCallback(
+    async (row: RosterRow, local: CrewMember | null) => {
+      if (!onRemoveBooking) return;
+      const crewId =
+        row.crewId ??
+        (row.source === "local" && local ? local.id : null);
+      const freelancerUserId =
+        row.freelancerUserId ?? local?.freelancerUserId ?? null;
+      if (!crewId || !freelancerUserId) {
+        const message = t("crew.remove.missingIdentity");
+        setError(message);
+        toast.error(message);
+        return;
+      }
+
+      const accepted =
+        row.status === "accepted" ||
+        row.status === "confirmed" ||
+        row.status === "done" ||
+        row.status === "invoiced" ||
+        row.status === "paid";
+      if (
+        accepted &&
+        !window.confirm(
+          t("crew.remove.confirm", {
+            name: row.name || t("crew.cancel.unnamed"),
+          }),
+        )
+      ) {
+        return;
+      }
+
+      const key = `remove:${crewId}`;
+      setSavingByKey((current) => ({ ...current, [key]: true }));
+      try {
+        await onRemoveBooking(crewId, freelancerUserId);
+        if (local) onRemove(local.id);
+        // Optimistically hide the exact role slot while the roster refetch
+        // settles. Both identity fields are required so removing one role
+        // never hides another role held by the same account.
+        setData((previous) =>
+          previous
+            ? {
+                ...previous,
+                crew: previous.crew.filter(
+                  (gig) =>
+                    !(
+                      gig.crewId === crewId &&
+                      gig.freelancerUserId === freelancerUserId
+                    ),
+                ),
+              }
+            : previous,
+        );
+        const fresh = await fetchRoster().catch(() => null);
+        if (fresh) {
+          setData({
+            ...fresh,
+            crew: fresh.crew.filter(
+              (gig) =>
+                !(
+                  gig.crewId === crewId &&
+                  gig.freelancerUserId === freelancerUserId
+                ),
+            ),
+          });
+        }
+        setError(null);
+        toast.success(
+          t("crew.remove.success", {
+            name: row.name || t("crew.cancel.unnamed"),
+          }),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : t("crew.remove.error");
+        setError(message);
+        toast.error(message);
+      } finally {
+        setSavingByKey((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+      }
+    },
+    [fetchRoster, onRemove, onRemoveBooking, t],
   );
 
   // Fetch the structured directory once so selecting a suggestion can
@@ -1401,6 +1501,42 @@ export function MasterCrewSheet({
                         ? () => void cancelPendingRequest(local)
                         : undefined
                     }
+                     onRemoveBooking={
+                       !readOnly &&
+                       onRemoveBooking &&
+                       row.freelancerUserId &&
+                       (
+                         (row.source === "gig" && row.crewId) ||
+                         (row.source === "local" &&
+                           local &&
+                           (local.briefAssignmentId ||
+                             (local.requestStatus &&
+                               local.requestStatus !== "requested" &&
+                               local.requestStatus !== "no-reply")))
+                       ) &&
+                       // Pending requests retain their dedicated cancel
+                       // action above; every other linked row uses the
+                       // active-booking removal endpoint.
+                       !(
+                         row.source === "local" &&
+                         (row.status === "requested" ||
+                           row.status === "no-reply")
+                       )
+                         ? () => void removeActiveBooking(row, local)
+                         : undefined
+                     }
+                     removeBookingSaving={
+                       Boolean(
+                         (row.crewId ||
+                           (row.source === "local" && local?.id)) &&
+                           savingByKey[
+                             `remove:${
+                               row.crewId ??
+                               (row.source === "local" ? local?.id : "")
+                             }`
+                           ],
+                       )
+                     }
                     cancelSaving={
                       local
                         ? Boolean(savingByKey[`cancel:${local.id}`])
@@ -1768,6 +1904,8 @@ function MasterRow({
   onLocalRemove,
   onCancelRequest,
   cancelSaving,
+  onRemoveBooking,
+  removeBookingSaving,
   onLocalDuplicate,
   phaseDays,
   phaseShiftTimes,
@@ -1800,6 +1938,11 @@ function MasterRow({
   onLocalRemove?: () => void;
   onCancelRequest?: () => void;
   cancelSaving?: boolean;
+  /** Remove one exact linked assignment from the active booking. The
+   *  server keeps the assignment history (including payroll history)
+   *  separate; this callback only frees the current role slot. */
+  onRemoveBooking?: () => void | Promise<void>;
+  removeBookingSaving?: boolean;
   onLocalDuplicate?: () => void;
   /** Days covered by each schedule phase. Drives the per-phase
    *  quick-pick buttons rendered next to the day chips on local
@@ -1837,6 +1980,10 @@ function MasterRow({
   const tone = statusTone(row.status);
   const label = statusLabel(row.status, t);
   const editableLocal = row.source === "local" && !!onLocalUpdate;
+  const statusAriaLabel = t("crew.sheet.personStatus", {
+    name: row.name || t("crew.sheet.freelancer"),
+    status: label,
+  });
 
   return (
     <tr>
@@ -1990,7 +2137,11 @@ function MasterRow({
           </select>
         ) : (
           <div>
-            <span className={`crew-pill crew-pill-${tone}`} title={label}>
+            <span
+              className={`crew-pill crew-pill-${tone}`}
+              title={`${row.name || t("crew.sheet.freelancer")}: ${label}`}
+              aria-label={statusAriaLabel}
+            >
               {statusIcon(row.status)} {label}
             </span>
             {row.status === "declined" && row.declineReason ? (
@@ -2219,6 +2370,18 @@ function MasterRow({
             title={t("crew.cancel.title")}
           >
             {cancelSaving ? t("crew.cancel.cancelling") : t("crew.cancel.action")}
+          </button>
+        ) : onRemoveBooking ? (
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            onClick={onRemoveBooking}
+            disabled={removeBookingSaving}
+            title={t("crew.remove.title")}
+          >
+            {removeBookingSaving
+              ? t("crew.remove.removing")
+              : t("crew.remove.action")}
           </button>
         ) : onLocalRemove ? (
           <button

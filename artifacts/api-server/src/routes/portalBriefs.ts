@@ -13,6 +13,7 @@ import {
   PROJECT_BRIEF_PROVENANCE_LOCK,
   venuesTable,
   type ProjectBriefRow,
+  type ProjectRow,
 } from "@workspace/db";
 import { getUserType, requireEmployee } from "../middleware/userType";
 import { logger } from "../lib/logger";
@@ -29,7 +30,10 @@ import {
 } from "../lib/briefAssignmentCancellation";
 import { parseDeclineReason } from "../lib/briefResponse";
 import { getBriefShiftSlots } from "../lib/briefShiftSlots";
-import { readBriefRecipients } from "../lib/briefRecipients";
+import {
+  readBriefRecipients,
+  selectBriefDispatchRecipients,
+} from "../lib/briefRecipients";
 import {
   notifyCrewResponse,
   subscribeCrewResponses,
@@ -57,6 +61,15 @@ import {
   DIETARY_TAGS,
   type DietaryTag,
 } from "../lib/dietaryTags";
+import {
+  removeCrewFromBriefData,
+  removeCrewAssignmentFromBriefData,
+  removeCrewFromProjectData,
+  markCrewAssignmentRemovedFromProjectData,
+  projectCrewFreelancerForRole,
+  removedCrewAssignmentKeys,
+  removedCrewIdsFromProjectData,
+} from "../lib/projectCrewRemoval";
 
 const router: IRouter = Router();
 
@@ -137,22 +150,28 @@ const RESTRICTED_BRIEF_KEYS = new Set([
   "client_contact",
   "client_contacts",
   "clientDirectory",
+  "removedCrewIds",
+  "removedCrewAssignments",
   "technicalContactName",
   "technicalContactPhone",
   "technicalContactEmail",
 ]);
 
+function isClientContactField(key: string): boolean {
+  const normalized = key.replace(/[-_]/g, "").toLowerCase();
+  return (
+    /^(?:client|customer)(?:contact|contacts|email|phone|mobile|telephone|address|street|postal|zip|details|profile)$/.test(
+      normalized,
+    ) ||
+    normalized === "clientcontactname" ||
+    normalized === "clientcontactphone" ||
+    normalized === "clientcontactemail"
+  );
+}
+
 /** Remove fields that are never appropriate in a freelancer DTO. This is
  * recursive because old briefs may have nested client-directory payloads. */
 function withoutUntrustedProfiles(raw: Record<string, unknown>): Record<string, unknown> {
-  const submittedProject =
-    raw.project && typeof raw.project === "object" && !Array.isArray(raw.project)
-      ? (raw.project as Record<string, unknown>)
-      : null;
-  const submittedClientContact =
-    typeof submittedProject?.clientContact === "string"
-      ? submittedProject.clientContact.trim()
-      : "";
   const cleanse = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(cleanse);
     if (!value || typeof value !== "object") return value;
@@ -160,8 +179,30 @@ function withoutUntrustedProfiles(raw: Record<string, unknown>): Record<string, 
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
       if (
         RESTRICTED_BRIEF_KEYS.has(key) ||
+        isClientContactField(key) ||
         /^(?:client[_-]?)?(?:billing|contact|contacts|organization|payment)/i.test(key)
       ) continue;
+      // Legacy briefs sometimes represented the client as a directory object.
+      // Keep only its company identity; a nested name/phone/email/contact
+      // object must never cross the freelancer DTO boundary.
+      if (
+        (key === "client" || key === "customer") &&
+        child &&
+        typeof child === "object" &&
+        !Array.isArray(child)
+      ) {
+        const cleanClient = cleanse(child);
+        if (cleanClient && typeof cleanClient === "object" && !Array.isArray(cleanClient)) {
+          const company: Record<string, unknown> = {};
+          for (const companyKey of ["company", "companyName", "name"]) {
+            if (typeof (cleanClient as Record<string, unknown>)[companyKey] === "string") {
+              company[companyKey] = (cleanClient as Record<string, unknown>)[companyKey];
+            }
+          }
+          if (Object.keys(company).length > 0) result[key] = company;
+        }
+        continue;
+      }
       result[key] = cleanse(child);
     }
     return result;
@@ -170,15 +211,12 @@ function withoutUntrustedProfiles(raw: Record<string, unknown>): Record<string, 
   const clean = cleansed && typeof cleansed === "object" && !Array.isArray(cleansed)
     ? cleansed as Record<string, unknown>
     : {};
-  if ("client" in clean && typeof clean.client !== "string") delete clean.client;
   if ("venue" in clean && typeof clean.venue !== "string") delete clean.venue;
   if (clean.project && typeof clean.project === "object" && !Array.isArray(clean.project)) {
     const project = { ...(clean.project as Record<string, unknown>) };
     for (const key of RESTRICTED_BRIEF_KEYS) delete project[key];
-    if ("client" in project && typeof project.client !== "string") delete project.client;
     if ("projectName" in project && typeof project.projectName !== "string") delete project.projectName;
     if ("venue" in project && typeof project.venue !== "string") delete project.venue;
-    if (submittedClientContact) project.clientContact = submittedClientContact;
     clean.project = project;
   }
   return clean;
@@ -510,7 +548,7 @@ router.get("/portal/briefs/mine", requireSignedIn, async (req, res) => {
       briefs: rows
         .filter(
           (row) =>
-            row.decision !== "declined" ||
+            row.decision !== "cancelled" &&
             isCurrentBriefRecipient(row.brief, row.crewId, userId),
         )
         .map((row) => ({
@@ -675,8 +713,7 @@ router.get("/portal/briefs/:id", requireSignedIn, async (req, res) => {
       const currentAssignments = assigned.filter(
         (assignment) =>
           assignment.decision !== "cancelled" &&
-          (assignment.decision !== "declined" ||
-            isCurrentBriefRecipient(brief.data, assignment.crewId, userId)),
+          isCurrentBriefRecipient(brief.data, assignment.crewId, userId),
       );
       if (currentAssignments.length > 0) {
         freelancerView = true;
@@ -781,7 +818,28 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
     res.status(400).json({ ok: false, error: "data must be a JSON object." });
     return;
   }
+  // Keep the producer's own call-sheet client contact in the stored brief.
+  // It is removed again by freelancerBriefData() at every freelancer
+  // projection boundary, including accepted snapshots.
+  const submittedProject =
+    (submittedData as Record<string, unknown>).project &&
+    typeof (submittedData as Record<string, unknown>).project === "object" &&
+    !Array.isArray((submittedData as Record<string, unknown>).project)
+      ? ((submittedData as Record<string, unknown>).project as Record<string, unknown>)
+      : null;
+  const submittedClientContact =
+    typeof submittedProject?.clientContact === "string"
+      ? submittedProject.clientContact.trim()
+      : "";
   const data = withoutUntrustedProfiles(submittedData as Record<string, unknown>);
+  if (submittedClientContact) {
+    const project =
+      data.project && typeof data.project === "object" && !Array.isArray(data.project)
+        ? { ...(data.project as Record<string, unknown>) }
+        : {};
+    project.clientContact = submittedClientContact;
+    data.project = project;
+  }
   const serialised = JSON.stringify(data);
   if (Buffer.byteLength(serialised, "utf8") > MAX_BRIEF_BYTES) {
     res.status(413).json({ ok: false, error: "Brief too large." });
@@ -791,19 +849,11 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
     typeof body.id === "string" && body.id.trim()
       ? body.id.trim().slice(0, 64)
       : randomUUID();
-  const indexed = extractIndexed(data as Record<string, unknown>);
-  const recipients = readBriefRecipients(
-    data,
-    body.recipients,
-  );
   const explicitEmailDispatch = body.send_email === true;
   // `recipients` reconciles the entire current brief. An explicit send,
   // however, targets only the top-level recipient list supplied for this
   // delivery action; never reset/reclaim every assignment merely because the
   // saved brief still contains their historical recipient ids.
-  const explicitDeliveryRecipients = explicitEmailDispatch
-    ? readBriefRecipients({}, body.recipients)
-    : [];
   const notificationType =
     body.notification_type === "share_brief"
       ? ("share_brief" as const)
@@ -838,6 +888,7 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
         .select({
           ownerUserId: projectBriefsTable.ownerUserId,
           projectId: projectBriefsTable.projectId,
+          data: projectBriefsTable.data,
         })
         .from(projectBriefsTable)
         .where(eq(projectBriefsTable.id, id))
@@ -856,6 +907,7 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
         return { terminalProject: true as const };
       }
       let effectiveProjectStatus = null;
+      let effectiveProjectData: unknown = null;
       if (effectiveProjectId) {
         const [effectiveProject] = await tx.select()
           .from(projectsTable)
@@ -869,7 +921,52 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
           ["completed", "archived"].includes(deriveLegacyProjectStatus(effectiveProject))
         ) return { terminalProject: true as const };
         effectiveProjectStatus = deriveLegacyProjectStatus(effectiveProject);
+        effectiveProjectData = effectiveProject.data;
       }
+      // The project remove endpoint persists role tombstones in the existing
+      // jsonb payload. Reconcile them here as well: a delayed brief autosave
+      // may still contain the removed assignment and must not recreate active
+      // access after the atomic remove has committed.
+      let effectiveData = data;
+      const removedCrewIds = [
+        ...new Set([
+          ...removedCrewIdsFromProjectData(existing[0]?.data),
+          ...removedCrewIdsFromProjectData(effectiveProjectData),
+        ]),
+      ];
+      for (const removedCrewId of removedCrewIds) {
+        effectiveData = removeCrewFromBriefData(effectiveData, removedCrewId).data;
+      }
+      const removedCrewAssignmentTombstones = new Set([
+        ...removedCrewAssignmentKeys(existing[0]?.data),
+        ...removedCrewAssignmentKeys(effectiveProjectData),
+      ]);
+      for (const tombstone of removedCrewAssignmentTombstones) {
+        const [removedCrewId, removedFreelancerUserId] =
+          tombstone.split("\u0000");
+        effectiveData = removeCrewAssignmentFromBriefData(
+          effectiveData,
+          removedCrewId,
+          removedFreelancerUserId,
+        ).data;
+      }
+      const indexed = extractIndexed(effectiveData as Record<string, unknown>);
+      const recipients = readBriefRecipients(effectiveData, body.recipients).filter(
+        (recipient) =>
+          !removedCrewIds.includes(recipient.crewId) &&
+          !removedCrewAssignmentTombstones.has(
+            `${recipient.crewId}\u0000${recipient.freelancerUserId}`,
+          ),
+      );
+      const explicitDeliveryRecipients = explicitEmailDispatch
+        ? readBriefRecipients({}, body.recipients).filter(
+            (recipient) =>
+              !removedCrewIds.includes(recipient.crewId) &&
+              !removedCrewAssignmentTombstones.has(
+                `${recipient.crewId}\u0000${recipient.freelancerUserId}`,
+              ),
+          )
+        : [];
       const inserted = await tx
         .insert(projectBriefsTable)
         .values({
@@ -877,7 +974,7 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
           ownerUserId: userId,
           projectId: effectiveProjectId,
           ...indexed,
-          data: data as Record<string, unknown>,
+          data: effectiveData as Record<string, unknown>,
           venueTechnicalSnapshot: venueProjection.snapshot,
         })
         .onConflictDoUpdate({
@@ -887,7 +984,7 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
             ...(typeof rawProjectId === "string"
               ? { projectId: rawProjectId }
               : {}),
-            data: data as Record<string, unknown>,
+            data: effectiveData as Record<string, unknown>,
             venueTechnicalSnapshot: venueProjection.snapshot,
             updatedAt: sql`now()`,
           },
@@ -902,35 +999,80 @@ router.post("/portal/briefs", requireEmployee, async (req, res) => {
       // brief's current `recipients` list as the source of truth.
       const assignmentSync = await synchronizeBriefAssignments(tx, id, recipients);
       if (explicitEmailDispatch && explicitDeliveryRecipients.length > 0) {
-        const recipientIds = [
-          ...new Set(
-            explicitDeliveryRecipients.map(
-              (recipient) => recipient.freelancerUserId,
+        // Share Brief is the deliberate producer resend action. Keep its
+        // historical explicit semantics (terminal sent/failed deliveries are
+        // reset), while send_request remains idempotent for already-sent
+        // requests and only retries a selected failed delivery.
+        if (notificationType === "share_brief") {
+          const recipientIds = [
+            ...new Set(
+              explicitDeliveryRecipients.map(
+                (recipient) => recipient.freelancerUserId,
+              ),
             ),
-          ),
-        ];
-        await tx
-          .update(briefDispatchesTable)
-          .set({
-            state: "pending",
-            claimedAt: null,
-            leaseExpiresAt: null,
-            failedAt: null,
-            updatedAt: sql`now()`,
+          ];
+          await tx
+            .update(briefDispatchesTable)
+            .set({
+              state: "pending",
+              claimedAt: null,
+              leaseExpiresAt: null,
+              failedAt: null,
+              updatedAt: sql`now()`,
+            })
+            .where(
+              and(
+                eq(briefDispatchesTable.briefId, id),
+                inArray(briefDispatchesTable.freelancerUserId, recipientIds),
+                inArray(briefDispatchesTable.state, ["sent", "failed"]),
+              ),
+            );
+        }
+      }
+      let dispatchRecipients = selectBriefDispatchRecipients({
+        newlyAdded: assignmentSync.newRecipientRecipients,
+        explicit: explicitEmailDispatch ? explicitDeliveryRecipients : null,
+        action: notificationType,
+      });
+      if (explicitEmailDispatch && notificationType === "send_request") {
+        // An accepted role is historical booking state, not a new request.
+        // A stale producer UI may still include it in recipients[], so do
+        // not emit a second request merely because the explicit action was
+        // selected again.
+        const accepted = await tx
+          .select({
+            freelancerUserId: briefAssignmentsTable.freelancerUserId,
+            crewId: briefAssignmentsTable.crewId,
+            decision: briefAssignmentsTable.decision,
           })
+          .from(briefAssignmentsTable)
           .where(
             and(
-              eq(briefDispatchesTable.briefId, id),
-              inArray(briefDispatchesTable.freelancerUserId, recipientIds),
-              inArray(briefDispatchesTable.state, ["sent", "failed"]),
+              eq(briefAssignmentsTable.briefId, id),
+              inArray(
+                briefAssignmentsTable.freelancerUserId,
+                [...new Set(explicitDeliveryRecipients.map((r) => r.freelancerUserId))],
+              ),
             ),
           );
+        const acceptedKeys = new Set(
+          accepted
+            .filter((row) => row.decision === "accepted")
+            .map((row) => `${row.freelancerUserId}\u0000${row.crewId}`),
+        );
+        dispatchRecipients = selectBriefDispatchRecipients({
+          newlyAdded: assignmentSync.newRecipientRecipients,
+          explicit: explicitDeliveryRecipients,
+          action: notificationType,
+          acceptedKeys,
+        });
       }
       const dispatch = explicitEmailDispatch || effectiveProjectStatus === "active"
         ? await claimBriefDispatches(
             tx,
             id,
-            explicitEmailDispatch ? explicitDeliveryRecipients : recipients,
+            dispatchRecipients,
+            explicitEmailDispatch,
           )
         : null;
       return {
@@ -1074,7 +1216,9 @@ router.get(
 /** DELETE /api/portal/briefs/:id/assignments/:crewId
  * Producer-only cancellation of one exact unanswered freelancer role slot.
  * The brief row lock serializes this with freelancer responses, so a request
- * cannot be accepted while it is being cancelled. */
+ * cannot be accepted while it is being cancelled. `mode: "remove"` is the
+ * explicit role-slot removal action. It unlinks the active project/brief role
+ * while retaining accepted assignment, gig, and work-history rows. */
 router.delete(
   "/portal/briefs/:id/assignments/:crewId",
   requireEmployee,
@@ -1083,7 +1227,11 @@ router.delete(
     const userId = (req as unknown as { _userId: string })._userId;
     const briefId = String(req.params.id ?? "");
     const crewId = String(req.params.crewId ?? "");
-    const body = (req.body ?? {}) as { freelancerUserId?: unknown };
+    const body = (req.body ?? {}) as {
+      freelancerUserId?: unknown;
+      mode?: unknown;
+    };
+    const mode = body.mode === undefined ? "cancel" : body.mode;
     const freelancerUserId =
       typeof body.freelancerUserId === "string"
         ? body.freelancerUserId.trim()
@@ -1092,13 +1240,52 @@ router.delete(
       !crewId ||
       crewId.length > 255 ||
       !freelancerUserId ||
-      freelancerUserId.length > 255
+      freelancerUserId.length > 255 ||
+      (mode !== "cancel" && mode !== "remove")
     ) {
-      res.status(400).json({ ok: false, error: "Invalid assignment identity." });
+      res.status(400).json({
+        ok: false,
+        error:
+          mode !== "cancel" && mode !== "remove"
+            ? 'mode must be "cancel" or "remove".'
+            : "Invalid assignment identity.",
+      });
       return;
     }
     try {
       const result = await db.transaction(async (tx) => {
+        await tx.execute(PROJECT_BRIEF_PROVENANCE_LOCK);
+        // Lock project first and brief second after reading the immutable
+        // relation. Autosaves use the same lock order, preventing a stale
+        // project payload from racing this removal.
+        const [briefLink] = await tx
+          .select({
+            projectId: projectBriefsTable.projectId,
+            ownerUserId: projectBriefsTable.ownerUserId,
+          })
+          .from(projectBriefsTable)
+          .where(eq(projectBriefsTable.id, briefId))
+          .limit(1);
+        if (!briefLink) return { kind: "no_brief" as const };
+        let project: ProjectRow | null = null;
+        if (briefLink.projectId) {
+          const [lockedProject] = await tx
+            .select()
+            .from(projectsTable)
+            .where(eq(projectsTable.id, briefLink.projectId))
+            .for("update")
+            .limit(1);
+          if (!lockedProject) return { kind: "no_project" as const };
+          project = lockedProject;
+          if (
+            isProjectArchived(lockedProject) ||
+            ["completed", "archived"].includes(
+              deriveLegacyProjectStatus(lockedProject),
+            )
+          ) {
+            return { kind: "terminal" as const };
+          }
+        }
         const [brief] = await tx
           .select({
             ownerUserId: projectBriefsTable.ownerUserId,
@@ -1115,6 +1302,8 @@ router.delete(
             id: briefAssignmentsTable.id,
             decision: briefAssignmentsTable.decision,
             acceptedGigId: briefAssignmentsTable.acceptedGigId,
+            crewId: briefAssignmentsTable.crewId,
+            freelancerUserId: briefAssignmentsTable.freelancerUserId,
           })
           .from(briefAssignmentsTable)
           .where(
@@ -1129,22 +1318,118 @@ router.delete(
           )
           .limit(1);
         if (!assignment) return { kind: "no_assignment" as const };
+        if (mode === "remove") {
+          // The assignment identity must still be the active brief recipient
+          // while the brief row is locked. A stale producer action must not
+          // remove a role after a replacement has taken over the brief slot.
+          if (!isCurrentBriefRecipient(brief.data, crewId, freelancerUserId)) {
+            return { kind: "stale_assignment" as const };
+          }
+          // A crew id is the immutable role-slot identity. Do not let a stale
+          // UI remove a replacement that now occupies the same slot.
+          if (project) {
+            const currentFreelancer = projectCrewFreelancerForRole(
+              project.data,
+              crewId,
+            );
+            if (currentFreelancer && currentFreelancer !== freelancerUserId) {
+              return { kind: "stale_assignment" as const };
+            }
+          }
+          const nextBrief = removeCrewFromBriefData(brief.data, crewId);
+          await tx
+            .update(projectBriefsTable)
+            .set({ data: nextBrief.data, updatedAt: sql`now()` })
+            .where(eq(projectBriefsTable.id, briefId));
+          if (project) {
+            await tx
+              .update(projectsTable)
+              .set({
+                data: removeCrewFromProjectData(project.data, crewId),
+                updatedAt: sql`now()`,
+              })
+              .where(eq(projectsTable.id, project.id));
+          }
+          return { kind: "removed" as const };
+        }
         if (!canCancelBriefAssignment(assignment)) {
           return { kind: "not_pending" as const };
         }
+        const slotAssignments = await tx
+          .select({
+            freelancerUserId: briefAssignmentsTable.freelancerUserId,
+            decision: briefAssignmentsTable.decision,
+          })
+          .from(briefAssignmentsTable)
+          .where(
+            and(
+              eq(briefAssignmentsTable.briefId, briefId),
+              eq(briefAssignmentsTable.crewId, crewId),
+            ),
+          );
+        const hasOtherPendingCandidate = slotAssignments.some(
+          (candidate) =>
+            candidate.freelancerUserId !== freelancerUserId &&
+            candidate.decision === "pending",
+        );
+        const hasOtherCurrentCandidate = recipientsFromBriefData(brief.data).some(
+          (recipient) =>
+            recipient.crewId === crewId &&
+            recipient.freelancerUserId !== freelancerUserId,
+        );
+        const briefRoleMatches =
+          isCurrentBriefRecipient(brief.data, crewId, freelancerUserId) &&
+          !hasOtherCurrentCandidate;
+        const projectFreelancer = project
+          ? projectCrewFreelancerForRole(project.data, crewId)
+          : null;
+        // A pending cancellation only removes the whole role when this
+        // account is still the active project assignment. If another
+        // candidate occupies the same brief slot, or the project role is
+        // unassigned/different, remove only this exact pending candidate so
+        // the role remains available for replacement.
+        const removeActiveRole =
+          briefRoleMatches &&
+          !hasOtherPendingCandidate &&
+          (!project || projectFreelancer === freelancerUserId);
         const nextBrief = removeCancelledAssignmentFromBriefData(
           brief.data,
           crewId,
           freelancerUserId,
         );
+        const exactCandidateBrief = removeCrewAssignmentFromBriefData(
+          nextBrief.data,
+          crewId,
+          freelancerUserId,
+        ).data;
         await tx
           .delete(briefAssignmentsTable)
           .where(eq(briefAssignmentsTable.id, assignment.id));
         await tx
           .update(projectBriefsTable)
-          .set({ data: nextBrief.data, updatedAt: sql`now()` })
+          .set({
+            data: removeActiveRole
+              ? removeCrewFromBriefData(brief.data, crewId).data
+              : exactCandidateBrief,
+            updatedAt: sql`now()`,
+          })
           .where(eq(projectBriefsTable.id, briefId));
-        return { kind: "cancelled" as const };
+        if (project) {
+          await tx
+            .update(projectsTable)
+            .set({
+              data: removeActiveRole
+                ? removeCrewFromProjectData(project.data, crewId)
+                : markCrewAssignmentRemovedFromProjectData(
+                    project.data,
+                    crewId,
+                    freelancerUserId,
+                  ),
+              updatedAt: sql`now()`,
+            })
+            .where(eq(projectsTable.id, project.id));
+        }
+        return { kind: "cancelled", roleRemoved: removeActiveRole } as const;
       });
       if (result.kind === "no_brief" || result.kind === "no_assignment") {
         res.status(404).json({ ok: false, error: "Assignment not found." });
@@ -1154,6 +1439,24 @@ router.delete(
         res.status(403).json({ ok: false, error: "Not your brief." });
         return;
       }
+      if (result.kind === "no_project") {
+        res.status(404).json({ ok: false, error: "Project not found." });
+        return;
+      }
+      if (result.kind === "terminal") {
+        res.status(409).json({
+          ok: false,
+          error: "Completed and archived projects are read-only.",
+        });
+        return;
+      }
+      if (result.kind === "stale_assignment") {
+        res.status(409).json({
+          ok: false,
+          error: "The role has already been assigned to another freelancer.",
+        });
+        return;
+      }
       if (result.kind === "not_pending") {
         res.status(409).json({
           ok: false,
@@ -1161,7 +1464,47 @@ router.delete(
         });
         return;
       }
-      res.json({ ok: true, cancelled: true, briefId, crewId });
+      if (result.kind === "removed") {
+        try {
+          await notifyCrewResponse(briefId);
+        } catch (err) {
+          logger.error(
+            {
+              briefId,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            "portal crew removal notification failed",
+          );
+        }
+        res.json({
+          ok: true,
+          removed: true,
+          briefId,
+          crewId,
+          mode: "remove",
+        });
+        return;
+      }
+      if (result.roleRemoved) {
+        try {
+          await notifyCrewResponse(briefId);
+        } catch (err) {
+          logger.error(
+            {
+              briefId,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            "portal crew cancellation notification failed",
+          );
+        }
+      }
+      res.json({
+        ok: true,
+        cancelled: true,
+        roleRemoved: result.roleRemoved,
+        briefId,
+        crewId,
+      });
     } catch (err) {
       logger.error(
         {
@@ -1299,12 +1642,18 @@ router.post(
           return { kind: "cancelled" as const };
         }
         if (
-          myRow.decision === "declined" &&
           !isCurrentBriefRecipient(briefRow.data, myRow.crewId, userId)
         ) {
           return { kind: "replaced" as const };
         }
-        const slotSiblings = siblings.filter((s) => s.crewId === myRow.crewId);
+        // Accepted assignments removed from the active roster remain in this
+        // table for history. They must not retain brief access or block a
+        // replacement freelancer from winning the role slot.
+        const slotSiblings = siblings.filter(
+          (s) =>
+            s.crewId === myRow.crewId &&
+            isCurrentBriefRecipient(briefRow.data, s.crewId, s.freelancerUserId),
+        );
         // Older server-created assignments can have a trusted snapshot and
         // acceptedGigId but no exact gig link. Adopt only that exact,
         // same-user, same-brief unlinked row. Never scan broadly by
@@ -1394,7 +1743,10 @@ router.post(
                 and(
                   eq(briefAssignmentsTable.briefId, briefId),
                   eq(briefAssignmentsTable.decision, "too_late"),
-                  eq(briefAssignmentsTable.crewId, myRow.crewId),
+                  inArray(
+                    briefAssignmentsTable.id,
+                    slotSiblings.map((s) => s.id),
+                  ),
                 ),
               );
           }
@@ -1483,7 +1835,10 @@ router.post(
             and(
               eq(briefAssignmentsTable.briefId, briefId),
               eq(briefAssignmentsTable.decision, "pending"),
-              eq(briefAssignmentsTable.crewId, myRow.crewId),
+                inArray(
+                  briefAssignmentsTable.id,
+                  slotSiblings.map((s) => s.id),
+                ),
             ),
           );
         // Materialise the booking. The gig row is the source of truth
@@ -2878,7 +3233,20 @@ router.get(
         .where(eq(briefRoomAssignmentsTable.briefId, id));
 
       const crew = rows
-        .filter((r) => ROSTER_GIG_STATUSES.has(r.status))
+        .filter(
+          (r) =>
+            ROSTER_GIG_STATUSES.has(r.status) &&
+            // The roster is an active-role DTO. A confirmed gig remains
+            // available in history/payroll, but an accepted assignment whose
+            // exact role/account pair is no longer in the brief must not
+            // appear in the current producer roster.
+            (!r.crewId ||
+              isCurrentBriefRecipient(
+                brief.data,
+                r.crewId,
+                r.freelancerUserId,
+              )),
+        )
         .map((r) => {
           const hasProfile = typeof r.profileFullName === "string";
           const name =
@@ -3583,17 +3951,28 @@ router.get(
         .select({
           crewId: briefAssignmentsTable.crewId,
           decision: briefAssignmentsTable.decision,
+          briefData: projectBriefsTable.data,
         })
         .from(briefAssignmentsTable)
+        .innerJoin(
+          projectBriefsTable,
+          eq(briefAssignmentsTable.briefId, projectBriefsTable.id),
+        )
         .where(
           and(
             eq(briefAssignmentsTable.briefId, id),
             eq(briefAssignmentsTable.freelancerUserId, userId),
           ),
-        )
-        .limit(1);
-      const assignment = assignmentRows[0];
-      if (!assignment || assignment.decision !== "accepted") {
+        );
+      const assignment = assignmentRows.find(
+        (candidate) =>
+          candidate.decision === "accepted" &&
+          isCurrentBriefRecipient(candidate.briefData, candidate.crewId, userId),
+      );
+      if (
+        !assignment ||
+        assignment.decision !== "accepted"
+      ) {
         // 403, not 404 — the brief exists, the caller just isn't
         // entitled. Same status the rest of the portal uses.
         res.status(403).json({

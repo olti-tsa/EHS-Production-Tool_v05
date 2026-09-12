@@ -4192,6 +4192,62 @@ function App() {
     cloudSaveQueue.current = queued.catch(() => undefined);
     await queued;
   };
+  /** Remove one exact linked crew role from the active portal booking.
+   *  This is deliberately serialized behind any already-queued project
+   *  autosave: an older payload may still contain the booking, and must
+   *  reach the server before the assignment DELETE so it cannot resurrect
+   *  the active slot after removal. The DELETE itself preserves the
+   *  server-side assignment/payroll history. */
+  const removeCrewBooking = useCallback(
+    async (crewId: string, freelancerUserId: string): Promise<void> => {
+      if (!activeBriefId) {
+        throw new Error(tr("crew.remove.noBrief"));
+      }
+      if (!crewId || !freelancerUserId) {
+        throw new Error(tr("crew.remove.missingIdentity"));
+      }
+      // Cancel a debounced snapshot captured before the producer clicked
+      // remove. Any request already running remains in the queue and is
+      // completed before the DELETE below.
+      if (projectSaveTimer.current) {
+        clearTimeout(projectSaveTimer.current);
+        projectSaveTimer.current = null;
+      }
+      ++projectSaveVersion.current;
+      const run = async () => {
+        const token = await getToken();
+        if (!token) throw new Error(tr("crew.remove.authError"));
+        const response = await fetch(
+          `/api/portal/briefs/${encodeURIComponent(activeBriefId)}/assignments/${encodeURIComponent(crewId)}`,
+          {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              freelancerUserId,
+              mode: "remove",
+            }),
+          },
+        );
+        const result = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: string;
+        } | null;
+        if (!response.ok || !result?.ok) {
+          throw new Error(
+            result?.error ??
+              tr("crew.remove.errorStatus", { status: response.status }),
+          );
+        }
+      };
+      const queued = cloudSaveQueue.current.catch(() => undefined).then(run);
+      cloudSaveQueue.current = queued.catch(() => undefined);
+      await queued;
+    },
+    [activeBriefId, getToken, tr],
+  );
   const removeCrew = (id: string) => {
     setCrew((all) => all.filter((m) => m.id !== id));
   };
@@ -8023,6 +8079,7 @@ function App() {
           onUpdate={updateCrew}
           onSaveShifts={saveCrewShifts}
           onRemove={removeCrew}
+          onRemoveBooking={removeCrewBooking}
           onDuplicate={duplicateCrew}
           onSendLinkedRequests={sendLinkedCrewRequests}
           onReplaceRole={replaceCrewRole}

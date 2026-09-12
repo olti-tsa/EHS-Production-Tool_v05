@@ -824,23 +824,6 @@ export function BriefDetail({
             </span>
           </div>
         ) : null}
-        {brief.project.clientContact ? (
-          <div
-            style={{
-              color: c.muted,
-              fontSize: 13,
-              fontWeight: 600,
-              marginTop: 2,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
-          >
-            <span style={{ color: c.muted, fontWeight: 700 }}>
-              {t("portal.brief.contact")}:
-            </span>{" "}
-            <span style={{ color: c.text }}>{brief.project.clientContact}</span>
-          </div>
-        ) : null}
         <div style={{ color: c.muted, fontSize: 14 }}>
           {brief.project.endDate &&
           brief.project.endDate !== brief.project.date

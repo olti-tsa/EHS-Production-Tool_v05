@@ -138,8 +138,13 @@ export async function synchronizeBriefAssignments(
   tx: Transaction,
   briefId: string,
   recipients: BriefRecipient[],
-): Promise<{ newRecipientUserIds: string[]; existingRecipientCount: number }> {
+): Promise<{
+  newRecipientUserIds: string[];
+  newRecipientRecipients: BriefRecipient[];
+  existingRecipientCount: number;
+}> {
   const newRecipientUserIds: string[] = [];
+  const newRecipientRecipients: BriefRecipient[] = [];
   let existingRecipientCount = 0;
   const currentKeys = new Set(
     recipients.map(
@@ -196,6 +201,7 @@ export async function synchronizeBriefAssignments(
         })
         .where(eq(briefAssignmentsTable.id, existing.id));
       newRecipientUserIds.push(recipient.freelancerUserId);
+      newRecipientRecipients.push(recipient);
       continue;
     }
     const inserted = await tx
@@ -214,7 +220,10 @@ export async function synchronizeBriefAssignments(
         ],
       })
       .returning({ id: briefAssignmentsTable.id });
-    if (inserted.length > 0) newRecipientUserIds.push(recipient.freelancerUserId);
+    if (inserted.length > 0) {
+      newRecipientUserIds.push(recipient.freelancerUserId);
+      newRecipientRecipients.push(recipient);
+    }
     else existingRecipientCount += 1;
     await tx
       .insert(briefDispatchesTable)
@@ -230,7 +239,7 @@ export async function synchronizeBriefAssignments(
         ],
       });
   }
-  return { newRecipientUserIds, existingRecipientCount };
+  return { newRecipientUserIds, newRecipientRecipients, existingRecipientCount };
 }
 
 /** Transactionally claims durable outbox rows. Assignment existence is not

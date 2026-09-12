@@ -30,6 +30,7 @@ import {
   projectDataWithOrganizationDefaults,
   projectFinanceSeed,
 } from "../lib/projectDefaults";
+import { normalizeProjectCrewData } from "../lib/projectCrewRemoval";
 import { dispatchBriefRequestEmails } from "../lib/briefEmail";
 import {
   canTransitionProject,
@@ -400,9 +401,11 @@ router.post("/projects", requireSignedIn, async (req, res) => {
       return;
     }
     const organization = await getOrganizationSettings();
-    const projectData = projectDataWithOrganizationDefaults(
-      data,
-      organizationDefaultsSnapshot(organization),
+    const projectData = normalizeProjectCrewData(
+      projectDataWithOrganizationDefaults(
+        data,
+        organizationDefaultsSnapshot(organization),
+      ),
     );
     const projectId = randomUUID();
     const result = await db.transaction(async (tx) => {
@@ -499,8 +502,6 @@ router.patch("/projects/:id", requireSignedIn, async (req, res) => {
   if (typeof easyjob_number === "string") {
     updates.easyjobNumber = easyjob_number.trim().slice(0, 100) || null;
   }
-  if (data !== undefined) updates.data = data;
-
   try {
     const accessRole = await getEmployeeProjectAccess(String(id), userId);
     if (!accessRole) {
@@ -550,6 +551,12 @@ router.patch("/projects/:id", requireSignedIn, async (req, res) => {
         ))
       ) {
         return { kind: "invalid_brief" as const };
+      }
+      if (data !== undefined) {
+        // A remove request persists role tombstones in project.data. Merge
+        // those server-owned markers into every later autosave so an older
+        // client payload cannot resurrect the removed crew slot.
+        updates.data = normalizeProjectCrewData(data, project.data);
       }
       const [updated] = await tx
         .update(projectsTable)

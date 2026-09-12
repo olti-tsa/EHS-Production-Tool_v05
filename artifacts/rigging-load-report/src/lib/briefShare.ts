@@ -44,7 +44,9 @@ function base64UrlToBuffer(s: string): Uint8Array {
 }
 
 export async function encodeBrief(brief: ProjectBrief): Promise<string> {
-  const json = JSON.stringify(brief);
+  // Share links are freelancer-facing, unlike the producer's saved project.
+  const { clientContact: _clientContact, ...project } = brief.project;
+  const json = JSON.stringify({ ...brief, project });
   const stream = new Response(json).body;
   if (!stream || typeof CompressionStream === "undefined") {
     // Fallback: uncompressed base64url. Larger but functional on very
@@ -85,7 +87,9 @@ async function decodeBriefInternal(encoded: string): Promise<ProjectBrief> {
   if (!brief) {
     throw new BriefShareError("payload_invalid");
   }
-  return brief;
+  // Also protect previously generated links containing the legacy contact.
+  const { clientContact: _clientContact, ...project } = brief.project;
+  return { ...brief, project };
 }
 
 export async function decodeBrief(encoded: string): Promise<ProjectBrief> {

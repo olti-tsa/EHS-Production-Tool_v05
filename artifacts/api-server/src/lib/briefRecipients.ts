@@ -3,6 +3,8 @@ export type BriefRecipient = {
   freelancerUserId: string;
 };
 
+export type BriefDispatchAction = "send_request" | "share_brief";
+
 /** Merge all current brief assignments for reconciliation. Callers that are
  * deliberately sending one explicit request should pass an empty data object
  * and the target top-level recipient list instead. */
@@ -34,4 +36,36 @@ export function readBriefRecipients(
     }
   }
   return [...seen.values()];
+}
+
+/**
+ * Assignment reconciliation and notification selection are deliberately
+ * separate. Lifecycle saves use only newly inserted/reactivated role keys;
+ * explicit actions use only their selected recipients. The outbox itself is
+ * user-scoped (one email can describe multiple roles), so collapse duplicate
+ * user ids after role-level filtering.
+ */
+export function selectBriefDispatchRecipients(args: {
+  newlyAdded: BriefRecipient[];
+  explicit: BriefRecipient[] | null;
+  action: BriefDispatchAction;
+  acceptedKeys?: ReadonlySet<string>;
+}): BriefRecipient[] {
+  const candidates = args.explicit ?? args.newlyAdded;
+  const acceptedKeys = args.acceptedKeys ?? new Set<string>();
+  const selected =
+    args.action === "send_request"
+      ? candidates.filter(
+          (recipient) =>
+            !acceptedKeys.has(
+              `${recipient.freelancerUserId}\u0000${recipient.crewId}`,
+            ),
+        )
+      : candidates;
+  const seen = new Set<string>();
+  return selected.filter((recipient) => {
+    if (seen.has(recipient.freelancerUserId)) return false;
+    seen.add(recipient.freelancerUserId);
+    return true;
+  });
 }

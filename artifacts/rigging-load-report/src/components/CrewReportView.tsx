@@ -18,6 +18,13 @@ type Props = {
   onUpdate: (id: string, patch: Partial<CrewMember>) => void;
   onSaveShifts?: (id: string, patch: Partial<CrewMember>) => Promise<void>;
   onRemove: (id: string) => void;
+  /** Remove one exact freelancer account from one exact active booking
+   *  slot. The parent serializes the server DELETE with project autosave;
+   *  assignment history remains on the server. */
+  onRemoveBooking?: (
+    crewId: string,
+    freelancerUserId: string,
+  ) => void | Promise<void>;
   onDuplicate: (id: string) => void;
   onSendLinkedRequests?: (members: CrewMember[]) => void | Promise<void>;
   sendingLinkedRequests?: boolean;
@@ -87,6 +94,7 @@ export function CrewReportView({
   onUpdate,
   onSaveShifts,
   onRemove,
+  onRemoveBooking,
   onDuplicate,
   onSendLinkedRequests,
   sendingLinkedRequests,
@@ -192,6 +200,7 @@ export function CrewReportView({
             onUpdate={onUpdate}
             onSaveShifts={onSaveShifts}
             onRemove={onRemove}
+            onRemoveBooking={onRemoveBooking}
             onDuplicate={onDuplicate}
             onSendLinkedRequests={onSendLinkedRequests}
             sendingLinkedRequests={sendingLinkedRequests}

@@ -77192,6 +77192,32 @@ function pickSkills(raw) {
 }
 var router6 = (0, import_express8.Router)();
 var objectStorageService2 = new ObjectStorageService();
+function activeGigAvailabilityPredicate(alias) {
+  const gigAssignmentId = sql.raw(`${alias}.brief_assignment_id`);
+  return sql`(
+    ${gigAssignmentId} IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM brief_assignments active_ba
+      JOIN project_briefs active_b
+        ON active_b.id = active_ba.brief_id
+      WHERE active_ba.id = ${gigAssignmentId}
+        AND active_ba.decision = 'accepted'
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(active_b.data->'assignments') = 'array'
+              THEN active_b.data->'assignments'
+              ELSE '[]'::jsonb
+            END
+          ) AS active_role
+          WHERE active_role->>'crewId' = active_ba.crew_id
+            AND active_role->>'freelancerUserId' = active_ba.freelancer_user_id
+        )
+    )
+  )`;
+}
 var PROFILE_PHOTO_TYPES = /* @__PURE__ */ new Set(["image/jpeg", "image/png", "image/webp"]);
 var PROFILE_PHOTO_MAX_BYTES = 5e6;
 var PROFILE_OBJECT_PATH = /^\/objects\/uploads\/[A-Za-z0-9_-]{8,128}$/;
@@ -77783,6 +77809,7 @@ router6.get("/portal/freelancers", requireEmployee, async (req, res) => {
               SELECT 1 FROM gigs g
                WHERE g.freelancer_user_id = ${directoryUserId}
                  AND g.status IN ('confirmed','done','invoiced','paid')
+                 AND ${activeGigAvailabilityPredicate("g")}
                  AND g.start_date IS NOT NULL
                  AND g.start_date <= ${endDate}::date
                  AND COALESCE(g.end_date, g.start_date) >= ${startDate}::date
@@ -77819,7 +77846,7 @@ router6.get("/portal/freelancers", requireEmployee, async (req, res) => {
       // Privacy-safe booking signal for producers. Notes and external
       // calendar metadata never leave the calendar tables.
       availabilityStatus: startDate ? sql`CASE
-              WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id = ${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date) >= ${startDate}::date) THEN 'unavailable'
+              WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id = ${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND ${activeGigAvailabilityPredicate("cg")} AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date) >= ${startDate}::date) THEN 'unavailable'
               WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from}) THEN 'unavailable'
               WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.expires_at > now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from}) THEN 'tentative'
               WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${directoryUserId} AND ca.status='unavailable' AND ca.starts_at < ${requestedBounds.to} AND ca.ends_at > ${requestedBounds.from}) THEN 'unavailable'
@@ -77827,7 +77854,7 @@ router6.get("/portal/freelancers", requireEmployee, async (req, res) => {
               WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${directoryUserId} AND ca.status='available' AND ca.starts_at <= ${requestedBounds.from} AND ca.ends_at >= ${requestedBounds.to}) THEN 'full'
               WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${directoryUserId} AND ca.status='available' AND ca.starts_at < ${requestedBounds.to} AND ca.ends_at > ${requestedBounds.from}) THEN 'partial'
               ELSE 'unknown' END`.as("availability_status") : sql`'unknown'`.as("availability_status"),
-      availabilityReason: startDate ? sql`CASE WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id=${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date)>=${startDate}::date) THEN 'gig' WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from}) THEN 'external_busy' WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from}) THEN 'hold' ELSE NULL END`.as("availability_reason") : sql`NULL`.as("availability_reason"),
+      availabilityReason: startDate ? sql`CASE WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id=${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND ${activeGigAvailabilityPredicate("cg")} AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date)>=${startDate}::date) THEN 'gig' WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from}) THEN 'external_busy' WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from}) THEN 'hold' ELSE NULL END`.as("availability_reason") : sql`NULL`.as("availability_reason"),
       availabilityUpdatedAt: sql`(SELECT max(x.updated_at) FROM calendar_availability x WHERE x.user_id=${directoryUserId})`.as("availability_updated_at"),
       conflicts: startDate ? sql`(SELECT count(*)::int FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds.to} AND cbi.ends_at > ${requestedBounds.from})`.as("conflicts") : sql`0`.as("conflicts"),
       holdId: startDate && briefId ? sql`(SELECT ch.id FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.owner_user_id=${callerUserId} AND ch.brief_id=${briefId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds.to} AND ch.ends_at > ${requestedBounds.from} ORDER BY ch.expires_at LIMIT 1)`.as("hold_id") : sql`NULL`.as("hold_id"),
@@ -78658,6 +78685,21 @@ function readBriefRecipients(data, topLevelRecipients) {
   }
   return [...seen.values()];
 }
+function selectBriefDispatchRecipients(args) {
+  const candidates = args.explicit ?? args.newlyAdded;
+  const acceptedKeys = args.acceptedKeys ?? /* @__PURE__ */ new Set();
+  const selected = args.action === "send_request" ? candidates.filter(
+    (recipient) => !acceptedKeys.has(
+      `${recipient.freelancerUserId}\0${recipient.crewId}`
+    )
+  ) : candidates;
+  const seen = /* @__PURE__ */ new Set();
+  return selected.filter((recipient) => {
+    if (seen.has(recipient.freelancerUserId)) return false;
+    seen.add(recipient.freelancerUserId);
+    return true;
+  });
+}
 
 // src/lib/briefResponseEvents.ts
 var CHANNEL = "portal_crew_response";
@@ -79011,6 +79053,7 @@ function summarizeBriefDelivery(dispatch, delivery) {
 }
 async function synchronizeBriefAssignments(tx, briefId, recipients) {
   const newRecipientUserIds = [];
+  const newRecipientRecipients = [];
   let existingRecipientCount = 0;
   const currentKeys = new Set(
     recipients.map(
@@ -79048,6 +79091,7 @@ async function synchronizeBriefAssignments(tx, briefId, recipients) {
         updatedAt: sql`now()`
       }).where(eq(briefAssignmentsTable.id, existing.id));
       newRecipientUserIds.push(recipient.freelancerUserId);
+      newRecipientRecipients.push(recipient);
       continue;
     }
     const inserted = await tx.insert(briefAssignmentsTable).values({
@@ -79062,8 +79106,10 @@ async function synchronizeBriefAssignments(tx, briefId, recipients) {
         briefAssignmentsTable.crewId
       ]
     }).returning({ id: briefAssignmentsTable.id });
-    if (inserted.length > 0) newRecipientUserIds.push(recipient.freelancerUserId);
-    else existingRecipientCount += 1;
+    if (inserted.length > 0) {
+      newRecipientUserIds.push(recipient.freelancerUserId);
+      newRecipientRecipients.push(recipient);
+    } else existingRecipientCount += 1;
     await tx.insert(briefDispatchesTable).values({
       briefId,
       freelancerUserId: recipient.freelancerUserId,
@@ -79075,7 +79121,7 @@ async function synchronizeBriefAssignments(tx, briefId, recipients) {
       ]
     });
   }
-  return { newRecipientUserIds, existingRecipientCount };
+  return { newRecipientUserIds, newRecipientRecipients, existingRecipientCount };
 }
 async function claimBriefDispatches(tx, briefId, recipients, retryFailed = false) {
   if (recipients.length === 0) {
@@ -79149,6 +79195,156 @@ function emptyDispatchSummary() {
   return { sent: 0, alreadySent: 0, skipped: 0 };
 }
 
+// src/lib/projectCrewRemoval.ts
+var REMOVED_CREW_IDS_KEY = "removedCrewIds";
+var REMOVED_CREW_ASSIGNMENTS_KEY = "removedCrewAssignments";
+function record3(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function cleanCrewId(value) {
+  if (typeof value !== "string") return null;
+  const id = value.trim();
+  return id && id.length <= 255 ? id : null;
+}
+function assignmentTombstoneKey(crewId, freelancerUserId) {
+  const cleanCrew = cleanCrewId(crewId);
+  const cleanFreelancer = typeof freelancerUserId === "string" ? freelancerUserId.trim() : "";
+  if (!cleanCrew || !cleanFreelancer || cleanFreelancer.length > 255) return null;
+  return `${cleanCrew}\0${cleanFreelancer}`;
+}
+function removedCrewIdsFromProjectData(data) {
+  const raw = record3(data)[REMOVED_CREW_IDS_KEY];
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map(cleanCrewId).filter((id) => id !== null))];
+}
+function removedCrewAssignmentKeys(data) {
+  const raw = record3(data)[REMOVED_CREW_ASSIGNMENTS_KEY];
+  if (!Array.isArray(raw)) return [];
+  return [
+    ...new Set(
+      raw.map((value) => {
+        if (typeof value !== "string") return null;
+        const [crewId, freelancerUserId] = value.split("\0");
+        return assignmentTombstoneKey(crewId, freelancerUserId);
+      }).filter((key2) => key2 !== null)
+    )
+  ];
+}
+function normalizeProjectCrewData(incoming, persisted = null) {
+  const data = { ...record3(incoming) };
+  const removed = /* @__PURE__ */ new Set([
+    ...removedCrewIdsFromProjectData(persisted),
+    ...removedCrewIdsFromProjectData(incoming)
+  ]);
+  const removedAssignments = /* @__PURE__ */ new Set([
+    ...removedCrewAssignmentKeys(persisted),
+    ...removedCrewAssignmentKeys(incoming)
+  ]);
+  if (removed.size > 0) {
+    data[REMOVED_CREW_IDS_KEY] = [...removed];
+    if (Array.isArray(data.crew)) {
+      data.crew = data.crew.filter((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+        const crewId = cleanCrewId(value.id);
+        return !crewId || !removed.has(crewId);
+      });
+    }
+  }
+  if (removedAssignments.size > 0) {
+    data[REMOVED_CREW_ASSIGNMENTS_KEY] = [...removedAssignments];
+    if (Array.isArray(data.crew)) {
+      data.crew = data.crew.map((value) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          return value;
+        }
+        const role = value;
+        const key2 = assignmentTombstoneKey(role.id, role.freelancerUserId);
+        return key2 && removedAssignments.has(key2) ? { ...role, freelancerUserId: null } : value;
+      });
+    }
+  }
+  return data;
+}
+function removeCrewFromProjectData(current, crewId) {
+  const id = cleanCrewId(crewId);
+  const data = normalizeProjectCrewData(current);
+  if (!id) return data;
+  const removed = new Set(removedCrewIdsFromProjectData(data));
+  removed.add(id);
+  data[REMOVED_CREW_IDS_KEY] = [...removed];
+  if (Array.isArray(data.crew)) {
+    data.crew = data.crew.filter((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+      const rowId = cleanCrewId(value.id);
+      return rowId !== id;
+    });
+  }
+  return data;
+}
+function markCrewAssignmentRemovedFromProjectData(current, crewId, freelancerUserId) {
+  const data = normalizeProjectCrewData(current);
+  const key2 = assignmentTombstoneKey(crewId, freelancerUserId);
+  if (!key2) return data;
+  const tombstones = new Set(removedCrewAssignmentKeys(data));
+  tombstones.add(key2);
+  data[REMOVED_CREW_ASSIGNMENTS_KEY] = [...tombstones];
+  return normalizeProjectCrewData(data);
+}
+function projectCrewFreelancerForRole(current, crewId) {
+  const crew = record3(current).crew;
+  if (!Array.isArray(crew)) return null;
+  const role = crew.find(
+    (value) => value && typeof value === "object" && !Array.isArray(value) && value.id === crewId
+  );
+  const freelancerUserId = role && typeof role === "object" && !Array.isArray(role) && role.freelancerUserId;
+  return typeof freelancerUserId === "string" && freelancerUserId.trim() ? freelancerUserId.trim() : null;
+}
+function removeCrewFromBriefData(current, crewId, options = {}) {
+  const source = { ...record3(current) };
+  const removedCrewIds = new Set(removedCrewIdsFromProjectData(source));
+  const id = cleanCrewId(crewId);
+  if (id && options.persistTombstone !== false) removedCrewIds.add(id);
+  const assignments = Array.isArray(source.assignments) ? source.assignments.filter((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return true;
+    return value.crewId !== crewId;
+  }) : null;
+  const removed = assignments !== null && assignments.length !== source.assignments.length;
+  return {
+    data: {
+      ...source,
+      ...assignments ? { assignments } : {},
+      ...source.recipientCrewId === crewId ? { recipientCrewId: null } : {},
+      ...removedCrewIds.size > 0 && options.persistTombstone !== false ? { [REMOVED_CREW_IDS_KEY]: [...removedCrewIds] } : {}
+    },
+    removed
+  };
+}
+function removeCrewAssignmentFromBriefData(current, crewId, freelancerUserId) {
+  const source = { ...record3(current) };
+  const key2 = assignmentTombstoneKey(crewId, freelancerUserId);
+  let removed = false;
+  const assignments = Array.isArray(source.assignments) ? source.assignments.filter((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return true;
+    }
+    const row = value;
+    const matches2 = row.crewId === crewId && row.freelancerUserId === freelancerUserId;
+    if (matches2) removed = true;
+    return !matches2;
+  }) : null;
+  const tombstones = new Set(removedCrewAssignmentKeys(source));
+  if (key2) tombstones.add(key2);
+  return {
+    data: {
+      ...source,
+      ...assignments ? { assignments } : {},
+      ...source.recipientCrewId === crewId ? { recipientCrewId: null } : {},
+      ...tombstones.size > 0 ? { [REMOVED_CREW_ASSIGNMENTS_KEY]: [...tombstones] } : {}
+    },
+    removed
+  };
+}
+
 // src/routes/portalBriefs.ts
 var router7 = (0, import_express10.Router)();
 function isCurrentBriefRecipient(briefData, crewId, freelancerUserId) {
@@ -79207,34 +79403,50 @@ var RESTRICTED_BRIEF_KEYS = /* @__PURE__ */ new Set([
   "client_contact",
   "client_contacts",
   "clientDirectory",
+  "removedCrewIds",
+  "removedCrewAssignments",
   "technicalContactName",
   "technicalContactPhone",
   "technicalContactEmail"
 ]);
+function isClientContactField(key2) {
+  const normalized = key2.replace(/[-_]/g, "").toLowerCase();
+  return /^(?:client|customer)(?:contact|contacts|email|phone|mobile|telephone|address|street|postal|zip|details|profile)$/.test(
+    normalized
+  ) || normalized === "clientcontactname" || normalized === "clientcontactphone" || normalized === "clientcontactemail";
+}
 function withoutUntrustedProfiles(raw) {
-  const submittedProject = raw.project && typeof raw.project === "object" && !Array.isArray(raw.project) ? raw.project : null;
-  const submittedClientContact = typeof submittedProject?.clientContact === "string" ? submittedProject.clientContact.trim() : "";
   const cleanse = (value) => {
     if (Array.isArray(value)) return value.map(cleanse);
     if (!value || typeof value !== "object") return value;
     const result = {};
     for (const [key2, child] of Object.entries(value)) {
-      if (RESTRICTED_BRIEF_KEYS.has(key2) || /^(?:client[_-]?)?(?:billing|contact|contacts|organization|payment)/i.test(key2)) continue;
+      if (RESTRICTED_BRIEF_KEYS.has(key2) || isClientContactField(key2) || /^(?:client[_-]?)?(?:billing|contact|contacts|organization|payment)/i.test(key2)) continue;
+      if ((key2 === "client" || key2 === "customer") && child && typeof child === "object" && !Array.isArray(child)) {
+        const cleanClient = cleanse(child);
+        if (cleanClient && typeof cleanClient === "object" && !Array.isArray(cleanClient)) {
+          const company = {};
+          for (const companyKey of ["company", "companyName", "name"]) {
+            if (typeof cleanClient[companyKey] === "string") {
+              company[companyKey] = cleanClient[companyKey];
+            }
+          }
+          if (Object.keys(company).length > 0) result[key2] = company;
+        }
+        continue;
+      }
       result[key2] = cleanse(child);
     }
     return result;
   };
   const cleansed = cleanse(raw);
   const clean2 = cleansed && typeof cleansed === "object" && !Array.isArray(cleansed) ? cleansed : {};
-  if ("client" in clean2 && typeof clean2.client !== "string") delete clean2.client;
   if ("venue" in clean2 && typeof clean2.venue !== "string") delete clean2.venue;
   if (clean2.project && typeof clean2.project === "object" && !Array.isArray(clean2.project)) {
     const project = { ...clean2.project };
     for (const key2 of RESTRICTED_BRIEF_KEYS) delete project[key2];
-    if ("client" in project && typeof project.client !== "string") delete project.client;
     if ("projectName" in project && typeof project.projectName !== "string") delete project.projectName;
     if ("venue" in project && typeof project.venue !== "string") delete project.venue;
-    if (submittedClientContact) project.clientContact = submittedClientContact;
     clean2.project = project;
   }
   return clean2;
@@ -79394,7 +79606,7 @@ router7.get("/portal/briefs/mine", requireSignedIn5, async (req, res) => {
     res.json({
       ok: true,
       briefs: rows.filter(
-        (row) => row.decision !== "declined" || isCurrentBriefRecipient(row.brief, row.crewId, userId2)
+        (row) => row.decision !== "cancelled" && isCurrentBriefRecipient(row.brief, row.crewId, userId2)
       ).map((row) => ({
         ...(() => {
           const { venueTechnicalSnapshot: _trustedSnapshot, ...withoutSnapshot } = row;
@@ -79520,7 +79732,7 @@ router7.get("/portal/briefs/:id", requireSignedIn5, async (req, res) => {
         )
       );
       const currentAssignments = assigned.filter(
-        (assignment) => assignment.decision !== "cancelled" && (assignment.decision !== "declined" || isCurrentBriefRecipient(brief.data, assignment.crewId, userId2))
+        (assignment) => assignment.decision !== "cancelled" && isCurrentBriefRecipient(brief.data, assignment.crewId, userId2)
       );
       if (currentAssignments.length > 0) {
         freelancerView = true;
@@ -79593,20 +79805,21 @@ router7.post("/portal/briefs", requireEmployee, async (req, res) => {
     res.status(400).json({ ok: false, error: "data must be a JSON object." });
     return;
   }
+  const submittedProject = submittedData.project && typeof submittedData.project === "object" && !Array.isArray(submittedData.project) ? submittedData.project : null;
+  const submittedClientContact = typeof submittedProject?.clientContact === "string" ? submittedProject.clientContact.trim() : "";
   const data = withoutUntrustedProfiles(submittedData);
+  if (submittedClientContact) {
+    const project = data.project && typeof data.project === "object" && !Array.isArray(data.project) ? { ...data.project } : {};
+    project.clientContact = submittedClientContact;
+    data.project = project;
+  }
   const serialised = JSON.stringify(data);
   if (Buffer.byteLength(serialised, "utf8") > MAX_BRIEF_BYTES) {
     res.status(413).json({ ok: false, error: "Brief too large." });
     return;
   }
   const id = typeof body.id === "string" && body.id.trim() ? body.id.trim().slice(0, 64) : randomUUID3();
-  const indexed = extractIndexed(data);
-  const recipients = readBriefRecipients(
-    data,
-    body.recipients
-  );
   const explicitEmailDispatch = body.send_email === true;
-  const explicitDeliveryRecipients = explicitEmailDispatch ? readBriefRecipients({}, body.recipients) : [];
   const notificationType = body.notification_type === "share_brief" ? "share_brief" : "send_request";
   try {
     const nestedProject = data.project && typeof data.project === "object" && !Array.isArray(data.project) ? data.project : {};
@@ -79629,7 +79842,8 @@ router7.post("/portal/briefs", requireEmployee, async (req, res) => {
       await tx.execute(PROJECT_BRIEF_PROVENANCE_LOCK);
       const existing = await tx.select({
         ownerUserId: projectBriefsTable.ownerUserId,
-        projectId: projectBriefsTable.projectId
+        projectId: projectBriefsTable.projectId,
+        data: projectBriefsTable.data
       }).from(projectBriefsTable).where(eq(projectBriefsTable.id, id)).limit(1).for("update");
       if (existing[0] && existing[0].ownerUserId !== userId2) {
         return { forbidden: true };
@@ -79642,55 +79856,122 @@ router7.post("/portal/briefs", requireEmployee, async (req, res) => {
         return { terminalProject: true };
       }
       let effectiveProjectStatus = null;
+      let effectiveProjectData = null;
       if (effectiveProjectId) {
         const [effectiveProject] = await tx.select().from(projectsTable).where(eq(projectsTable.id, effectiveProjectId)).limit(1).for("update");
         if (!effectiveProject || effectiveProject.userId !== userId2 || isProjectArchived(effectiveProject) || ["completed", "archived"].includes(deriveLegacyProjectStatus(effectiveProject))) return { terminalProject: true };
         effectiveProjectStatus = deriveLegacyProjectStatus(effectiveProject);
+        effectiveProjectData = effectiveProject.data;
       }
+      let effectiveData = data;
+      const removedCrewIds = [
+        .../* @__PURE__ */ new Set([
+          ...removedCrewIdsFromProjectData(existing[0]?.data),
+          ...removedCrewIdsFromProjectData(effectiveProjectData)
+        ])
+      ];
+      for (const removedCrewId of removedCrewIds) {
+        effectiveData = removeCrewFromBriefData(effectiveData, removedCrewId).data;
+      }
+      const removedCrewAssignmentTombstones = /* @__PURE__ */ new Set([
+        ...removedCrewAssignmentKeys(existing[0]?.data),
+        ...removedCrewAssignmentKeys(effectiveProjectData)
+      ]);
+      for (const tombstone of removedCrewAssignmentTombstones) {
+        const [removedCrewId, removedFreelancerUserId] = tombstone.split("\0");
+        effectiveData = removeCrewAssignmentFromBriefData(
+          effectiveData,
+          removedCrewId,
+          removedFreelancerUserId
+        ).data;
+      }
+      const indexed = extractIndexed(effectiveData);
+      const recipients = readBriefRecipients(effectiveData, body.recipients).filter(
+        (recipient) => !removedCrewIds.includes(recipient.crewId) && !removedCrewAssignmentTombstones.has(
+          `${recipient.crewId}\0${recipient.freelancerUserId}`
+        )
+      );
+      const explicitDeliveryRecipients = explicitEmailDispatch ? readBriefRecipients({}, body.recipients).filter(
+        (recipient) => !removedCrewIds.includes(recipient.crewId) && !removedCrewAssignmentTombstones.has(
+          `${recipient.crewId}\0${recipient.freelancerUserId}`
+        )
+      ) : [];
       const inserted = await tx.insert(projectBriefsTable).values({
         id,
         ownerUserId: userId2,
         projectId: effectiveProjectId,
         ...indexed,
-        data,
+        data: effectiveData,
         venueTechnicalSnapshot: venueProjection.snapshot
       }).onConflictDoUpdate({
         target: projectBriefsTable.id,
         set: {
           ...indexed,
           ...typeof rawProjectId === "string" ? { projectId: rawProjectId } : {},
-          data,
+          data: effectiveData,
           venueTechnicalSnapshot: venueProjection.snapshot,
           updatedAt: sql`now()`
         }
       }).returning();
       const assignmentSync = await synchronizeBriefAssignments(tx, id, recipients);
       if (explicitEmailDispatch && explicitDeliveryRecipients.length > 0) {
-        const recipientIds = [
-          ...new Set(
-            explicitDeliveryRecipients.map(
-              (recipient) => recipient.freelancerUserId
+        if (notificationType === "share_brief") {
+          const recipientIds = [
+            ...new Set(
+              explicitDeliveryRecipients.map(
+                (recipient) => recipient.freelancerUserId
+              )
+            )
+          ];
+          await tx.update(briefDispatchesTable).set({
+            state: "pending",
+            claimedAt: null,
+            leaseExpiresAt: null,
+            failedAt: null,
+            updatedAt: sql`now()`
+          }).where(
+            and(
+              eq(briefDispatchesTable.briefId, id),
+              inArray(briefDispatchesTable.freelancerUserId, recipientIds),
+              inArray(briefDispatchesTable.state, ["sent", "failed"])
+            )
+          );
+        }
+      }
+      let dispatchRecipients = selectBriefDispatchRecipients({
+        newlyAdded: assignmentSync.newRecipientRecipients,
+        explicit: explicitEmailDispatch ? explicitDeliveryRecipients : null,
+        action: notificationType
+      });
+      if (explicitEmailDispatch && notificationType === "send_request") {
+        const accepted = await tx.select({
+          freelancerUserId: briefAssignmentsTable.freelancerUserId,
+          crewId: briefAssignmentsTable.crewId,
+          decision: briefAssignmentsTable.decision
+        }).from(briefAssignmentsTable).where(
+          and(
+            eq(briefAssignmentsTable.briefId, id),
+            inArray(
+              briefAssignmentsTable.freelancerUserId,
+              [...new Set(explicitDeliveryRecipients.map((r) => r.freelancerUserId))]
             )
           )
-        ];
-        await tx.update(briefDispatchesTable).set({
-          state: "pending",
-          claimedAt: null,
-          leaseExpiresAt: null,
-          failedAt: null,
-          updatedAt: sql`now()`
-        }).where(
-          and(
-            eq(briefDispatchesTable.briefId, id),
-            inArray(briefDispatchesTable.freelancerUserId, recipientIds),
-            inArray(briefDispatchesTable.state, ["sent", "failed"])
-          )
         );
+        const acceptedKeys = new Set(
+          accepted.filter((row) => row.decision === "accepted").map((row) => `${row.freelancerUserId}\0${row.crewId}`)
+        );
+        dispatchRecipients = selectBriefDispatchRecipients({
+          newlyAdded: assignmentSync.newRecipientRecipients,
+          explicit: explicitDeliveryRecipients,
+          action: notificationType,
+          acceptedKeys
+        });
       }
       const dispatch = explicitEmailDispatch || effectiveProjectStatus === "active" ? await claimBriefDispatches(
         tx,
         id,
-        explicitEmailDispatch ? explicitDeliveryRecipients : recipients
+        dispatchRecipients,
+        explicitEmailDispatch
       ) : null;
       return {
         brief: inserted[0] ?? null,
@@ -79811,13 +80092,34 @@ router7.delete(
     const briefId = String(req.params.id ?? "");
     const crewId = String(req.params.crewId ?? "");
     const body = req.body ?? {};
+    const mode = body.mode === void 0 ? "cancel" : body.mode;
     const freelancerUserId = typeof body.freelancerUserId === "string" ? body.freelancerUserId.trim() : "";
-    if (!crewId || crewId.length > 255 || !freelancerUserId || freelancerUserId.length > 255) {
-      res.status(400).json({ ok: false, error: "Invalid assignment identity." });
+    if (!crewId || crewId.length > 255 || !freelancerUserId || freelancerUserId.length > 255 || mode !== "cancel" && mode !== "remove") {
+      res.status(400).json({
+        ok: false,
+        error: mode !== "cancel" && mode !== "remove" ? 'mode must be "cancel" or "remove".' : "Invalid assignment identity."
+      });
       return;
     }
     try {
       const result = await db.transaction(async (tx) => {
+        await tx.execute(PROJECT_BRIEF_PROVENANCE_LOCK);
+        const [briefLink] = await tx.select({
+          projectId: projectBriefsTable.projectId,
+          ownerUserId: projectBriefsTable.ownerUserId
+        }).from(projectBriefsTable).where(eq(projectBriefsTable.id, briefId)).limit(1);
+        if (!briefLink) return { kind: "no_brief" };
+        let project = null;
+        if (briefLink.projectId) {
+          const [lockedProject] = await tx.select().from(projectsTable).where(eq(projectsTable.id, briefLink.projectId)).for("update").limit(1);
+          if (!lockedProject) return { kind: "no_project" };
+          project = lockedProject;
+          if (isProjectArchived(lockedProject) || ["completed", "archived"].includes(
+            deriveLegacyProjectStatus(lockedProject)
+          )) {
+            return { kind: "terminal" };
+          }
+        }
         const [brief] = await tx.select({
           ownerUserId: projectBriefsTable.ownerUserId,
           data: projectBriefsTable.data
@@ -79827,7 +80129,9 @@ router7.delete(
         const [assignment] = await tx.select({
           id: briefAssignmentsTable.id,
           decision: briefAssignmentsTable.decision,
-          acceptedGigId: briefAssignmentsTable.acceptedGigId
+          acceptedGigId: briefAssignmentsTable.acceptedGigId,
+          crewId: briefAssignmentsTable.crewId,
+          freelancerUserId: briefAssignmentsTable.freelancerUserId
         }).from(briefAssignmentsTable).where(
           and(
             eq(briefAssignmentsTable.briefId, briefId),
@@ -79839,17 +80143,76 @@ router7.delete(
           )
         ).limit(1);
         if (!assignment) return { kind: "no_assignment" };
+        if (mode === "remove") {
+          if (!isCurrentBriefRecipient(brief.data, crewId, freelancerUserId)) {
+            return { kind: "stale_assignment" };
+          }
+          if (project) {
+            const currentFreelancer = projectCrewFreelancerForRole(
+              project.data,
+              crewId
+            );
+            if (currentFreelancer && currentFreelancer !== freelancerUserId) {
+              return { kind: "stale_assignment" };
+            }
+          }
+          const nextBrief2 = removeCrewFromBriefData(brief.data, crewId);
+          await tx.update(projectBriefsTable).set({ data: nextBrief2.data, updatedAt: sql`now()` }).where(eq(projectBriefsTable.id, briefId));
+          if (project) {
+            await tx.update(projectsTable).set({
+              data: removeCrewFromProjectData(project.data, crewId),
+              updatedAt: sql`now()`
+            }).where(eq(projectsTable.id, project.id));
+          }
+          return { kind: "removed" };
+        }
         if (!canCancelBriefAssignment(assignment)) {
           return { kind: "not_pending" };
         }
+        const slotAssignments = await tx.select({
+          freelancerUserId: briefAssignmentsTable.freelancerUserId,
+          decision: briefAssignmentsTable.decision
+        }).from(briefAssignmentsTable).where(
+          and(
+            eq(briefAssignmentsTable.briefId, briefId),
+            eq(briefAssignmentsTable.crewId, crewId)
+          )
+        );
+        const hasOtherPendingCandidate = slotAssignments.some(
+          (candidate) => candidate.freelancerUserId !== freelancerUserId && candidate.decision === "pending"
+        );
+        const hasOtherCurrentCandidate = recipientsFromBriefData(brief.data).some(
+          (recipient) => recipient.crewId === crewId && recipient.freelancerUserId !== freelancerUserId
+        );
+        const briefRoleMatches = isCurrentBriefRecipient(brief.data, crewId, freelancerUserId) && !hasOtherCurrentCandidate;
+        const projectFreelancer = project ? projectCrewFreelancerForRole(project.data, crewId) : null;
+        const removeActiveRole = briefRoleMatches && !hasOtherPendingCandidate && (!project || projectFreelancer === freelancerUserId);
         const nextBrief = removeCancelledAssignmentFromBriefData(
           brief.data,
           crewId,
           freelancerUserId
         );
+        const exactCandidateBrief = removeCrewAssignmentFromBriefData(
+          nextBrief.data,
+          crewId,
+          freelancerUserId
+        ).data;
         await tx.delete(briefAssignmentsTable).where(eq(briefAssignmentsTable.id, assignment.id));
-        await tx.update(projectBriefsTable).set({ data: nextBrief.data, updatedAt: sql`now()` }).where(eq(projectBriefsTable.id, briefId));
-        return { kind: "cancelled" };
+        await tx.update(projectBriefsTable).set({
+          data: removeActiveRole ? removeCrewFromBriefData(brief.data, crewId).data : exactCandidateBrief,
+          updatedAt: sql`now()`
+        }).where(eq(projectBriefsTable.id, briefId));
+        if (project) {
+          await tx.update(projectsTable).set({
+            data: removeActiveRole ? removeCrewFromProjectData(project.data, crewId) : markCrewAssignmentRemovedFromProjectData(
+              project.data,
+              crewId,
+              freelancerUserId
+            ),
+            updatedAt: sql`now()`
+          }).where(eq(projectsTable.id, project.id));
+        }
+        return { kind: "cancelled", roleRemoved: removeActiveRole };
       });
       if (result.kind === "no_brief" || result.kind === "no_assignment") {
         res.status(404).json({ ok: false, error: "Assignment not found." });
@@ -79859,6 +80222,24 @@ router7.delete(
         res.status(403).json({ ok: false, error: "Not your brief." });
         return;
       }
+      if (result.kind === "no_project") {
+        res.status(404).json({ ok: false, error: "Project not found." });
+        return;
+      }
+      if (result.kind === "terminal") {
+        res.status(409).json({
+          ok: false,
+          error: "Completed and archived projects are read-only."
+        });
+        return;
+      }
+      if (result.kind === "stale_assignment") {
+        res.status(409).json({
+          ok: false,
+          error: "The role has already been assigned to another freelancer."
+        });
+        return;
+      }
       if (result.kind === "not_pending") {
         res.status(409).json({
           ok: false,
@@ -79866,7 +80247,47 @@ router7.delete(
         });
         return;
       }
-      res.json({ ok: true, cancelled: true, briefId, crewId });
+      if (result.kind === "removed") {
+        try {
+          await notifyCrewResponse(briefId);
+        } catch (err) {
+          logger.error(
+            {
+              briefId,
+              err: err instanceof Error ? err.message : String(err)
+            },
+            "portal crew removal notification failed"
+          );
+        }
+        res.json({
+          ok: true,
+          removed: true,
+          briefId,
+          crewId,
+          mode: "remove"
+        });
+        return;
+      }
+      if (result.roleRemoved) {
+        try {
+          await notifyCrewResponse(briefId);
+        } catch (err) {
+          logger.error(
+            {
+              briefId,
+              err: err instanceof Error ? err.message : String(err)
+            },
+            "portal crew cancellation notification failed"
+          );
+        }
+      }
+      res.json({
+        ok: true,
+        cancelled: true,
+        roleRemoved: result.roleRemoved,
+        briefId,
+        crewId
+      });
     } catch (err) {
       logger.error(
         {
@@ -79939,10 +80360,12 @@ router7.post(
         if (myRow.decision === "cancelled") {
           return { kind: "cancelled" };
         }
-        if (myRow.decision === "declined" && !isCurrentBriefRecipient(briefRow.data, myRow.crewId, userId2)) {
+        if (!isCurrentBriefRecipient(briefRow.data, myRow.crewId, userId2)) {
           return { kind: "replaced" };
         }
-        const slotSiblings = siblings.filter((s2) => s2.crewId === myRow.crewId);
+        const slotSiblings = siblings.filter(
+          (s2) => s2.crewId === myRow.crewId && isCurrentBriefRecipient(briefRow.data, s2.crewId, s2.freelancerUserId)
+        );
         if (myRow.acceptedSnapshotTrusted && myRow.acceptedGigId) {
           await tx.update(gigsTable).set({
             briefAssignmentId: myRow.id,
@@ -79995,7 +80418,10 @@ router7.post(
               and(
                 eq(briefAssignmentsTable.briefId, briefId),
                 eq(briefAssignmentsTable.decision, "too_late"),
-                eq(briefAssignmentsTable.crewId, myRow.crewId)
+                inArray(
+                  briefAssignmentsTable.id,
+                  slotSiblings.map((s2) => s2.id)
+                )
               )
             );
           }
@@ -80050,7 +80476,10 @@ router7.post(
           and(
             eq(briefAssignmentsTable.briefId, briefId),
             eq(briefAssignmentsTable.decision, "pending"),
-            eq(briefAssignmentsTable.crewId, myRow.crewId)
+            inArray(
+              briefAssignmentsTable.id,
+              slotSiblings.map((s2) => s2.id)
+            )
           )
         );
         const baseGigFields = gigFieldsFromBrief(briefRow, myRow.crewId);
@@ -80874,7 +81303,17 @@ router7.get(
         freelancerUserId: briefRoomAssignmentsTable.freelancerUserId,
         roomKey: briefRoomAssignmentsTable.roomKey
       }).from(briefRoomAssignmentsTable).where(eq(briefRoomAssignmentsTable.briefId, id));
-      const crew = rows.filter((r) => ROSTER_GIG_STATUSES.has(r.status)).map((r) => {
+      const crew = rows.filter(
+        (r) => ROSTER_GIG_STATUSES.has(r.status) && // The roster is an active-role DTO. A confirmed gig remains
+        // available in history/payroll, but an accepted assignment whose
+        // exact role/account pair is no longer in the brief must not
+        // appear in the current producer roster.
+        (!r.crewId || isCurrentBriefRecipient(
+          brief.data,
+          r.crewId,
+          r.freelancerUserId
+        ))
+      ).map((r) => {
         const hasProfile = typeof r.profileFullName === "string";
         const name = (hasProfile ? r.profileFullName : null) || // Same fallback as the catering endpoint so a profileless
         // freelancer still shows up readably in the table.
@@ -81297,14 +81736,20 @@ router7.get(
     try {
       const assignmentRows = await db.select({
         crewId: briefAssignmentsTable.crewId,
-        decision: briefAssignmentsTable.decision
-      }).from(briefAssignmentsTable).where(
+        decision: briefAssignmentsTable.decision,
+        briefData: projectBriefsTable.data
+      }).from(briefAssignmentsTable).innerJoin(
+        projectBriefsTable,
+        eq(briefAssignmentsTable.briefId, projectBriefsTable.id)
+      ).where(
         and(
           eq(briefAssignmentsTable.briefId, id),
           eq(briefAssignmentsTable.freelancerUserId, userId2)
         )
-      ).limit(1);
-      const assignment = assignmentRows[0];
+      );
+      const assignment = assignmentRows.find(
+        (candidate) => candidate.decision === "accepted" && isCurrentBriefRecipient(candidate.briefData, candidate.crewId, userId2)
+      );
       if (!assignment || assignment.decision !== "accepted") {
         res.status(403).json({
           ok: false,
@@ -83744,11 +84189,11 @@ function projectFinanceSeed(rawData) {
 }
 
 // src/lib/projectCrewCounts.ts
-function record3(raw) {
+function record4(raw) {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
 }
 function rosterRoleSlots(projectData) {
-  const crew = record3(projectData).crew;
+  const crew = record4(projectData).crew;
   if (!Array.isArray(crew)) return [];
   const slots = /* @__PURE__ */ new Map();
   for (const value of crew) {
@@ -84053,9 +84498,11 @@ router13.post("/projects", requireSignedIn10, async (req, res) => {
       return;
     }
     const organization = await getOrganizationSettings();
-    const projectData = projectDataWithOrganizationDefaults(
-      data,
-      organizationDefaultsSnapshot(organization)
+    const projectData = normalizeProjectCrewData(
+      projectDataWithOrganizationDefaults(
+        data,
+        organizationDefaultsSnapshot(organization)
+      )
     );
     const projectId = randomUUID7();
     const result = await db.transaction(async (tx) => {
@@ -84145,7 +84592,6 @@ router13.patch("/projects/:id", requireSignedIn10, async (req, res) => {
   if (typeof easyjob_number === "string") {
     updates.easyjobNumber = easyjob_number.trim().slice(0, 100) || null;
   }
-  if (data !== void 0) updates.data = data;
   try {
     const accessRole = await getEmployeeProjectAccess(String(id), userId2);
     if (!accessRole) {
@@ -84184,6 +84630,9 @@ router13.patch("/projects/:id", requireSignedIn10, async (req, res) => {
         data
       )) {
         return { kind: "invalid_brief" };
+      }
+      if (data !== void 0) {
+        updates.data = normalizeProjectCrewData(data, project.data);
       }
       const [updated] = await tx.update(projectsTable).set(updates).where(eq(projectsTable.id, String(id))).returning();
       const projectBriefText = projectBriefTextIn(data);
@@ -86707,7 +87156,7 @@ async function ensureFartBroadcastListener() {
       if (released) return;
       released = true;
       detach();
-      if (listenerRecord === record4) listenerRecord = null;
+      if (listenerRecord === record5) listenerRecord = null;
       client.release(error40);
     };
     const close = async () => {
@@ -86715,7 +87164,7 @@ async function ensureFartBroadcastListener() {
       closing = true;
       client.off("notification", onNotification);
       client.off("end", onEnd);
-      if (listenerRecord === record4) listenerRecord = null;
+      if (listenerRecord === record5) listenerRecord = null;
       let releaseError;
       try {
         await client.query(`UNLISTEN ${CHANNEL2}`);
@@ -86763,7 +87212,7 @@ async function ensureFartBroadcastListener() {
       dispose();
       if (generation === listenerGeneration2) scheduleReconnect();
     };
-    const record4 = {
+    const record5 = {
       client,
       generation,
       dispose,
@@ -86778,7 +87227,7 @@ async function ensureFartBroadcastListener() {
         await close();
         return;
       }
-      listenerRecord = record4;
+      listenerRecord = record5;
       logger.info({ scope: "fartBroadcast" }, "fart broadcast listener ready");
     } catch (error40) {
       dispose(error40 instanceof Error ? error40 : new Error(String(error40)));
@@ -86805,9 +87254,9 @@ async function disconnectFartBroadcastListener() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
   reconnectTimer = null;
   connectionPromise = null;
-  const record4 = listenerRecord;
+  const record5 = listenerRecord;
   listenerRecord = null;
-  if (record4) await record4.close();
+  if (record5) await record5.close();
 }
 function subscribeToFartAlerts(subscriber) {
   subscribers2.add(subscriber);
@@ -88888,10 +89337,10 @@ var queryTimeZoneIntlFormat = /* @__PURE__ */ memoize((upperNormId) => new RawDa
   second: "numeric"
 }));
 function queryTimeZone(rawTimeZoneId) {
-  const record4 = resolveTimeZoneRecord(rawTimeZoneId);
-  return queryTimeZoneRecord(record4.id, record4);
+  const record5 = resolveTimeZoneRecord(rawTimeZoneId);
+  return queryTimeZoneRecord(record5.id, record5);
 }
-var queryTimeZoneRecord = /* @__PURE__ */ memoize((normTimeZoneId, record4) => "named" === record4.kind ? new IntlTimeZone(normTimeZoneId, record4.o, record4.format) : new FixedTimeZone(normTimeZoneId, record4.o, "fixed" === record4.kind ? record4._ : 0));
+var queryTimeZoneRecord = /* @__PURE__ */ memoize((normTimeZoneId, record5) => "named" === record5.kind ? new IntlTimeZone(normTimeZoneId, record5.o, record5.format) : new FixedTimeZone(normTimeZoneId, record5.o, "fixed" === record5.kind ? record5._ : 0));
 var FixedTimeZone = class {
   constructor(id, compareKey, offsetNano) {
     this.id = id, this.o = compareKey, this._ = offsetNano;
@@ -98253,10 +98702,10 @@ var queryTimeZoneIntlFormat2 = /* @__PURE__ */ memoize2((upperNormId) => new Raw
   second: "numeric"
 }));
 function queryTimeZone2(rawTimeZoneId) {
-  const record4 = resolveTimeZoneRecord2(rawTimeZoneId);
-  return queryTimeZoneRecord2(record4.id, record4);
+  const record5 = resolveTimeZoneRecord2(rawTimeZoneId);
+  return queryTimeZoneRecord2(record5.id, record5);
 }
-var queryTimeZoneRecord2 = /* @__PURE__ */ memoize2((normTimeZoneId, record4) => "named" === record4.kind ? new IntlTimeZone2(normTimeZoneId, record4.m, record4.format) : new FixedTimeZone2(normTimeZoneId, record4.m, "fixed" === record4.kind ? record4.X : 0));
+var queryTimeZoneRecord2 = /* @__PURE__ */ memoize2((normTimeZoneId, record5) => "named" === record5.kind ? new IntlTimeZone2(normTimeZoneId, record5.m, record5.format) : new FixedTimeZone2(normTimeZoneId, record5.m, "fixed" === record5.kind ? record5.X : 0));
 var FixedTimeZone2 = class {
   constructor(id, compareKey, offsetNano) {
     this.id = id, this.m = compareKey, this.X = offsetNano;

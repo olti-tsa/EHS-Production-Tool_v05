@@ -53,6 +53,40 @@ function pickSkills(raw: unknown): string[] {
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
+
+/**
+ * A removed accepted role keeps its confirmed gig for history/payroll, but
+ * that gig no longer occupies the freelancer's active directory availability.
+ * Assignment rows remain immutable history, so use the brief's current
+ * role/freelancer pair as the active signal instead of changing gig status.
+ * The aliases passed here are fixed internal SQL aliases (g/cg).
+ */
+function activeGigAvailabilityPredicate(alias: "g" | "cg") {
+  const gigAssignmentId = sql.raw(`${alias}.brief_assignment_id`);
+  return sql`(
+    ${gigAssignmentId} IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM brief_assignments active_ba
+      JOIN project_briefs active_b
+        ON active_b.id = active_ba.brief_id
+      WHERE active_ba.id = ${gigAssignmentId}
+        AND active_ba.decision = 'accepted'
+        AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(active_b.data->'assignments') = 'array'
+              THEN active_b.data->'assignments'
+              ELSE '[]'::jsonb
+            END
+          ) AS active_role
+          WHERE active_role->>'crewId' = active_ba.crew_id
+            AND active_role->>'freelancerUserId' = active_ba.freelancer_user_id
+        )
+    )
+  )`;
+}
 const PROFILE_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PROFILE_PHOTO_MAX_BYTES = 5_000_000;
 const PROFILE_OBJECT_PATH = /^\/objects\/uploads\/[A-Za-z0-9_-]{8,128}$/;
@@ -972,6 +1006,7 @@ router.get("/portal/freelancers", requireEmployee, async (req, res) => {
               SELECT 1 FROM gigs g
                WHERE g.freelancer_user_id = ${directoryUserId}
                  AND g.status IN ('confirmed','done','invoiced','paid')
+                 AND ${activeGigAvailabilityPredicate("g")}
                  AND g.start_date IS NOT NULL
                  AND g.start_date <= ${endDate}::date
                  AND COALESCE(g.end_date, g.start_date) >= ${startDate}::date
@@ -1012,7 +1047,7 @@ router.get("/portal/freelancers", requireEmployee, async (req, res) => {
         // calendar metadata never leave the calendar tables.
         availabilityStatus: startDate
           ? sql<string>`CASE
-              WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id = ${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date) >= ${startDate}::date) THEN 'unavailable'
+              WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id = ${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND ${activeGigAvailabilityPredicate("cg")} AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date) >= ${startDate}::date) THEN 'unavailable'
               WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds!.to} AND cbi.ends_at > ${requestedBounds!.from}) THEN 'unavailable'
               WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.expires_at > now() AND ch.starts_at < ${requestedBounds!.to} AND ch.ends_at > ${requestedBounds!.from}) THEN 'tentative'
               WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${directoryUserId} AND ca.status='unavailable' AND ca.starts_at < ${requestedBounds!.to} AND ca.ends_at > ${requestedBounds!.from}) THEN 'unavailable'
@@ -1021,7 +1056,7 @@ router.get("/portal/freelancers", requireEmployee, async (req, res) => {
               WHEN EXISTS (SELECT 1 FROM calendar_availability ca WHERE ca.user_id=${directoryUserId} AND ca.status='available' AND ca.starts_at < ${requestedBounds!.to} AND ca.ends_at > ${requestedBounds!.from}) THEN 'partial'
               ELSE 'unknown' END`.as("availability_status")
           : sql<string>`'unknown'`.as("availability_status"),
-        availabilityReason: startDate ? sql<string>`CASE WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id=${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date)>=${startDate}::date) THEN 'gig' WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds!.to} AND cbi.ends_at > ${requestedBounds!.from}) THEN 'external_busy' WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds!.to} AND ch.ends_at > ${requestedBounds!.from}) THEN 'hold' ELSE NULL END`.as("availability_reason") : sql<string | null>`NULL`.as("availability_reason"),
+         availabilityReason: startDate ? sql<string>`CASE WHEN EXISTS (SELECT 1 FROM gigs cg WHERE cg.freelancer_user_id=${directoryUserId} AND cg.status IN ('confirmed','done','invoiced','paid') AND ${activeGigAvailabilityPredicate("cg")} AND cg.start_date <= ${endDate}::date AND COALESCE(cg.end_date,cg.start_date)>=${startDate}::date) THEN 'gig' WHEN EXISTS (SELECT 1 FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds!.to} AND cbi.ends_at > ${requestedBounds!.from}) THEN 'external_busy' WHEN EXISTS (SELECT 1 FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds!.to} AND ch.ends_at > ${requestedBounds!.from}) THEN 'hold' ELSE NULL END`.as("availability_reason") : sql<string | null>`NULL`.as("availability_reason"),
         availabilityUpdatedAt: sql<Date | null>`(SELECT max(x.updated_at) FROM calendar_availability x WHERE x.user_id=${directoryUserId})`.as("availability_updated_at"),
         conflicts: startDate ? sql<number>`(SELECT count(*)::int FROM calendar_busy_intervals cbi JOIN calendar_connections cc ON cc.id=cbi.connection_id WHERE cc.user_id=${directoryUserId} AND cbi.starts_at < ${requestedBounds!.to} AND cbi.ends_at > ${requestedBounds!.from})`.as("conflicts") : sql<number>`0`.as("conflicts"),
         holdId: startDate && briefId ? sql<string | null>`(SELECT ch.id FROM calendar_holds ch WHERE ch.freelancer_user_id=${directoryUserId} AND ch.owner_user_id=${callerUserId} AND ch.brief_id=${briefId} AND ch.expires_at>now() AND ch.starts_at < ${requestedBounds!.to} AND ch.ends_at > ${requestedBounds!.from} ORDER BY ch.expires_at LIMIT 1)`.as("hold_id") : sql<string | null>`NULL`.as("hold_id"),

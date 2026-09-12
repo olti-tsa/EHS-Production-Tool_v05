@@ -12,7 +12,10 @@ import {
   type RosterResponse,
   type RosterGig,
 } from "./crewRoster.ts";
-import type { CrewMember } from "./crew.ts";
+import {
+  CREW_REQUEST_STATUS_META,
+  type CrewMember,
+} from "./crew.ts";
 
 function makeLocal(overrides: Partial<CrewMember>): CrewMember {
   return {
@@ -32,6 +35,8 @@ function makeLocal(overrides: Partial<CrewMember>): CrewMember {
 function makeGig(overrides: Partial<RosterGig> & { gigId: string }): RosterGig {
   return {
     gigId: overrides.gigId,
+    briefAssignmentId: overrides.briefAssignmentId,
+    crewId: overrides.crewId,
     freelancerUserId: overrides.freelancerUserId ?? `user-${overrides.gigId}`,
     name: overrides.name ?? "Anders Andersen",
     role: overrides.role ?? "Rigging",
@@ -308,6 +313,41 @@ test("mergeRoster preserves two role gigs for the same freelancer", () => {
   assert.deepEqual(lighting?.assignedDates, ["2026-05-11", "2026-05-12"]);
   assert.equal(lighting?.hotelRequired, true);
   assert.equal(lighting?.status, "paid");
+});
+
+test("mergeRoster preserves exact role-slot and account identity for removal", () => {
+  const out = mergeRoster(
+    [],
+    makeResponse([
+      makeGig({
+        gigId: "gig-a",
+        briefAssignmentId: "assignment-a",
+        crewId: "crew-a",
+        freelancerUserId: "user-shared",
+        name: "Shared Account",
+      }),
+      makeGig({
+        gigId: "gig-b",
+        briefAssignmentId: "assignment-b",
+        crewId: "crew-b",
+        freelancerUserId: "user-shared",
+        name: "Shared Account",
+      }),
+    ]),
+  );
+  assert.equal(out.length, 2);
+  const first = out.find((row) => row.crewId === "crew-a");
+  const second = out.find((row) => row.crewId === "crew-b");
+  assert.equal(first?.briefAssignmentId, "assignment-a");
+  assert.equal(first?.freelancerUserId, "user-shared");
+  assert.equal(second?.briefAssignmentId, "assignment-b");
+  assert.equal(second?.freelancerUserId, "user-shared");
+});
+
+test("request status metadata keeps producer status tones explicit", () => {
+  assert.equal(CREW_REQUEST_STATUS_META.accepted.tone, "ok");
+  assert.equal(CREW_REQUEST_STATUS_META.requested.tone, "warn");
+  assert.equal(CREW_REQUEST_STATUS_META.declined.tone, "bad");
 });
 
 test("mergeRoster keeps two gigs separate when freelancerUserIds differ", () => {
