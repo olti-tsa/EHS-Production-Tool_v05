@@ -3,10 +3,54 @@ import { describe, it } from "node:test";
 import type { CalendarEntry } from "./types";
 import {
   buildDayAvailabilityReplacement,
+  getIsoWeekNumber,
   overlapsLocalDay,
   replaceAvailabilityEntriesInRange,
   responseError,
 } from "./utils";
+
+describe("ISO week numbers", () => {
+  const cases: [string, number][] = [
+    ["2026-06-15", 25],
+    ["2026-06-21", 25],
+    ["2026-06-22", 26],
+    ["2024-02-29", 9],
+    ["2026-12-27", 52],
+    ["2026-12-28", 53],
+    ["2026-12-29", 53],
+    ["2026-12-30", 53],
+    ["2026-12-31", 53],
+    ["2027-01-01", 53],
+    ["2027-01-02", 53],
+    ["2027-01-03", 53],
+    ["2027-01-04", 1],
+    ["2027-01-10", 1],
+    ["2027-01-11", 2],
+    ["2024-12-29", 52],
+    ["2024-12-30", 1],
+    ["2024-12-31", 1],
+    ["2025-01-01", 1],
+    ["2022-01-01", 52],
+  ];
+
+  for (const [isoDate, expectedWeek] of cases) {
+    it(`${isoDate} is ISO week ${expectedWeek}`, () => {
+      const [year, month, day] = isoDate.split("-").map(Number);
+      // Match the calendar's local-date construction, not UTC string parsing.
+      const date = new Date(year, month - 1, day);
+      assert.equal(getIsoWeekNumber(date), expectedWeek);
+    });
+  }
+
+  it("uses the local calendar day regardless of time and leaves the input unchanged", () => {
+    for (const hour of [0, 12, 23]) {
+      const date = new Date(2027, 0, 3, hour, 59, 59);
+      const originalTime = date.getTime();
+      assert.equal(getIsoWeekNumber(date), 53);
+      assert.equal(date.getTime(), originalTime);
+    }
+  });
+});
 
 describe("availability state range replacement", () => {
   it("preserves the rest of an available month when one day becomes busy", () => {
