@@ -9,7 +9,8 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/lib/calendarSync.test.ts src/lib/calendarAvailabilityBulk.test.ts src/lib/calendarAvailabilityRules.test.ts src/lib/clerkFreelancerSync.test.ts src/lib/portalUrl.test.ts src/lib/briefEmail.test.ts src/lib/briefAssignmentCancellation.test.ts src/lib/briefDispatchSchema.test.ts src/lib/briefResponse.test.ts src/lib/briefRecipients.test.ts src/lib/projectCrewCounts.test.ts src/routes/projects.test.ts",
-    "test:api": "node --experimental-test-module-mocks --import tsx --test --test-concurrency=1 src/routes/portalSecurity.integration.test.ts src/routes/projectTasks.integration.test.ts"
+    "test:api": "node --experimental-test-module-mocks --import tsx --test --test-concurrency=1 src/routes/portalSecurity.integration.test.ts src/routes/projectTasks.integration.test.ts src/routes/calendarAvailability.integration.test.ts",
+    "test:calendar": "node --experimental-test-module-mocks --import tsx --test --test-concurrency=1 src/lib/calendarAvailabilityBulk.test.ts src/lib/calendarAvailabilityRules.test.ts src/routes/calendarAvailability.integration.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.69.0",

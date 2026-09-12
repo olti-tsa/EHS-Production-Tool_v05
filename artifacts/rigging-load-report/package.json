@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test src/lib/briefDeliveryToast.test.ts src/lib/briefShare.test.ts src/lib/crewRoster.test.ts src/lib/i18n/translations/parity.test.ts src/portal/screens/availability/utils.test.ts src/components/global/MasterCalendarPage.test.ts",
     "test:auth-e2e": "playwright install chromium && playwright test --config playwright.config.ts",
-    "test:tasks-e2e": "playwright test project-task-board.spec.ts --config playwright.config.ts"
+    "test:tasks-e2e": "playwright test project-task-board.spec.ts --config playwright.config.ts",
+    "test:availability-e2e": "playwright test availability-calendar.spec.ts --config playwright.config.ts"
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
