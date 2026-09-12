@@ -27,6 +27,7 @@ import {
 } from "./lib/portalStorage";
 import type { ProjectBrief } from "../lib/projectBrief";
 import type { ThemeMode } from "./lib/portalTheme";
+import { useT } from "../lib/i18n/I18nContext";
 
 export type PortalProps = {
   theme: ThemeMode;
@@ -35,6 +36,7 @@ export type PortalProps = {
 };
 
 export function Portal({ theme, pref, setPref }: PortalProps) {
+  const t = useT();
   const { user } = useUser();
   const { getToken, isSignedIn } = useAuth();
   const userId = user?.id ?? null;
@@ -285,7 +287,7 @@ export function Portal({ theme, pref, setPref }: PortalProps) {
         user?.primaryEmailAddress?.emailAddress ??
         user?.username ??
         user?.firstName ??
-        "Account"
+        t("portal.layout.group.account")
       }
     >
       <Switch>

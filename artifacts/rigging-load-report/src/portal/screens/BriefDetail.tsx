@@ -1870,7 +1870,7 @@ function AssignmentCard({
           textTransform: "uppercase",
         }}
       >
-        Your assignment
+        {t("portal.brief.assignment.title")}
       </div>
       <div
         style={{
@@ -1888,12 +1888,12 @@ function AssignmentCard({
         />
         <Field
           theme={theme}
-          label="Call time"
+          label={t("portal.brief.assignment.callTime")}
           value={assignment.callTime || "—"}
         />
         <Field
           theme={theme}
-          label="Off time"
+          label={t("portal.brief.assignment.offTime")}
           value={assignment.offTime || "—"}
         />
         <Field
@@ -1903,15 +1903,15 @@ function AssignmentCard({
         />
         <Field
           theme={theme}
-          label="Day rate"
+          label={t("portal.brief.assignment.dayRate")}
           value={fee > 0 ? formatNok(fee) : "—"}
           strong
         />
         {(assignment.hotelDates?.length ?? 0) > 0 ? (
           <Field
             theme={theme}
-            label="Hotel"
-            value={`🏨 ${assignment.hotelDates.length} night${assignment.hotelDates.length === 1 ? "" : "s"}`}
+            label={t("portal.brief.assignment.hotel")}
+            value={`🏨 ${t(assignment.hotelDates.length === 1 ? "portal.brief.assignment.night" : "portal.brief.assignment.nights", { count: assignment.hotelDates.length })}`}
             strong
           />
         ) : null}
@@ -1933,7 +1933,7 @@ function AssignmentCard({
               textTransform: "uppercase",
             }}
           >
-            Confirm each shift
+            {t("portal.brief.assignment.confirmEachShift")}
           </div>
           <div
             style={{
@@ -3053,6 +3053,7 @@ function BriefActionRow({
   onAddToCalendar: () => void;
   onOpenCallSheet: () => void;
 }) {
+  const t = useT();
   const c = PALETTE[theme];
   const btnStyle: React.CSSProperties = {
     flex: 1,
@@ -3073,10 +3074,10 @@ function BriefActionRow({
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       <button type="button" onClick={onAddToCalendar} style={btnStyle}>
-        <span aria-hidden>📅</span> Add to calendar
+        <span aria-hidden>📅</span> {t("portal.brief.actions.addToCalendar")}
       </button>
       <button type="button" onClick={onOpenCallSheet} style={btnStyle}>
-        <span aria-hidden>📄</span> Call sheet PDF
+        <span aria-hidden>📄</span> {t("portal.brief.actions.callSheetPdf")}
       </button>
     </div>
   );

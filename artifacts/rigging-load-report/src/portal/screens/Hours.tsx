@@ -97,7 +97,7 @@ function statusPill(
     case "rejected":
       return { bg: "rgba(239,68,68,0.18)", fg: "#ef4444", label: t("portal.hours.statusPill.rejected") };
     case "flagged":
-      return { bg: "rgba(239,68,68,0.18)", fg: "#ef4444", label: "Flagged" };
+      return { bg: "rgba(239,68,68,0.18)", fg: "#ef4444", label: t("producerHours.status.flagged") };
     case "locked":
       return { bg: "rgba(120,120,120,0.22)", fg: c.muted, label: t("portal.hours.statusPill.locked") };
     default:
