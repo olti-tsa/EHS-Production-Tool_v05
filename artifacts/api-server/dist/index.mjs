@@ -78911,6 +78911,23 @@ function isProjectWriter(role) {
 function isProjectArchived(project) {
   return project.archivedAt != null || project.status === "archived";
 }
+async function getProjectAccess(projectId, userId2, options = {}) {
+  const [project] = await db.select({
+    ownerId: projectsTable.userId,
+    archivedAt: projectsTable.archivedAt,
+    status: projectsTable.status
+  }).from(projectsTable).where(eq(projectsTable.id, projectId)).limit(1);
+  if (!project) return null;
+  if (!options.includeArchived && isProjectArchived(project)) return null;
+  if (project.ownerId === userId2) return "owner";
+  const [membership] = await db.select({ role: projectMembersTable.role }).from(projectMembersTable).where(
+    and(
+      eq(projectMembersTable.projectId, projectId),
+      eq(projectMembersTable.userId, userId2)
+    )
+  ).limit(1);
+  return membership?.role === "editor" || membership?.role === "viewer" ? membership.role : null;
+}
 async function getEmployeeProjectAccess(projectId, userId2, options = {}) {
   const [project] = await db.select({
     ownerId: projectsTable.userId,
@@ -84794,6 +84811,12 @@ var TASK_DEPARTMENTS = [
   "Logistics"
 ];
 var DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+function isCalendarDate(value) {
+  if (typeof value !== "string" || !DATE_PATTERN.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
 function userIdFor(req) {
   return req._userId;
 }
@@ -84808,7 +84831,7 @@ router16.get("/projects/:projectId/tasks", async (req, res) => {
     return;
   }
   try {
-    if (!await getEmployeeProjectAccess(projectId, userId2)) {
+    if (!await getProjectAccess(projectId, userId2)) {
       res.status(404).json({ ok: false, error: "Project not found." });
       return;
     }
@@ -84832,7 +84855,7 @@ router16.post("/projects/:projectId/tasks", async (req, res) => {
     return;
   }
   try {
-    const accessRole = await getEmployeeProjectAccess(projectId, userId2);
+    const accessRole = await getProjectAccess(projectId, userId2);
     if (!accessRole) {
       res.status(404).json({ ok: false, error: "Project not found." });
       return;
@@ -84861,7 +84884,7 @@ router16.patch("/projects/tasks/:id", async (req, res) => {
     return;
   }
   const [taskForAccess] = await db.select({ projectId: projectTasksTable.projectId }).from(projectTasksTable).where(eq(projectTasksTable.id, id)).limit(1);
-  const accessRole = taskForAccess ? await getEmployeeProjectAccess(taskForAccess.projectId, userId2) : null;
+  const accessRole = taskForAccess ? await getProjectAccess(taskForAccess.projectId, userId2) : null;
   if (!accessRole) {
     res.status(404).json({ ok: false, error: "Task not found." });
     return;
@@ -84901,7 +84924,7 @@ router16.patch("/projects/tasks/:id", async (req, res) => {
     updates.department = req.body.department;
   }
   if (req.body?.dueDate !== void 0) {
-    if (req.body.dueDate !== null && (typeof req.body.dueDate !== "string" || !DATE_PATTERN.test(req.body.dueDate))) {
+    if (req.body.dueDate !== null && !isCalendarDate(req.body.dueDate)) {
       res.status(400).json({ ok: false, error: "Invalid due date." });
       return;
     }
@@ -84960,7 +84983,7 @@ router16.delete("/projects/tasks/:id", async (req, res) => {
       res.status(404).json({ ok: false, error: "Task not found." });
       return;
     }
-    const accessRole = await getEmployeeProjectAccess(ownedTask.projectId, userId2);
+    const accessRole = await getProjectAccess(ownedTask.projectId, userId2);
     if (!accessRole) {
       res.status(404).json({ ok: false, error: "Task not found." });
       return;
@@ -85646,7 +85669,7 @@ function userId(req) {
 function isMinorUnits(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= MAX_MINOR_UNITS;
 }
-function isCalendarDate(value) {
+function isCalendarDate2(value) {
   if (typeof value !== "string" || !DATE_PATTERN3.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
   const parsed = new Date(Date.UTC(year, month - 1, day));
@@ -86033,7 +86056,7 @@ router21.post(
       body.category
     );
     const validText = (key2, max) => body[key2] == null || typeof body[key2] === "string" && body[key2].length <= max;
-    if (Object.keys(body).some((key2) => !allowed.includes(key2)) || !validCategory || !isMinorUnits(body.amountMinor) || body.amountMinor === 0 || !isCalendarDate(body.incurredOn) || !validText("description", 2e3) || !validText("vendor", 300) || !validText("reference", 300)) {
+    if (Object.keys(body).some((key2) => !allowed.includes(key2)) || !validCategory || !isMinorUnits(body.amountMinor) || body.amountMinor === 0 || !isCalendarDate2(body.incurredOn) || !validText("description", 2e3) || !validText("vendor", 300) || !validText("reference", 300)) {
       res.status(400).json({ ok: false, error: "Invalid expense." });
       return;
     }

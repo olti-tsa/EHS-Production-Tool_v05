@@ -1,3 +1,4 @@
+- [Merge checker source maps](merge-checker-source-maps.md) — generated dependency comments can trigger false conflict-marker detection; equivalent JSON escaping preserves map contents.
 - [LED PDF vs tab parity](led-pdf-vs-tab-parity.md) — PDF must use computeScreenMetrics(…, beamCatalog)/m.weightKg for weight; power split (raw nameplate vs estimateScreenPower) is intentional.
 - [LED finishing row](led-finishing-row.md) — bottom row uses a different real (smaller) panel; finishing panel width MUST match main panel; the key→panel resolver is the single guard.
 - [Profile photo ownership and route gates](profile-photo-security.md) — bind private uploads to their issuer; scope role middleware to URL namespaces so shared portal routes remain reachable.

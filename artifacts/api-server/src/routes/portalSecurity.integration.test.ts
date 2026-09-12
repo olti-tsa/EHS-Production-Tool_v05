@@ -75,6 +75,7 @@ before(async () => {
   // than creating Clerk accounts or depending on an external identity API.
   mock.module("../middleware/userType", {
     namedExports: {
+      hasVerifiedPrimaryEhsEmail: () => false,
       getUserType: async (userId: string) =>
         userId === freelancer ? "freelancer" : "employee",
       tagAsFreelancer: async () => undefined,
@@ -165,6 +166,11 @@ before(async () => {
     (req as typeof req & { auth: () => { userId: string | null } }).auth = () => ({
       userId: userId ?? null,
     });
+    req.log = {
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+    } as typeof req.log;
     next();
   });
   app.use("/api", profileRouter, calendarRouter);

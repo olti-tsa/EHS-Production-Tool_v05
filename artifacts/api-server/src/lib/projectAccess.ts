@@ -22,13 +22,19 @@ export function isProjectArchived(project: {
 export async function getProjectAccess(
   projectId: string,
   userId: string,
+  options: ProjectAccessOptions = {},
 ): Promise<ProjectAccessRole | null> {
   const [project] = await db
-    .select({ ownerId: projectsTable.userId })
+    .select({
+      ownerId: projectsTable.userId,
+      archivedAt: projectsTable.archivedAt,
+      status: projectsTable.status,
+    })
     .from(projectsTable)
     .where(eq(projectsTable.id, projectId))
     .limit(1);
   if (!project) return null;
+  if (!options.includeArchived && isProjectArchived(project)) return null;
   if (project.ownerId === userId) return "owner";
   const [membership] = await db
     .select({ role: projectMembersTable.role })

@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { asc, eq, sql } from "drizzle-orm";
 import { db, freelancerProfilesTable, projectTasksTable } from "@workspace/db";
 import {
-  getEmployeeProjectAccess,
+  getProjectAccess,
   isProjectWriter,
   UUID_PATTERN,
 } from "../lib/projectAccess";
@@ -27,6 +27,17 @@ const TASK_DEPARTMENTS = [
 ] as const;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== "string" || !DATE_PATTERN.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+}
+
 function userIdFor(req: unknown): string {
   return (req as { _userId: string })._userId;
 }
@@ -43,7 +54,7 @@ router.get("/projects/:projectId/tasks", async (req, res): Promise<void> => {
     return;
   }
   try {
-    if (!(await getEmployeeProjectAccess(projectId, userId))) {
+    if (!(await getProjectAccess(projectId, userId))) {
       res.status(404).json({ ok: false, error: "Project not found." });
       return;
     }
@@ -72,7 +83,7 @@ router.post("/projects/:projectId/tasks", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const accessRole = await getEmployeeProjectAccess(projectId, userId);
+    const accessRole = await getProjectAccess(projectId, userId);
     if (!accessRole) {
       res.status(404).json({ ok: false, error: "Project not found." });
       return;
@@ -114,7 +125,7 @@ router.patch("/projects/tasks/:id", async (req, res): Promise<void> => {
     .where(eq(projectTasksTable.id, id))
     .limit(1);
   const accessRole = taskForAccess
-    ? await getEmployeeProjectAccess(taskForAccess.projectId, userId)
+    ? await getProjectAccess(taskForAccess.projectId, userId)
     : null;
   if (!accessRole) {
     res.status(404).json({ ok: false, error: "Task not found." });
@@ -159,8 +170,7 @@ router.patch("/projects/tasks/:id", async (req, res): Promise<void> => {
   if (req.body?.dueDate !== undefined) {
     if (
       req.body.dueDate !== null &&
-      (typeof req.body.dueDate !== "string" ||
-        !DATE_PATTERN.test(req.body.dueDate))
+      !isCalendarDate(req.body.dueDate)
     ) {
       res.status(400).json({ ok: false, error: "Invalid due date." });
       return;
@@ -238,7 +248,7 @@ router.delete("/projects/tasks/:id", async (req, res): Promise<void> => {
       res.status(404).json({ ok: false, error: "Task not found." });
       return;
     }
-    const accessRole = await getEmployeeProjectAccess(ownedTask.projectId, userId);
+    const accessRole = await getProjectAccess(ownedTask.projectId, userId);
     if (!accessRole) {
       res.status(404).json({ ok: false, error: "Task not found." });
       return;

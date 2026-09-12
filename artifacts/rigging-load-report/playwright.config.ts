@@ -5,7 +5,7 @@ const baseURL = externalBaseURL ?? "http://127.0.0.1:4180";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: "auth-roles.spec.ts",
+  testMatch: ["auth-roles.spec.ts", "project-task-board.spec.ts"],
   fullyParallel: false,
   workers: 1,
   retries: 0,
