@@ -1271,6 +1271,7 @@ export const no: Translations = {
   // ---------- Portal: navigation ----------
   "portal.nav.hub": "Hub",
   "portal.nav.briefs": "Briefer",
+  "portal.nav.guidelines": "Retningslinjer",
   "portal.nav.gigs": "Oppdrag",
   "portal.nav.runs": "Mine kjøreruter",
   "portal.nav.tasks": "Mine oppgaver",

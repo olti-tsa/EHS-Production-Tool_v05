@@ -10,6 +10,7 @@ import {
   Command,
   HelpCircle,
   Inbox,
+  BookOpen,
   LogOut,
   MessageSquare,
   MoreHorizontal,
@@ -42,6 +43,7 @@ import {
 export type PortalNavKey =
   | "hub"
   | "briefs"
+  | "guidelines"
   | "gigs"
   | "runs"
   | "tasks"
@@ -65,6 +67,7 @@ type NavItem = {
 const NAV_WORK: NavItem[] = [
   { key: "hub", labelKey: "portal.nav.hub", href: "/portal", icon: Activity },
   { key: "briefs", labelKey: "portal.nav.briefs", href: "/portal/briefs", icon: Inbox },
+  { key: "guidelines", labelKey: "portal.nav.guidelines", href: "/portal/guidelines", icon: BookOpen },
   { key: "gigs", labelKey: "portal.nav.gigs", href: "/portal/gigs", icon: Calendar },
   { key: "runs", labelKey: "portal.nav.runs", href: "/portal/my-runs", icon: Truck },
   { key: "tasks", labelKey: "portal.nav.tasks", href: "/portal/my-tasks", icon: ListChecks },

@@ -10,6 +10,7 @@ import { Hours } from "./screens/Hours";
 import { Profile } from "./screens/Profile";
 import { Briefs } from "./screens/Briefs";
 import { BriefDetail } from "./screens/BriefDetail";
+import { Guidelines } from "./screens/Guidelines";
 import { BriefImport } from "./screens/BriefImport";
 import { Help } from "./screens/Help";
 import { MyRuns } from "./screens/MyRuns";
@@ -149,6 +150,7 @@ export function Portal({ theme, pref, setPref }: PortalProps) {
   const [location] = useLocation();
   const active: PortalNavKey = useMemo(() => {
     const path = location.replace(/\/+$/, "");
+    if (path.includes("/guidelines")) return "guidelines";
     if (path.endsWith("/gigs")) return "gigs";
     if (path.endsWith("/my-runs")) return "runs";
     if (path.endsWith("/my-tasks")) return "tasks";
@@ -316,6 +318,9 @@ export function Portal({ theme, pref, setPref }: PortalProps) {
         </Route>
         <Route path="/portal/briefs">
           <Briefs theme={theme} data={data} />
+        </Route>
+        <Route path="/portal/guidelines">
+          <Guidelines />
         </Route>
         <Route path="/portal/briefs/:id">
           {(params) => (

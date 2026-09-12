@@ -1140,6 +1140,7 @@ export const en = {
   // ---------- Portal: navigation ----------
   "portal.nav.hub": "Hub",
   "portal.nav.briefs": "Briefs",
+  "portal.nav.guidelines": "Guidelines",
   "portal.nav.gigs": "Gigs",
   "portal.nav.runs": "My Runs",
   "portal.nav.tasks": "My Tasks",
