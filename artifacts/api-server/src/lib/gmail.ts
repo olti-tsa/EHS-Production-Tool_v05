@@ -39,12 +39,19 @@ function isSafeEmailAddress(value: string): boolean {
   return /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(value);
 }
 
-function buildRfc822(args: {
+export type InlineEmailImage = {
+  contentId: string;
+  filename: string;
+  content: Buffer;
+};
+
+export function buildRfc822(args: {
   to: string;
   toName?: string;
   subject: string;
   textBody: string;
   htmlBody?: string;
+  inlineImages?: InlineEmailImage[];
 }): string {
   const toHeader = args.toName
     ? `${encodeRfc2047(args.toName)} <${args.to}>`
@@ -55,6 +62,36 @@ function buildRfc822(args: {
     : null;
   const boundary = "ehs-alt-9f4b25f0";
   if (htmlBodyB64) {
+    const images = args.inlineImages ?? [];
+    for (const image of images) {
+      if (!/^[a-zA-Z0-9._@-]+$/.test(image.contentId) ||
+          !/^[a-zA-Z0-9._-]+$/.test(image.filename)) {
+        throw new Error("Invalid inline image metadata");
+      }
+    }
+    const relatedBoundary = "ehs-related-a48c610e";
+    const htmlPart = [
+      `Content-Type: text/html; charset=UTF-8`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      htmlBodyB64,
+    ];
+    const richPart = images.length ? [
+      `Content-Type: multipart/related; boundary="${relatedBoundary}"; type="text/html"`,
+      ``,
+      `--${relatedBoundary}`,
+      ...htmlPart,
+      ...images.flatMap((image) => [
+        `--${relatedBoundary}`,
+        `Content-Type: image/png; name="${image.filename}"`,
+        `Content-Transfer-Encoding: base64`,
+        `Content-ID: <${image.contentId}>`,
+        `Content-Disposition: inline; filename="${image.filename}"`,
+        ``,
+        chunk76(image.content.toString("base64")),
+      ]),
+      `--${relatedBoundary}--`,
+    ] : htmlPart;
     return [
       `To: ${toHeader}`,
       `Subject: ${encodeRfc2047(args.subject)}`,
@@ -67,10 +104,7 @@ function buildRfc822(args: {
       ``,
       bodyB64,
       `--${boundary}`,
-      `Content-Type: text/html; charset=UTF-8`,
-      `Content-Transfer-Encoding: base64`,
-      ``,
-      htmlBodyB64,
+      ...richPart,
       `--${boundary}--`,
       ``,
     ].join("\r\n");
@@ -96,6 +130,7 @@ export async function sendGmail(args: {
   subject: string;
   textBody: string;
   htmlBody?: string;
+  inlineImages?: InlineEmailImage[];
 }): Promise<SendGmailResult> {
   if (!isSafeEmailAddress(args.to)) {
     logger.warn(

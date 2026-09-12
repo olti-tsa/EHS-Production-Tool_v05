@@ -78069,6 +78069,35 @@ function buildRfc822(args) {
   const htmlBodyB64 = args.htmlBody ? chunk76(Buffer.from(args.htmlBody, "utf8").toString("base64")) : null;
   const boundary = "ehs-alt-9f4b25f0";
   if (htmlBodyB64) {
+    const images = args.inlineImages ?? [];
+    for (const image of images) {
+      if (!/^[a-zA-Z0-9._@-]+$/.test(image.contentId) || !/^[a-zA-Z0-9._-]+$/.test(image.filename)) {
+        throw new Error("Invalid inline image metadata");
+      }
+    }
+    const relatedBoundary = "ehs-related-a48c610e";
+    const htmlPart = [
+      `Content-Type: text/html; charset=UTF-8`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      htmlBodyB64
+    ];
+    const richPart = images.length ? [
+      `Content-Type: multipart/related; boundary="${relatedBoundary}"; type="text/html"`,
+      ``,
+      `--${relatedBoundary}`,
+      ...htmlPart,
+      ...images.flatMap((image) => [
+        `--${relatedBoundary}`,
+        `Content-Type: image/png; name="${image.filename}"`,
+        `Content-Transfer-Encoding: base64`,
+        `Content-ID: <${image.contentId}>`,
+        `Content-Disposition: inline; filename="${image.filename}"`,
+        ``,
+        chunk76(image.content.toString("base64"))
+      ]),
+      `--${relatedBoundary}--`
+    ] : htmlPart;
     return [
       `To: ${toHeader}`,
       `Subject: ${encodeRfc2047(args.subject)}`,
@@ -78081,10 +78110,7 @@ function buildRfc822(args) {
       ``,
       bodyB64,
       `--${boundary}`,
-      `Content-Type: text/html; charset=UTF-8`,
-      `Content-Transfer-Encoding: base64`,
-      ``,
-      htmlBodyB64,
+      ...richPart,
       `--${boundary}--`,
       ``
     ].join("\r\n");
@@ -78148,6 +78174,12 @@ function buildPortalBriefUrl(briefId) {
 }
 
 // src/lib/briefEmail.ts
+import { readFileSync } from "node:fs";
+var briefEmailLogo = {
+  contentId: "ehs-logo@ehs",
+  filename: "ehs-logo.png",
+  content: readFileSync(new URL("./assets/ehs-logo.png", import.meta.url))
+};
 var clerk3 = process.env.CLERK_SECRET_KEY ? createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY }) : null;
 function resolveProducerDisplayName(args) {
   const fullName = args.fullName?.trim();
@@ -78330,8 +78362,10 @@ function buildBriefEmailContent(args) {
           <td style="padding:22px 28px;background:#111827;">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
               <tr>
-                <td style="font-family:Arial,Helvetica,sans-serif;font-size:30px;line-height:34px;font-weight:900;letter-spacing:2px;color:#ffffff;">EHS</td>
-                <td align="right" style="font-family:Arial,sans-serif;font-size:13px;line-height:18px;font-weight:700;color:#ffffff;">Crew Management System</td>
+                <td width="156" valign="middle" style="width:156px;vertical-align:middle;">
+                  <img src="cid:${briefEmailLogo.contentId}" width="156" height="40" border="0" alt="EHS - LYD \xB7 LYS \xB7 BILDE" style="display:block;width:156px;height:40px;border:0;outline:none;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#ffffff;">
+                </td>
+                <td align="right" valign="middle" style="padding-left:16px;vertical-align:middle;font-family:Arial,sans-serif;font-size:13px;line-height:18px;font-weight:700;color:#ffffff;">Crew Management System</td>
               </tr>
             </table>
           </td>
@@ -78416,7 +78450,8 @@ async function dispatchBriefRequestEmails(args, dependencies = defaultDependenci
         toName: recipientName || void 0,
         subject: content.subject,
         textBody: content.textBody,
-        htmlBody: content.htmlBody
+        htmlBody: content.htmlBody,
+        inlineImages: [briefEmailLogo]
       });
       if (result.ok) {
         sent += 1;

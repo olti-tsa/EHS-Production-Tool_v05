@@ -9,6 +9,13 @@ import {
 import { logger } from "./logger";
 import { sendGmail } from "./gmail";
 import { buildPortalBriefUrl } from "./portalUrl";
+import { readFileSync } from "node:fs";
+
+export const briefEmailLogo = {
+  contentId: "ehs-logo@ehs",
+  filename: "ehs-logo.png",
+  content: readFileSync(new URL("./assets/ehs-logo.png", import.meta.url)),
+};
 
 const clerk = process.env.CLERK_SECRET_KEY
   ? createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY })
@@ -277,8 +284,10 @@ export function buildBriefEmailContent(args: {
           <td style="padding:22px 28px;background:#111827;">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
               <tr>
-                <td style="font-family:Arial,Helvetica,sans-serif;font-size:30px;line-height:34px;font-weight:900;letter-spacing:2px;color:#ffffff;">EHS</td>
-                <td align="right" style="font-family:Arial,sans-serif;font-size:13px;line-height:18px;font-weight:700;color:#ffffff;">Crew Management System</td>
+                <td width="156" valign="middle" style="width:156px;vertical-align:middle;">
+                  <img src="cid:${briefEmailLogo.contentId}" width="156" height="40" border="0" alt="EHS - LYD · LYS · BILDE" style="display:block;width:156px;height:40px;border:0;outline:none;text-decoration:none;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#ffffff;">
+                </td>
+                <td align="right" valign="middle" style="padding-left:16px;vertical-align:middle;font-family:Arial,sans-serif;font-size:13px;line-height:18px;font-weight:700;color:#ffffff;">Crew Management System</td>
               </tr>
             </table>
           </td>
@@ -373,6 +382,7 @@ export async function dispatchBriefRequestEmails(args: {
         subject: content.subject,
         textBody: content.textBody,
         htmlBody: content.htmlBody,
+        inlineImages: [briefEmailLogo],
       });
       if (result.ok) {
         sent += 1;

@@ -2,11 +2,44 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildBriefEmailContent,
+  briefEmailLogo,
   dispatchBriefRequestEmails,
   resolveProducerDisplayName,
   type BriefEmailDependencies,
   type BriefEmailProfile,
 } from "./briefEmail";
+import { buildRfc822 } from "./gmail";
+
+it("embeds the official PNG in a related MIME part while retaining plain text", () => {
+  const content = buildBriefEmailContent({
+    recipientName: "Crew",
+    producerName: "Producer",
+    link: "https://example.com/brief",
+  });
+  const raw = buildRfc822({
+    to: "crew@example.com",
+    ...content,
+    inlineImages: [briefEmailLogo],
+  });
+  assert.match(raw, /Content-Type: multipart\/alternative/);
+  assert.match(raw, /Content-Type: multipart\/related/);
+  assert.match(raw, /Content-ID: <ehs-logo@ehs>/);
+  assert.match(raw, /Content-Disposition: inline; filename="ehs-logo.png"/);
+  assert.match(raw, /Content-Type: image\/png/);
+  const compact = raw.replace(/\r\n/g, "");
+  assert.ok(compact.includes(Buffer.from(content.htmlBody).toString("base64")));
+  assert.ok(compact.includes(Buffer.from(content.textBody).toString("base64")));
+  assert.ok(compact.includes(briefEmailLogo.content.toString("base64")));
+  assert.equal(briefEmailLogo.content.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+});
+
+it("keeps unrelated HTML emails attachment-free", () => {
+  const raw = buildRfc822({
+    to: "crew@example.com", subject: "Test", textBody: "Hello", htmlBody: "<p>Hello</p>",
+  });
+  assert.match(raw, /multipart\/alternative/);
+  assert.doesNotMatch(raw, /multipart\/related|Content-ID:/);
+});
 
 function dependencies(
   profiles: BriefEmailProfile[],
@@ -28,6 +61,7 @@ function dependencies(
       rolesByUserId: { "freelancer-secret-id": ["Lydtekniker"] },
     }),
     send: async (message) => {
+      assert.deepEqual(message.inlineImages, [briefEmailLogo]);
       deliveries.push({
         to: message.to,
         subject: message.subject,
@@ -163,8 +197,10 @@ describe("brief email dispatch", () => {
     assert.match(content.textBody, /Rolle: Ikke oppgitt/);
     assert.match(content.textBody, /Sted: Ikke oppgitt/);
     assert.match(content.htmlBody, /Prosjekt/);
-    assert.doesNotMatch(content.htmlBody, /<img\b/i);
-    assert.match(content.htmlBody, />EHS</);
+    assert.match(content.htmlBody, /src="cid:ehs-logo@ehs"/);
+    assert.match(content.htmlBody, /width="156" height="40"/);
+    assert.match(content.htmlBody, /alt="EHS - LYD · LYS · BILDE"/);
+    assert.doesNotMatch(content.htmlBody, />EHS</);
     assert.match(
       content.htmlBody,
       /word-break:break-all;font-family:monospace;font-size:12px;line-height:18px;color:#666666/,
